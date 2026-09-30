@@ -1,0 +1,15 @@
+{
+  "session_id": "SESSION",
+  "prompt_id": "5f0c1a3e-0000-4000-8000-000000000001",
+  "transcript_path": "/home/marker-user/.claude/projects/-home-marker-user-src-payments-service/SESSION.jsonl",
+  "cwd": "/home/marker-user/src/payments-service",
+  "scratchpad_dir": "/tmp/claude-1000/-home-marker-user-src-payments-service/SESSION/scratchpad",
+  "permission_mode": "default",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "InstructionsLoaded",
+  "load_reason": "session_start",
+  "file_path": "/home/marker-user/src/payments-service/CLAUDE.md",
+  "content_hash": "sha256:4f1c0d9a6b2e7f3810aa5c9e2d4b6f8a0c1e3d5b7f9a1c3e5d7b9f1a3c5e7d9b"
+}

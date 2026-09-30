@@ -1,0 +1,149 @@
+# Cardo reference stack (ADR-0009): ClickHouse + Grafana + the org-edge collector, single node,
+# self-hosted.
+#
+# This is the evaluation and reference deployment, not a production topology. It exists so a
+# platform team can see the whole pipeline working on one machine before being asked to approve
+# anything, and so the SQL in sql/clickhouse/ has somewhere to be tested for real.
+#
+# Three deliberate choices, each of which has bitten someone before:
+#
+#   1. EVERY PUBLISHED PORT IS BOUND TO LOOPBACK. This stack holds pseudonymous engineering
+#      telemetry. A 0.0.0.0 binding would put it on every network the host is attached to,
+#      including hotel wifi. INV-7 is a property of the deployment as much as of the code.
+#
+#   2. NON-DEFAULT HOST PORTS. ClickHouse is published on 8124 and Grafana on 3001, not on 8123
+#      and 3000, so this stack can coexist with whatever else on the machine already took the
+#      obvious ports. Inside the network the containers still use the standard ports.
+#
+#   3. `restart: unless-stopped`, NOT `always`. With `always`, `docker compose stop` is undone by
+#      the next Docker Desktop launch and the stack silently runs forever. With `unless-stopped` a
+#      stop sticks -- which is also what lets Docker Desktop idle the VM, since that only engages
+#      when no containers are running. Stop it when you are not using it.
+#
+# Usage:
+#   cp .env.example .env     # then edit the password
+#   docker compose up -d
+#   docker compose down      # add -v to delete the data too
+
+name: cardo
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:26.6
+    restart: unless-stopped
+    user: "101:101"
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-cardo}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set CLICKHOUSE_PASSWORD in .env}
+      # Lets the cardo user create the `cardo` database and its tables on first run.
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ports:
+      - "127.0.0.1:8124:8123"   # HTTP interface -- this is what cardo writes to
+      - "127.0.0.1:9001:9000"   # native protocol, for clickhouse-client
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
+      # Read-only overlays. See each file's header for the measurements behind it. The server runs
+      # as uid 101, and `:ro` host binds stay readable to it.
+      #
+      # Mounted one file at a time rather than binding the whole directory, because config.d also
+      # holds docker_related_config.xml from the image -- it sets listen_host, and a directory bind
+      # would shadow it and leave the server unreachable. The cost is that a NEW overlay file needs
+      # a line here or it is silently ignored: the server starts clean, logs nothing, and runs on
+      # defaults. TestDeployOverlaysAreAllMounted in test/deploy_test.go fails if one is missing.
+      - ./clickhouse/config.d/10-cardo-quiet.xml:/etc/clickhouse-server/config.d/10-cardo-quiet.xml:ro
+      - ./clickhouse/config.d/20-cardo-idle.xml:/etc/clickhouse-server/config.d/20-cardo-idle.xml:ro
+      - ./clickhouse/users.d/10-cardo-quiet.xml:/etc/clickhouse-server/users.d/10-cardo-quiet.xml:ro
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      # Probe fast while starting, then back off for the rest of the container's life. A 5s
+      # healthcheck forks a process inside the container every 5 seconds, forever, which is a
+      # meaningful share of the idle cost this stack is trying not to have.
+      interval: 60s
+      timeout: 5s
+      start_period: 60s
+      start_interval: 2s
+
+  # One-shot. Applies the schema -- including the tables the collector writes to -- and exits.
+  # The collector below only ever INSERTs (create_schema: false), so it waits for this to succeed.
+  migrate:
+    build:
+      context: ../..
+    image: cardo:dev
+    command: ["migrate"]
+    restart: "no"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    environment:
+      CARDO_CLICKHOUSE_URL: http://clickhouse:8123
+      CARDO_CLICKHOUSE_USER: ${CLICKHOUSE_USER:-cardo}
+      CARDO_CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      # What the views over the collector's data read (ADR-0029). The same CARDO_ORG_ARTIFACTS
+      # the collector gets below, so what it stores and what the views label agree.
+      CARDO_ORG_ARTIFACTS: ${CARDO_ORG_ARTIFACTS:-}
+      CARDO_MIN_GROUP_SIZE: ${CARDO_MIN_GROUP_SIZE:-}
+
+  # The org-edge collector: everything Claude Code sends arrives here and is pseudonymized and
+  # reduced before it is written. deploy/collector/config.yaml is the contract.
+  #
+  # Without a usable CARDO_SALT it starts but refuses every OTel batch, with a REFUSED line in its
+  # log saying why; hook events, which carry no identity, still flow. Compose does not block on
+  # the variable, because interpolation errors stop the whole stack, and ClickHouse and Grafana
+  # have no use for a salt.
+  #
+  # In this single-machine stack the salt necessarily sits in the same .env as the database
+  # password. In a real deployment the collector's salt comes from the security team's secret
+  # store and the analytics environment never sees it (ADR-0006).
+  collector:
+    image: otel/opentelemetry-collector-contrib:0.161.0
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      CARDO_SALT: ${CARDO_SALT:-}
+      CARDO_SALT_VERSION: ${CARDO_SALT_VERSION:-v1}
+      CARDO_ORG_ARTIFACTS: ${CARDO_ORG_ARTIFACTS:-}
+      CARDO_ARTIFACT_NAMES: ${CARDO_ARTIFACT_NAMES:-all}
+      CARDO_CLICKHOUSE_ENDPOINT: tcp://clickhouse:9000
+      CARDO_CLICKHOUSE_USER: ${CLICKHOUSE_USER:-cardo}
+      CARDO_CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+    ports:
+      - "127.0.0.1:4319:4318"   # OTLP/HTTP from Claude Code (deploy/managed-settings/local-evaluation.json)
+      - "127.0.0.1:8089:8088"   # the hook pack
+    volumes:
+      - ../collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    restart: unless-stopped
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    environment:
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?set GRAFANA_PASSWORD in .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      # No call-home from the dashboard host either (INV-7).
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-cardo}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+    ports:
+      - "127.0.0.1:3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../../dashboards:/var/lib/grafana/dashboards:ro
+
+volumes:
+  clickhouse_data:
+  clickhouse_logs:
+  grafana_data:

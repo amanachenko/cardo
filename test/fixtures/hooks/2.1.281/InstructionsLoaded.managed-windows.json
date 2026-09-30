@@ -1,0 +1,10 @@
+{
+  "session_id": "SESSION",
+  "transcript_path": "C:\\Users\\marker-user\\.claude\\projects\\C--Users-marker-user-src-payments-service\\SESSION.jsonl",
+  "cwd": "C:\\Users\\marker-user\\src\\payments-service",
+  "scratchpad_dir": "C:\\Users\\marker-user\\AppData\\Local\\Temp\\claude\\C--Users-marker-user-src-payments-service\\SESSION\\scratchpad",
+  "hook_event_name": "InstructionsLoaded",
+  "file_path": "C:\\Program Files\\ClaudeCode\\CLAUDE.md",
+  "memory_type": "Managed",
+  "load_reason": "session_start"
+}

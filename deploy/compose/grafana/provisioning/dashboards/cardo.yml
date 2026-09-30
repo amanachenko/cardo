@@ -1,0 +1,14 @@
+# Dashboards are loaded from the repository, not from Grafana's database, so what a reviewer reads
+# in the pull request is what an operator sees on the screen.
+apiVersion: 1
+
+providers:
+  - name: cardo
+    folder: Cardo
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

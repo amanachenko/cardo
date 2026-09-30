@@ -1,0 +1,347 @@
+# Cardo org-edge collector (ADR-0006, ADR-0012, ADR-0023, ADR-0025, ADR-0026, ADR-0027).
+#
+# This file IS the privacy contract for the collector path. Everything Claude Code sends -- native
+# OTel from every session, and the hook pack's HTTP POSTs -- passes through here before anything is
+# written down, and nothing in this pipeline is code that Cardo wrote. If you want to know what
+# Cardo stores about you, this file and deploy/managed-settings/ are the whole answer.
+#
+# Pinned to otel/opentelemetry-collector-contrib 0.161.0. Component names and OTTL syntax move
+# between collector releases; upgrading is a tested change, not a tag bump.
+#
+# Required environment (the reference stack sets these from .env):
+#   CARDO_SALT              pseudonymization salt, >= 32 characters, hex. Held by the security team.
+#   CARDO_SALT_VERSION      label stored beside every pseudonym (default v1). Must match the poller.
+#   CARDO_CLICKHOUSE_ENDPOINT, CARDO_CLICKHOUSE_USER, CARDO_CLICKHOUSE_PASSWORD
+# Optional:
+#   CARDO_ORG_ARTIFACTS     regex naming your organization's own commands, agents, MCP servers and
+#                           instructions files. It decides which instructions-file names are kept,
+#                           and, in strict mode, which artifact names are. See transform/hooks.
+#   CARDO_ARTIFACT_NAMES    "all" (default) keeps artifact names; anything else is the strict mode,
+#                           which records every name not matching CARDO_ORG_ARTIFACTS as "custom".
+
+receivers:
+  # Native OTel from Claude Code. HTTP only: one protocol, one port, one thing to put behind TLS.
+  # The managed-settings bundle pins OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf to match.
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # The hook pack. Each hook is an async HTTP POST of the hook's JSON input; this receiver turns
+  # each request body into one log record whose body is the raw JSON string. The raw string never
+  # survives transform/hooks.
+  #
+  # The receiver's default body limit is 100 KiB, and it refuses anything larger with a 400 and no
+  # log line on this side. Payloads carry whole prompts and subagent replies, so real ones cross it:
+  # two SubagentStop events were lost that way in the first real session. The content is discarded
+  # either way; the limit only decides whether the event's metadata survives.
+  webhook_event:
+    endpoint: 0.0.0.0:8088
+    path: /v1/hooks
+    health_path: /health
+    max_request_body_size: 16777216
+
+processors:
+  # ---- Refuse to pseudonymize with a salt that would not protect anything -------------------
+  #
+  # Email addresses are low-entropy and guessable; with a short or missing salt every pseudonym is
+  # reversible by anyone holding the hashes. `cardo poll` refuses to start in this state. The
+  # collector cannot refuse to start on a value's length, so it refuses every identity-bearing
+  # batch instead -- and says so, because "no data" with no explanation is the failure an operator
+  # wastes a day on.
+  #
+  # OTTL has no statement that raises an error on purpose. This uses one that cannot succeed:
+  # ParseJSON of a sentence fails, error_mode is propagate, the batch is refused, and the sentence
+  # itself is what appears in the collector's error log. The hook pipeline does not pass through
+  # here: hook payloads carry no identity to hash, so they keep flowing either way.
+  transform/refuse_weak_salt:
+    error_mode: propagate
+    log_statements:
+      - context: log
+        statements:
+          - 'set(log.cache["refused"], ParseJSON("REFUSED - CARDO_SALT is unset or shorter than 32 characters, so pseudonyms would be reversible. No OTel data is stored until it is fixed.")) where Len("${env:CARDO_SALT}") < 32'
+    metric_statements:
+      - context: datapoint
+        statements:
+          - 'set(datapoint.cache["refused"], ParseJSON("REFUSED - CARDO_SALT is unset or shorter than 32 characters, so pseudonyms would be reversible. No OTel data is stored until it is fixed.")) where Len("${env:CARDO_SALT}") < 32'
+
+  # ---- OTel: identity (INV-2) ---------------------------------------------------------------
+  #
+  # user.email cannot be suppressed at source (it is on every record of an authenticated
+  # session), so this is where the promise is kept. The pseudonym is byte-for-byte the one the
+  # poller computes -- SHA256(salt || 0x1F || lowercase(trimmed email)), hex -- so the same engineer
+  # is the same pseudonym whichever path saw them. test/collector_test.go holds the two to it.
+  #
+  # Identity may be on resource attributes or on each record; both are handled. After hashing,
+  # anything whose key mentions email is removed, and so are the account identifiers:
+  # user.account_uuid / user.account_id are not salted and can be looked up in the Anthropic
+  # console, which would make the pseudonym decorative. user.id is a per-install device ID that no
+  # Cardo question needs.
+  transform/otel_identity:
+    error_mode: propagate
+    log_statements:
+      - context: resource
+        statements:
+          - 'set(resource.attributes["user.pseudonym"], SHA256(Concat(["${env:CARDO_SALT}", "\u001f", ToLowerCase(Trim(resource.attributes["user.email"]))], ""))) where IsString(resource.attributes["user.email"])'
+          - 'delete_matching_keys(resource.attributes, "(?i)email")'
+          - 'delete_matching_keys(resource.attributes, "^user\\.(account_uuid|account_id|id|groups)$")'
+      - context: log
+        statements:
+          - 'set(log.attributes["user.pseudonym"], SHA256(Concat(["${env:CARDO_SALT}", "\u001f", ToLowerCase(Trim(log.attributes["user.email"]))], ""))) where IsString(log.attributes["user.email"])'
+          - 'delete_matching_keys(log.attributes, "(?i)email")'
+          - 'delete_matching_keys(log.attributes, "^user\\.(account_uuid|account_id|id|groups)$")'
+    metric_statements:
+      - context: resource
+        statements:
+          - 'set(resource.attributes["user.pseudonym"], SHA256(Concat(["${env:CARDO_SALT}", "\u001f", ToLowerCase(Trim(resource.attributes["user.email"]))], ""))) where IsString(resource.attributes["user.email"])'
+          - 'delete_matching_keys(resource.attributes, "(?i)email")'
+          - 'delete_matching_keys(resource.attributes, "^user\\.(account_uuid|account_id|id|groups)$")'
+      - context: datapoint
+        statements:
+          - 'set(datapoint.attributes["user.pseudonym"], SHA256(Concat(["${env:CARDO_SALT}", "\u001f", ToLowerCase(Trim(datapoint.attributes["user.email"]))], ""))) where IsString(datapoint.attributes["user.email"])'
+          - 'delete_matching_keys(datapoint.attributes, "(?i)email")'
+          - 'delete_matching_keys(datapoint.attributes, "^user\\.(account_uuid|account_id|id|groups)$")'
+
+  # ---- OTel: content and paths (INV-5) ------------------------------------------------------
+  #
+  # Claude Code redacts content at source, and the managed-settings bundle pins every OTEL_LOG_*
+  # flag to 0, so none of these should ever arrive. This is the second lock, for the machine where
+  # someone set a flag the bundle did not reach. It is a denylist rather than an allowlist because
+  # the OTel surface is designed to be safe by default and gates every content field behind a
+  # flag; the hook surface is not, which is why the hook path below works the other way round.
+  #
+  # host.name is dropped because laptop hostnames are routinely the owner's name. vcs.* is repo
+  # identity, which ADR-0002 places in the security tier, not this one.
+  transform/otel_content:
+    error_mode: propagate
+    log_statements:
+      - context: resource
+        statements:
+          - 'delete_key(resource.attributes, "host.name")'
+          - 'delete_matching_keys(resource.attributes, "^vcs\\.")'
+      - context: log
+        statements:
+          - 'delete_matching_keys(log.attributes, "^(prompt|response|tool_parameters|tool_input|error|body|body_ref|managed_settings|workspace\\.host_paths)$")'
+          - 'delete_matching_keys(log.attributes, "^vcs\\.")'
+          # The event name is already in attributes["event.name"]; the body is the one field the
+          # OTel log model lets carry arbitrary text, so it is emptied rather than trusted.
+          - 'set(log.event_name, Concat(["claude_code.", log.attributes["event.name"]], "")) where log.event_name == "" and IsString(log.attributes["event.name"])'
+          - 'set(log.body, "")'
+    metric_statements:
+      - context: resource
+        statements:
+          - 'delete_key(resource.attributes, "host.name")'
+          - 'delete_matching_keys(resource.attributes, "^vcs\\.")'
+      - context: datapoint
+        statements:
+          - 'delete_matching_keys(datapoint.attributes, "^vcs\\.")'
+
+  # ---- OTel: artifact names in strict mode (ADR-0025) ---------------------------------------
+  #
+  # Claude Code puts the real name of a custom slash command or skill on skill.name, on API events
+  # and on the cost and token metrics, even with every OTEL_LOG_* flag off (observed 2026-09-24;
+  # its own skill_activated event says "custom_skill" instead). By default Cardo keeps it, as it
+  # keeps the same name from the hooks. In strict mode it gets the hooks' rule.
+  transform/otel_names:
+    error_mode: propagate
+    log_statements:
+      - context: log
+        statements:
+          - 'set(log.attributes["skill.name"], "custom") where "${env:CARDO_ARTIFACT_NAMES:-all}" != "all" and IsString(log.attributes["skill.name"]) and ("${env:CARDO_ORG_ARTIFACTS:-}" == "" or not IsMatch(log.attributes["skill.name"], "${env:CARDO_ORG_ARTIFACTS:-}"))'
+    metric_statements:
+      - context: datapoint
+        statements:
+          - 'set(datapoint.attributes["skill.name"], "custom") where "${env:CARDO_ARTIFACT_NAMES:-all}" != "all" and IsString(datapoint.attributes["skill.name"]) and ("${env:CARDO_ORG_ARTIFACTS:-}" == "" or not IsMatch(datapoint.attributes["skill.name"], "${env:CARDO_ORG_ARTIFACTS:-}"))'
+
+  # ---- Hooks: allowlist (INV-5, ADR-0023) ---------------------------------------------------
+  #
+  # A hook payload is not telemetry. It is the input Claude Code hands a local script so the script
+  # can act on it, and it carries content by design: user_input is the prompt text, tool_input is
+  # the command line or the file being written, last_assistant_message is model output, and every
+  # event carries cwd and transcript_path. Nothing is redacted at source.
+  #
+  # So this is an allowlist. Every field kept below was chosen because a Cardo question needs it
+  # and it carries no content. Anything Claude Code adds in a future release is dropped until
+  # someone decides otherwise in a reviewed change -- but its NAME is recorded in
+  # cardo.received_keys, so a new field shows up as drift rather than disappearing silently
+  # (ADR-0014).
+  #
+  # Some facts are derived from content and then the content is dropped:
+  #   prompt_length       from prompt (UserPromptSubmit)   the text itself never leaves this processor
+  #   instructions_file   from file_path    CLAUDE.md | CLAUDE.local.md | AGENTS.md | rule | other
+  #   instructions_scope  from file_path    "managed" when it is the org's own managed file
+  #   instructions_name   from file_path    the file's own name, only if it is one of the org's
+  #
+  # Every field name below was observed from Claude Code 2.1.281 on 2026-09-24, except where a
+  # comment says otherwise (docs/research/2026-09-24-first-real-hook-payloads.md). The names the
+  # documentation used before that are still accepted, so an older client keeps working.
+  transform/hooks:
+    error_mode: propagate
+    log_statements:
+      - context: log
+        statements:
+          - 'merge_maps(log.cache, ParseJSON(log.body), "upsert") where IsString(log.body)'
+          - 'set(log.attributes["cardo.received_keys"], Keys(log.cache))'
+
+          # Several facts arrive under generic names whose meaning depends on the event: reason,
+          # trigger, source, prompt. A generic name never goes on the allowlist, because the list
+          # is a union across events and "source" or "prompt" elsewhere may carry anything. Each is
+          # mapped here, for one named event, onto a specific name, and only if it is enum-shaped.
+          - 'set(log.cache["session_end_reason"], log.cache["reason"]) where log.cache["hook_event_name"] == "SessionEnd" and IsString(log.cache["reason"]) and IsMatch(log.cache["reason"], "^[A-Za-z_-]{1,40}$")'
+          - 'set(log.cache["compaction_reason"], log.cache["trigger"]) where (log.cache["hook_event_name"] == "PreCompact" or log.cache["hook_event_name"] == "PostCompact") and IsString(log.cache["trigger"]) and IsMatch(log.cache["trigger"], "^[A-Za-z_-]{1,40}$")'
+          - 'set(log.cache["config_source"], log.cache["source"]) where log.cache["hook_event_name"] == "ConfigChange" and IsString(log.cache["source"]) and IsMatch(log.cache["source"], "^[A-Za-z_-]{1,40}$")'
+          - 'set(log.cache["model_switch_source"], log.cache["source"]) where log.cache["hook_event_name"] == "PreModelSwitch" and IsString(log.cache["source"]) and IsMatch(log.cache["source"], "^[A-Za-z_-]{1,40}$")'
+          - 'set(log.cache["prompt_length"], Len(log.cache["prompt"])) where log.cache["hook_event_name"] == "UserPromptSubmit" and IsString(log.cache["prompt"])'
+          - 'set(log.cache["prompt_length"], Len(log.cache["user_input"])) where IsString(log.cache["user_input"])'
+
+          - 'set(log.cache["effort_level"], log.cache["effort"]["level"]) where IsMap(log.cache["effort"])'
+
+          # ConfigChange carries a file_path too, and it is a settings file, not instructions.
+          - 'delete_key(log.cache, "file_path") where log.cache["hook_event_name"] != "InstructionsLoaded"'
+          - 'set(log.cache["instructions_file"], "other") where IsString(log.cache["file_path"])'
+          - 'set(log.cache["instructions_file"], "rule") where IsString(log.cache["file_path"]) and IsMatch(log.cache["file_path"], "[/\\\\]\\.claude[/\\\\]rules[/\\\\]")'
+          - 'set(log.cache["instructions_file"], "CLAUDE.md") where IsString(log.cache["file_path"]) and IsMatch(log.cache["file_path"], "(^|[/\\\\])CLAUDE\\.md$")'
+          - 'set(log.cache["instructions_file"], "CLAUDE.local.md") where IsString(log.cache["file_path"]) and IsMatch(log.cache["file_path"], "(^|[/\\\\])CLAUDE\\.local\\.md$")'
+          - 'set(log.cache["instructions_file"], "AGENTS.md") where IsString(log.cache["file_path"]) and IsMatch(log.cache["file_path"], "(^|[/\\\\])AGENTS\\.md$")'
+          - 'set(log.cache["instructions_scope"], "managed") where IsString(log.cache["file_path"]) and IsMatch(log.cache["file_path"], "^(/Library/Application Support/ClaudeCode/|/etc/claude-code/|[A-Za-z]:[/\\\\]Program Files[/\\\\]ClaudeCode[/\\\\])")'
+
+          # The file's own name, when it is one of the organization's artifacts (ADR-0026). Claude
+          # Code sends no content hash, so a version in the name (acme-standards-v7.md) is how a
+          # stale copy shows up. Every other file name stays unrecorded: a file name is part of a
+          # path (INV-5), and an empty pattern keeps none, since an empty regex matches everything.
+          - 'set(log.cache["instructions_name"], log.cache["file_path"]) where IsString(log.cache["file_path"])'
+          - 'replace_pattern(log.cache["instructions_name"], "^.*[/\\\\]", "") where IsString(log.cache["instructions_name"])'
+          - 'delete_key(log.cache, "instructions_name") where IsString(log.cache["instructions_name"]) and ("${env:CARDO_ORG_ARTIFACTS:-}" == "" or not IsMatch(log.cache["instructions_name"], "${env:CARDO_ORG_ARTIFACTS:-}"))'
+
+          # Names of commands, subagents and MCP servers are kept (ADR-0025): what engineers build
+          # for themselves is the best evidence of what the platform team should ship. The views,
+          # not this file, keep a name nobody else uses out of sight (ADR-0029). The list of Claude
+          # Code's built-in subagents below is also in sql/clickhouse/006_silver_collector.sql
+          # (is_builtin); change both together.
+          #
+          # CARDO_ARTIFACT_NAMES=org-only is the strict mode, for an organization whose works
+          # council requires it: every name not matching CARDO_ORG_ARTIFACTS becomes "custom", as
+          # Claude Code's own OTel does by default. Any value other than "all" is strict, so a typo
+          # fails closed. An empty CARDO_ORG_ARTIFACTS names nothing, which each statement has to
+          # say, because an empty regex matches every string.
+          - 'set(log.cache["command_name"], "custom") where "${env:CARDO_ARTIFACT_NAMES:-all}" != "all" and IsString(log.cache["command_name"]) and log.cache["command_source"] != "builtin" and ("${env:CARDO_ORG_ARTIFACTS:-}" == "" or not IsMatch(log.cache["command_name"], "${env:CARDO_ORG_ARTIFACTS:-}"))'
+          - 'set(log.cache["agent_type"], "custom") where "${env:CARDO_ARTIFACT_NAMES:-all}" != "all" and IsString(log.cache["agent_type"]) and not IsMatch(log.cache["agent_type"], "^(general-purpose|Explore|Plan|statusline-setup|claude-code-guide)$") and ("${env:CARDO_ORG_ARTIFACTS:-}" == "" or not IsMatch(log.cache["agent_type"], "${env:CARDO_ORG_ARTIFACTS:-}"))'
+          - 'set(log.cache["tool_name"], "mcp__custom") where "${env:CARDO_ARTIFACT_NAMES:-all}" != "all" and IsString(log.cache["tool_name"]) and IsMatch(log.cache["tool_name"], "^mcp__") and ("${env:CARDO_ORG_ARTIFACTS:-}" == "" or not IsMatch(log.cache["tool_name"], "${env:CARDO_ORG_ARTIFACTS:-}"))'
+
+          # What a model switch costs (ADR-0027). Each is kept only when its value has the type the
+          # name means, so text cannot ride in under a numeric name. A real switch on 2026-09-24
+          # passed every guard: an integer, a number, a boolean, and "1h".
+          - 'delete_key(log.cache, "context_tokens") where log.cache["context_tokens"] != nil and not IsInt(log.cache["context_tokens"]) and not IsDouble(log.cache["context_tokens"])'
+          - 'delete_key(log.cache, "estimated_cache_write_usd") where log.cache["estimated_cache_write_usd"] != nil and not IsInt(log.cache["estimated_cache_write_usd"]) and not IsDouble(log.cache["estimated_cache_write_usd"])'
+          - 'delete_key(log.cache, "prompt_cache_warm") where log.cache["prompt_cache_warm"] != nil and not IsBool(log.cache["prompt_cache_warm"])'
+          - 'delete_key(log.cache, "cache_ttl") where log.cache["cache_ttl"] != nil and not IsInt(log.cache["cache_ttl"]) and not IsDouble(log.cache["cache_ttl"]) and not (IsString(log.cache["cache_ttl"]) and IsMatch(log.cache["cache_ttl"], "^[0-9A-Za-z]{1,12}$"))'
+          - 'delete_key(log.cache, "requested_model") where log.cache["requested_model"] != nil and not (IsString(log.cache["requested_model"]) and IsMatch(log.cache["requested_model"], "^[A-Za-z0-9._:\\[\\]-]{1,80}$"))'
+
+          - >-
+            keep_keys(log.cache, [
+              "hook_event_name", "session_id", "prompt_id", "agent_id", "agent_type",
+              "permission_mode", "effort_level",
+              "session_start_reason", "model", "session_end_reason",
+              "prompt_length",
+              "command_name", "command_source", "expansion_type",
+              "tool_name", "tool_use_id",
+              "compaction_reason", "current_context_tokens", "target_tokens", "tokens_before", "tokens_after",
+              "load_reason", "memory_type", "content_hash", "instructions_file", "instructions_scope",
+              "instructions_name",
+              "from_model", "to_model", "requested_model", "model_switch_source",
+              "context_tokens", "prompt_cache_warm", "cache_ttl", "estimated_cache_write_usd",
+              "config_source"
+            ])
+          - 'merge_maps(log.attributes, log.cache, "upsert")'
+          - 'set(log.event_name, log.attributes["hook_event_name"]) where IsString(log.attributes["hook_event_name"])'
+          - 'set(log.body, "")'
+          # Hook payloads carry no timestamp of their own; the receive time is the event time.
+          - 'set(log.time, log.observed_time) where log.time_unix_nano == 0'
+
+  # ---- Every pipeline: tier and salt version ------------------------------------------------
+  transform/tag:
+    error_mode: propagate
+    log_statements:
+      - context: resource
+        statements:
+          - 'set(resource.attributes["cardo.tier"], "1")'
+          - 'set(resource.attributes["cardo.salt_version"], "${env:CARDO_SALT_VERSION:-v1}")'
+    metric_statements:
+      - context: resource
+        statements:
+          - 'set(resource.attributes["cardo.tier"], "1")'
+          - 'set(resource.attributes["cardo.salt_version"], "${env:CARDO_SALT_VERSION:-v1}")'
+
+  # ---- INV-2 tripwire -----------------------------------------------------------------------
+  #
+  # Last processor on every pipeline. If anything shaped like an email address is still present
+  # after the transforms, the record is dropped rather than stored. It should never fire; when it
+  # does, a transform above is wrong, and a missing record is the correct failure. The poller has
+  # the same tripwire for the same reason (internal/pseudonym/scrub.go).
+  filter/inv2_tripwire:
+    error_mode: propagate
+    logs:
+      log_record:
+        - 'IsMatch(String(log.attributes), "[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}")'
+        - 'IsMatch(String(resource.attributes), "[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}")'
+        - 'IsMatch(log.body, "[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}")'
+    metrics:
+      datapoint:
+        - 'IsMatch(String(datapoint.attributes), "[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}")'
+        - 'IsMatch(String(resource.attributes), "[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}")'
+
+exporters:
+  # create_schema is false on both: the DDL is sql/clickhouse/004_bronze_collector.sql, applied by
+  # `cardo migrate`. async_insert is false for the same reason cardo's own client sends
+  # async_insert=0 -- a server default is not a contract -- and the batch below already does the
+  # coalescing async inserts would. A 10 s flush keeps the part count, and the wakeups, low.
+  clickhouse/hooks:
+    endpoint: ${env:CARDO_CLICKHOUSE_ENDPOINT}
+    username: ${env:CARDO_CLICKHOUSE_USER}
+    password: ${env:CARDO_CLICKHOUSE_PASSWORD}
+    database: cardo
+    create_schema: false
+    async_insert: false
+    logs_table_name: bronze_hook_events
+    timeout: 10s
+    sending_queue:
+      batch:
+        flush_timeout: 10s
+
+  clickhouse/otel:
+    endpoint: ${env:CARDO_CLICKHOUSE_ENDPOINT}
+    username: ${env:CARDO_CLICKHOUSE_USER}
+    password: ${env:CARDO_CLICKHOUSE_PASSWORD}
+    database: cardo
+    create_schema: false
+    async_insert: false
+    logs_table_name: bronze_otel_logs
+    metrics_tables:
+      sum:
+        name: bronze_otel_metrics_sum
+    timeout: 10s
+    sending_queue:
+      batch:
+        flush_timeout: 10s
+
+service:
+  # The collector's own telemetry stays inside the container. No internal metrics endpoint, no
+  # traces, warnings only (INV-7 applies to the collector as much as to the binary).
+  telemetry:
+    logs:
+      level: warn
+    metrics:
+      level: none
+  pipelines:
+    logs/hooks:
+      receivers: [webhook_event]
+      processors: [transform/hooks, transform/tag, filter/inv2_tripwire]
+      exporters: [clickhouse/hooks]
+    logs/otel:
+      receivers: [otlp]
+      processors: [transform/refuse_weak_salt, transform/otel_identity, transform/otel_content, transform/otel_names, transform/tag, filter/inv2_tripwire]
+      exporters: [clickhouse/otel]
+    metrics/otel:
+      receivers: [otlp]
+      processors: [transform/refuse_weak_salt, transform/otel_identity, transform/otel_content, transform/otel_names, transform/tag, filter/inv2_tripwire]
+      exporters: [clickhouse/otel]

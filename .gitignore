@@ -1,0 +1,46 @@
+# Build output
+/bin/
+/dist/
+# Anchored to the repo root: an unanchored "cardo" would also match the cmd/cardo/
+# source directory and silently exclude the binary's own source from git.
+/cardo
+/cardo.exe
+
+# Go
+*.test
+*.out
+vendor/
+
+# Local data / evaluation mode
+*.duckdb
+*.duckdb.wal
+*.parquet
+/data/
+# Sample store generated for SQL verification:
+#   CARDO_SAMPLE_DIR=.sample go test ./test/ -run TestGenerateSampleStore
+# Unanchored on purpose. The generator resolves a relative CARDO_SAMPLE_DIR against the repo root,
+# so this should only ever match at the root -- and if some future caller passes an absolute path
+# somewhere else in the tree, that copy stays ignored too.
+.sample/
+
+# Secrets — never commit. The pseudonymization salt is held by the organization's
+# security team (ADR-0006) and must never appear in this repo.
+.env
+.env.*
+# ...but the template must ship: it is how an operator knows which variables exist, and it holds
+# placeholders rather than secrets.
+!.env.example
+*.salt
+*secret*
+*credentials*
+admin-key*
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Claude Code local state
+.claude/settings.local.json

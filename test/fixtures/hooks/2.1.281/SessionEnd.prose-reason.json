@@ -1,0 +1,9 @@
+{
+  "session_id": "SESSION",
+  "transcript_path": "C:\\Users\\marker-user\\.claude\\projects\\C--Users-marker-user-src-payments-service\\SESSION.jsonl",
+  "cwd": "C:\\Users\\marker-user\\src\\payments-service",
+  "scratchpad_dir": "C:\\Users\\marker-user\\AppData\\Local\\Temp\\claude\\C--Users-marker-user-src-payments-service\\SESSION\\scratchpad",
+  "hook_event_name": "SessionEnd",
+  "prompt_id": "5f0c1a3e-0000-4000-8000-000000000001",
+  "reason": "CONTENT-MARKER a reason that is prose, not an enum"
+}

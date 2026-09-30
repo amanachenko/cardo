@@ -1,0 +1,21 @@
+# Cardo's ClickHouse, provisioned rather than clicked.
+#
+# Credentials come from the compose environment, which reads .env. They are not in this file and
+# must not be added to it: this file is committed.
+apiVersion: 1
+
+datasources:
+  - name: Cardo ClickHouse
+    uid: cardo-clickhouse
+    type: grafana-clickhouse-datasource
+    isDefault: true
+    editable: false
+    jsonData:
+      host: clickhouse
+      port: 9000
+      protocol: native
+      secure: false
+      username: ${CLICKHOUSE_USER}
+      defaultDatabase: cardo
+    secureJsonData:
+      password: ${CLICKHOUSE_PASSWORD}

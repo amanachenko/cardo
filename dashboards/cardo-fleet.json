@@ -1,0 +1,551 @@
+{
+  "uid": "cardo-fleet",
+  "title": "Cardo — fleet adoption",
+  "description": "Cohort-level Claude Code adoption, cost and tool acceptance from the Claude Code Analytics API. Every panel reads a gold view, and every gold view aggregates the pseudonym away: there is deliberately no per-person row here and no way to add one without failing CI (INV-3).",
+  "tags": [
+    "cardo"
+  ],
+  "timezone": "utc",
+  "editable": true,
+  "schemaVersion": 39,
+  "refresh": "",
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Fleet adoption",
+      "type": "row",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": 2,
+      "title": "Engineers using Claude Code",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "cardo-clickhouse"
+      },
+      "description": "Distinct pseudonymous actors with any Claude Code activity that day. Cohort counts only: the pseudonym is counted here and never listed (INV-3).",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 1
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT day AS time, source, active_actors FROM cardo.gold_fleet_adoption WHERE $__timeFilter(day) ORDER BY day"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "pointSize": 5,
+            "spanNulls": false
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "none",
+          "min": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "title": "Sessions per active engineer",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "cardo-clickhouse"
+      },
+      "description": "Depth of use, not breadth. Rising adoption with a flat value here means more people trying it once; rising here means the people who adopted it are leaning on it.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT day AS time, source, sessions_per_active_actor FROM cardo.gold_fleet_adoption WHERE $__timeFilter(day) ORDER BY day"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "pointSize": 5,
+            "spanNulls": false
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "none",
+          "min": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "title": "Code movement",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "cardo-clickhouse"
+      },
+      "description": "Volume, deliberately not framed as productivity. Lines of code is an activity measure and a bad outcome measure; it is here because it is what the API reports, and it is left unweighted rather than folded into a score (ADR-0001).",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT day AS time, lines_added, lines_removed, commits, pull_requests FROM cardo.gold_fleet_adoption WHERE $__timeFilter(day) ORDER BY day"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "pointSize": 5,
+            "spanNulls": false
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "title": "Cost",
+      "type": "row",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 17
+      }
+    },
+    {
+      "id": 6,
+      "title": "Daily spend",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "cardo-clickhouse"
+      },
+      "description": "Estimated cost in US dollars. The API reports cents; the silver layer divides once and names the column cost_usd, so nothing downstream divides again.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 18
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT day AS time, source, cost_usd FROM cardo.gold_cost_daily WHERE $__timeFilter(day) ORDER BY day"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "pointSize": 5,
+            "spanNulls": false
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "currencyUSD",
+          "min": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "title": "Spend per active engineer",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "cardo-clickhouse"
+      },
+      "description": "The number to take into a capacity conversation. Total spend rises with headcount; this does not.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 18
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT day AS time, source, cost_usd_per_active_actor FROM cardo.gold_cost_daily WHERE $__timeFilter(day) ORDER BY day"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "pointSize": 5,
+            "spanNulls": false
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "currencyUSD",
+          "min": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "title": "Model mix by spend",
+      "type": "piechart",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "cardo-clickhouse"
+      },
+      "description": "Where the money goes by model. Useful for checking whether a model policy is actually in force.",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 26
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT model, sum(cost_usd) AS cost_usd FROM cardo.gold_model_mix WHERE $__timeFilter(day) GROUP BY model ORDER BY cost_usd DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        },
+        "pieType": "donut",
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        }
+      }
+    },
+    {
+      "id": 9,
+      "title": "Token mix by model",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "cardo-clickhouse"
+      },
+      "description": "Billable tokens by model, excluding cache reads.",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 26
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT day AS time, model, tokens_input + tokens_output AS tokens FROM cardo.gold_model_mix WHERE $__timeFilter(day) ORDER BY day"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "pointSize": 5,
+            "spanNulls": false
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 10,
+      "title": "Tool acceptance",
+      "type": "row",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 35
+      }
+    },
+    {
+      "id": 11,
+      "title": "Edit acceptance rate, with the volume it is measured over",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "cardo-clickhouse"
+      },
+      "description": "ADR-0008 requires the denominator to be on the chart, not one click away. An acceptance rate alone rewards timidity: a session that proposes nothing is never rejected, and scores 100%. Read the rate only against the bar height.",
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 36
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT day AS time, acceptance_rate, proposals FROM cardo.gold_tool_acceptance WHERE $__timeFilter(day) ORDER BY day"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "pointSize": 5,
+            "spanNulls": false
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "acceptance_rate"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              },
+              {
+                "id": "max",
+                "value": 1
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "left"
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "proposals"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "bars"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 40
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "super-light-blue"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 12,
+      "title": "Pipeline health",
+      "type": "row",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 45
+      }
+    },
+    {
+      "id": 13,
+      "title": "Fields the adapter does not model",
+      "type": "table",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "cardo-clickhouse"
+      },
+      "description": "Empty is the expected state. A row here means the API grew a field this build does not parse. The payload kept it (ADR-0010), so nothing is lost -- but the canonical views need updating before that field can be reported on. This panel is the reason a Claude Code release does not silently degrade the dashboards above (ADR-0014).",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 46
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT source, unmodelled_field, rows_affected, first_seen, last_seen FROM cardo.gold_schema_drift ORDER BY rows_affected DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto"
+          }
+        },
+        "overrides": []
+      }
+    }
+  ]
+}

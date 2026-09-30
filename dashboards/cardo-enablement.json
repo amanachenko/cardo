@@ -1,0 +1,771 @@
+{
+  "uid": "cardo-enablement",
+  "title": "Cardo — enablement",
+  "description": "What the organization shipped for Claude Code and whether it is used, what engineers built for themselves that several now use, and the friction and context costs around it, from the hook pack and native OTel. Every panel reads a gold view. A home-grown name or a cohort is shown only once enough people are in it (ADR-0029), and there is no per-person row anywhere (INV-3).",
+  "tags": [
+    "cardo"
+  ],
+  "timezone": "utc",
+  "editable": true,
+  "schemaVersion": 39,
+  "refresh": "",
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Artifacts: what the organization shipped, and what engineers built",
+      "type": "row",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": 2,
+      "title": "The organization's artifacts in use",
+      "type": "table",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "cardo-clickhouse"
+      },
+      "description": "Commands, skills, subagents, MCP servers and instructions files whose names match CARDO_ORG_ARTIFACTS. People are counted per week and cannot be added across weeks, so this shows the busiest week in the range beside the size of the fleet that week. The organization's own names are always shown, however few people use them (ADR-0029).",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 1
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT kind, artifact, max(people) AS peak_weekly_people, max(active_people) AS active_people, max(people_share) AS peak_weekly_people_share, sum(sessions) AS sessions, sum(uses) AS uses FROM cardo.gold_artifact_usage WHERE is_org AND week >= toMonday(toDate($__fromTime)) AND week <= toDate($__toTime) GROUP BY kind, artifact ORDER BY peak_weekly_people DESC, sessions DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "peak_weekly_people_share"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 3,
+      "title": "Built by engineers, used by several",
+      "type": "table",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "cardo-clickhouse"
+      },
+      "description": "Commands, skills, subagents and MCP servers the organization did not ship, named only once at least the minimum group size of people (five unless raised) used one in the same week. Several people writing the same thing is a missing organization artifact. Everything below the threshold is counted as \"other\" and never named, and nothing here is per person (ADR-0025, ADR-0029).",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT kind, artifact, max(people) AS peak_weekly_people, max(active_people) AS active_people, sum(sessions) AS sessions, sum(uses) AS uses FROM cardo.gold_artifact_usage WHERE NOT is_org AND NOT is_builtin AND artifact != '' AND week >= toMonday(toDate($__fromTime)) AND week <= toDate($__toTime) GROUP BY kind, artifact ORDER BY artifact = 'other', peak_weekly_people DESC, sessions DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 4,
+      "title": "Weekly reach of the organization's artifacts",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "cardo-clickhouse"
+      },
+      "description": "Distinct people who used each of the organization's artifacts, per week.",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 10
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT week AS time, artifact, people FROM cardo.gold_artifact_usage WHERE is_org AND week >= toMonday(toDate($__fromTime)) AND week <= toDate($__toTime) ORDER BY week"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 6,
+            "spanNulls": false
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "title": "Instructions files: who is on which version",
+      "type": "row",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      }
+    },
+    {
+      "id": 6,
+      "title": "Versions in use",
+      "type": "table",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "cardo-clickhouse"
+      },
+      "description": "The organization's versioned instructions files (acme-security-v3.md) and who loads each version. A version that is not current is people on a stale one. Current means the highest version anyone loaded while the data was retained; a version shipped and not yet loaded cannot be seen (ADR-0026).",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 19
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT family, instructions_name, version, is_current, max(people) AS peak_weekly_people, sum(sessions) AS sessions, sum(loads) AS loads FROM cardo.gold_instructions_versions WHERE week >= toMonday(toDate($__fromTime)) AND week <= toDate($__toTime) GROUP BY family, instructions_name, version, is_current ORDER BY family, version DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 7,
+      "title": "Sessions on a stale version, with all sessions loading the file",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "cardo-clickhouse"
+      },
+      "description": "Per week and file: sessions that loaded a version older than the current one, beside every session that loaded the file at all.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 19
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT week AS time, family, sumIf(sessions, NOT is_current) AS stale_sessions, sum(sessions) AS all_sessions FROM cardo.gold_instructions_versions WHERE week >= toMonday(toDate($__fromTime)) AND week <= toDate($__toTime) GROUP BY week, family ORDER BY week"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "pointSize": 5,
+            "spanNulls": false
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "title": "Friction (ADR-0008), always beside the volume it is measured over",
+      "type": "row",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 27
+      }
+    },
+    {
+      "id": 9,
+      "title": "Edit rejection rate, with the edits it is measured over",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "cardo-clickhouse"
+      },
+      "description": "Rejected edits over edits proposed (Edit, MultiEdit, Write, NotebookEdit), across the fleet. The bars are the edits proposed: a day with no rejections and no edits is not a good day.",
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 0,
+        "y": 28
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT time, round(rejections_total / nullIf(proposals_total, 0), 4) AS edit_rejection_rate, proposals_total AS edit_proposals FROM (SELECT day AS time, sum(edit_rejections) AS rejections_total, sum(edit_proposals) AS proposals_total FROM cardo.gold_friction_daily WHERE $__timeFilter(day) GROUP BY day) ORDER BY time"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "pointSize": 5,
+            "spanNulls": false
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "edit_proposals"
+            },
+            "properties": [
+              {
+                "id": "custom.drawStyle",
+                "value": "bars"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 40
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "unit",
+                "value": "none"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 10,
+      "title": "Permission waits, with the prompts answered",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "cardo-clickhouse"
+      },
+      "description": "Mean seconds a person took to answer a permission prompt, both ends on the laptop's clock. The bars are the prompts answered. Waits that had to fall back to the collector's clock are counted in the table below.",
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 8,
+        "y": 28
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT time, round(wait_s_total / nullIf(answered_total, 0), 1) AS permission_wait_s_mean, answered_total AS permission_answered FROM (SELECT day AS time, sum(permission_wait_s_total) AS wait_s_total, sum(permission_answered) AS answered_total FROM cardo.gold_friction_daily WHERE $__timeFilter(day) GROUP BY day) ORDER BY time"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "pointSize": 5,
+            "spanNulls": false
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "permission_answered"
+            },
+            "properties": [
+              {
+                "id": "custom.drawStyle",
+                "value": "bars"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 40
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "unit",
+                "value": "none"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 11,
+      "title": "Compactions per session, with sessions",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "cardo-clickhouse"
+      },
+      "description": "Compactions, manual and automatic, over sessions started that day. The bars are the sessions.",
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 16,
+        "y": 28
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT time, round(compactions_total / nullIf(sessions_total, 0), 4) AS compactions_per_session, sessions_total AS sessions FROM (SELECT day AS time, sum(compactions) AS compactions_total, sum(sessions) AS sessions_total FROM cardo.gold_friction_daily WHERE $__timeFilter(day) GROUP BY day) ORDER BY time"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "pointSize": 5,
+            "spanNulls": false
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "sessions"
+            },
+            "properties": [
+              {
+                "id": "custom.drawStyle",
+                "value": "bars"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 40
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "unit",
+                "value": "none"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 12,
+      "title": "Friction by cohort",
+      "type": "table",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "cardo-clickhouse"
+      },
+      "description": "Over the whole range. A cohort is named only on days when at least the minimum group size of people (five unless raised) worked in it; other days count under \"other\" (ADR-0029). People cannot be added across days, so this shows the busiest day.",
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 37
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT cohort, peak_people AS peak_daily_people, sessions_total AS sessions, prompts_total AS prompts, proposals_total AS edit_proposals, round(rejections_total / nullIf(proposals_total, 0), 4) AS edit_rejection_rate, answered_total AS permission_answered, round(wait_s_total / nullIf(answered_total, 0), 1) AS permission_wait_s_mean, two_clocks_total AS permission_prompts_two_clocks, compactions_total AS compactions, round(compactions_total / nullIf(sessions_total, 0), 4) AS compactions_per_session FROM (SELECT cohort, max(active_people) AS peak_people, sum(sessions) AS sessions_total, sum(prompts) AS prompts_total, sum(edit_proposals) AS proposals_total, sum(edit_rejections) AS rejections_total, sum(permission_answered) AS answered_total, sum(permission_wait_s_total) AS wait_s_total, sum(permission_prompts_two_clocks) AS two_clocks_total, sum(compactions) AS compactions_total FROM cardo.gold_friction_daily WHERE $__timeFilter(day) GROUP BY cohort) ORDER BY sessions DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 13,
+      "title": "Context and model switches",
+      "type": "row",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 44
+      }
+    },
+    {
+      "id": 14,
+      "title": "Context per prompt, with prompts",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "cardo-clickhouse"
+      },
+      "description": "Per prompt, the largest context any of its main-thread requests sent: how large conversations grow. Median and 90th percentile by cohort; the bars are the prompts. Claude Code does not report the window's size, so these are tokens, not a percentage.",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 45
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT day AS time, cohort, turn_peak_context_p50, turn_peak_context_p90, turns FROM cardo.gold_context_daily WHERE $__timeFilter(day) ORDER BY day"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "pointSize": 5,
+            "spanNulls": false
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*turns.*"
+            },
+            "properties": [
+              {
+                "id": "custom.drawStyle",
+                "value": "bars"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 40
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 15,
+      "title": "Context a session starts from, with sessions",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "cardo-clickhouse"
+      },
+      "description": "The median context of each session's first main-thread request: Claude Code's system prompt, tools and instructions files, plus the first prompt. Every session pays it before any work.",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 45
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT day AS time, cohort, session_start_context_p50, sessions_with_requests FROM cardo.gold_context_daily WHERE $__timeFilter(day) ORDER BY day"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "pointSize": 5,
+            "spanNulls": false
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*sessions_with_requests.*"
+            },
+            "properties": [
+              {
+                "id": "custom.drawStyle",
+                "value": "bars"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 40
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 16,
+      "title": "Model switches: what they cost, and what Claude Code estimated",
+      "type": "table",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "cardo-clickhouse"
+      },
+      "description": "The measured cost is the next main-thread request on the new model: the cache it wrote and its whole cost. Claude Code's estimate assumes the whole context is rewritten, and in the switch observed it was 3.2 times the measured cost (ADR-0027). The estimate is shown only beside the measurement.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 54
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT cohort, sum(model_switches) AS model_switches, sum(model_switches_measured) AS measured, sum(switch_cache_write_tokens) AS cache_write_tokens, round(sum(switch_next_request_cost_usd), 4) AS next_request_cost_usd, sum(model_switches_estimated) AS estimated, round(sum(switch_estimated_cache_write_usd), 4) AS estimated_cache_write_usd FROM cardo.gold_context_daily WHERE $__timeFilter(day) GROUP BY cohort ORDER BY model_switches DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 17,
+      "title": "Daily spend by cohort",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "cardo-clickhouse"
+      },
+      "description": "Claude Code's own cost per API request, main thread, subagents and its helpers together.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 54
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT day AS time, cohort, cost_usd FROM cardo.gold_context_daily WHERE $__timeFilter(day) ORDER BY day"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "pointSize": 5,
+            "spanNulls": false
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": []
+      }
+    }
+  ]
+}

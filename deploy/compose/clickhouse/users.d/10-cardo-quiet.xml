@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<!--
+  Companion to ../config.d/10-cardo-quiet.xml.
+
+  Disabling <trace_log> in config.d stops the profiler's OUTPUT, but the sampling itself is a USER
+  setting, so it keeps running and drops the samples on the floor — a timer signal per query thread
+  every second, for nothing. On the instance measured in the companion file, system.trace_log was both
+  the largest table and the heaviest merger, so it is worth closing both halves.
+
+  This lives in users.d rather than config.d because ClickHouse keeps profile settings there. The
+  image's entrypoint generates users.d/default-user.xml from CLICKHOUSE_USER / CLICKHOUSE_PASSWORD on
+  every start; this file touches only profile settings and never credentials.
+-->
+<clickhouse>
+    <profiles>
+        <default>
+            <query_profiler_real_time_period_ns>0</query_profiler_real_time_period_ns>
+            <query_profiler_cpu_time_period_ns>0</query_profiler_cpu_time_period_ns>
+        </default>
+    </profiles>
+</clickhouse>

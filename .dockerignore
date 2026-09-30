@@ -1,0 +1,8 @@
+# Allowlist, for the same reason the collector's hook path is one: the build context should hold
+# exactly what the image needs and nothing that happens to be lying in the working tree -- local
+# data, a .env with real passwords, a generated sample store.
+*
+!go.mod
+!cmd/
+!internal/
+!sql/

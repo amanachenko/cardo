@@ -1,0 +1,84 @@
+<?xml version="1.0"?>
+<!--
+  Idle-cost overlay for the Cardo reference stack.
+
+  WHY THIS FILE EXISTS. A stock ClickHouse is tuned for a production cluster someone is paged about.
+  Left at defaults on a single-node evaluation box it spends a continuous fraction of a core writing
+  and merging its OWN diagnostics, whether or not anybody is talking to it. On one measured instance
+  (Docker Desktop, zero application traffic, 26 days) the self-telemetry looked like this:
+
+      system.trace_log                469 MiB    22.5M rows     9.7 rows/sec
+      system.text_log                 177 MiB     4.5M rows     1.9 rows/sec
+      system.asynchronous_metric_log  133 MiB   237.1M rows   102.4 rows/sec
+      system.metric_log                63 MiB     0.3M rows
+      system.part_log                  48 MiB     0.6M rows
+
+  894 MiB of self-observation against 1.65 MiB of real data — and it accumulates forever, because
+  these tables ship with no TTL. In a representative hour that instance ran 548 merges over 282 MiB
+  and every one of them was on a system.* table. part_log was the busiest, which is the tell that it
+  self-feeds: merging part_log emits part_log rows.
+
+  Cardo's own write volume is one row per actor per day. Without this overlay, a Cardo evaluation
+  install would spend orders of magnitude more I/O describing itself than storing the answer, and on
+  Docker Desktop every one of those writes crosses the VM boundary and shows up as host battery drain.
+  An observability tool that is itself a resource problem does not get a second install.
+
+  WHAT IS KEPT: query_log and error_log, capped at 3 days. They are small, and they are the two you
+  actually want when a Cardo query misbehaves.
+
+  TRADE-OFF, stated so it is not a surprise later: with part_log off, historical "what was ClickHouse
+  merging" queries return nothing. The live equivalents cost nothing and remain: `SELECT * FROM
+  system.merges` for in-flight work, and the MergedRows / MergedUncompressedBytes counters in
+  `system.events`. If you need the history back, comment out the part_log line and restart.
+
+  Measurements above were taken on an unrelated single-node instance, not on Cardo. They are the
+  reason for the settings, not a claim about Cardo's own footprint.
+-->
+<clickhouse>
+    <!-- High-frequency self-telemetry. `remove="1"` deletes the section from the merged
+         configuration, which is ClickHouse's documented way to disable a system log. -->
+    <asynchronous_metric_log remove="1"/>       <!-- ~102 rows/sec, the top writer by a wide margin -->
+    <metric_log remove="1"/>                    <!-- a wide row every second -->
+    <trace_log remove="1"/>                     <!-- sampling profiler; also see users.d overlay -->
+    <text_log remove="1"/>                      <!-- duplicates the server log into a table -->
+    <part_log remove="1"/>                      <!-- self-feeding; see TRADE-OFF above -->
+    <processors_profile_log remove="1"/>
+    <opentelemetry_span_log remove="1"/>        <!-- ClickHouse's own spans, unrelated to Cardo's -->
+    <query_thread_log remove="1"/>              <!-- per-thread detail nothing here reads -->
+    <query_views_log remove="1"/>               <!-- Cardo's views are plain views, not materialized -->
+    <background_schedule_pool_log remove="1"/>
+    <blob_storage_log remove="1"/>
+    <backup_log remove="1"/>
+    <query_metric_log remove="1"/>              <!-- samples every RUNNING query on a 1s timer -->
+
+    <!-- Deliberately LEFT ENABLED, because none of them write on a single-node Cardo box:
+         crash_log (only on a crash, and worth having), session_log (auth events only), the
+         zookeeper_* logs (no ZooKeeper here) and the various metadata logs for storage engines
+         nothing here uses.
+
+         This list used to include asynchronous_insert_log, on the stated grounds that "Cardo does
+         not use async inserts". That was wrong: ClickHouse 26.x turns async_insert on by default,
+         so Cardo's own writes were going through the queue and the log had rows in it. Both the
+         queue and the log are dealt with in 20-cardo-idle.xml, which is also where the measurement
+         that caught it is written down. -->
+
+    <!-- Kept for debuggability. These sections already exist in the stock config, so this merges a
+         TTL into them rather than defining them fresh. -->
+    <query_log>
+        <ttl>event_date + INTERVAL 3 DAY DELETE</ttl>
+    </query_log>
+    <error_log>
+        <ttl>event_date + INTERVAL 3 DAY DELETE</ttl>
+    </error_log>
+
+    <!-- Removing asynchronous_metric_log stops the WRITES but not the COLLECTION: ClickHouse still
+         walks /proc and stats the disks on this interval regardless of whether anything records the
+         result. Stock default is 1s. -->
+    <asynchronous_metrics_update_period_s>60</asynchronous_metrics_update_period_s>
+
+    <!-- Stock images default to `debug`, which is what feeds text_log millions of rows and grows the
+         log volume on disk too. -->
+    <logger>
+        <level>warning</level>
+    </logger>
+</clickhouse>

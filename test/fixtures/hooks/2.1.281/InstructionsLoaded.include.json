@@ -1,0 +1,11 @@
+{
+  "session_id": "SESSION",
+  "transcript_path": "C:\\Users\\marker-user\\.claude\\projects\\C--Users-marker-user-src-payments-service\\SESSION.jsonl",
+  "cwd": "C:\\Users\\marker-user\\src\\payments-service",
+  "scratchpad_dir": "C:\\Users\\marker-user\\AppData\\Local\\Temp\\claude\\C--Users-marker-user-src-payments-service\\SESSION\\scratchpad",
+  "hook_event_name": "InstructionsLoaded",
+  "memory_type": "Project",
+  "parent_file_path": "C:\\Users\\marker-user\\src\\payments-service\\CLAUDE.md",
+  "file_path": "C:\\Users\\marker-user\\src\\payments-service\\acme-standards-v7.md",
+  "load_reason": "include"
+}

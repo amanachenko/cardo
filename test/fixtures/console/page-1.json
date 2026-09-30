@@ -1,0 +1,32 @@
+{
+  "data": [
+    {
+      "date": "2026-09-08T00:00:00Z",
+      "actor": { "type": "user_actor", "email_address": "first@example.com" },
+      "organization_id": "dc9f6c26-b22c-4831-8d01-0446bada88f1",
+      "customer_type": "subscription",
+      "terminal_type": "iTerm.app",
+      "core_metrics": {
+        "num_sessions": 3,
+        "lines_of_code": { "added": 120, "removed": 45 },
+        "commits_by_claude_code": 1,
+        "pull_requests_by_claude_code": 0
+      },
+      "tool_actions": {
+        "edit_tool": { "accepted": 10, "rejected": 4 },
+        "multi_edit_tool": { "accepted": 0, "rejected": 0 },
+        "write_tool": { "accepted": 2, "rejected": 1 },
+        "notebook_edit_tool": { "accepted": 0, "rejected": 0 }
+      },
+      "model_breakdown": [
+        {
+          "model": "claude-sonnet-5",
+          "tokens": { "input": 5000, "output": 1200, "cache_read": 0, "cache_creation": 0 },
+          "estimated_cost": { "currency": "USD", "amount": 7 }
+        }
+      ]
+    }
+  ],
+  "has_more": true,
+  "next_page": "page_MjAyNS0wNS0xNFQwMDowMDowMFo="
+}

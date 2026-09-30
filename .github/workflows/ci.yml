@@ -1,0 +1,200 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+
+      - name: Formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt'd:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build
+        run: go build ./...
+
+      # The invariant tests are the ones that must never silently regress. They are run
+      # separately and verbosely so that a failure is legible in the log rather than buried
+      # among the unit tests — each one guards a promise in docs/design/invariants.md.
+      - name: Invariant tests
+        run: go test ./test/ -v -run 'TestINV'
+
+      - name: Unit and contract tests
+        run: go test ./... -race
+
+      - name: Verify the SQL layer against a generated store
+        run: |
+          curl -sSL -o duckdb.zip https://github.com/duckdb/duckdb/releases/latest/download/duckdb_cli-linux-amd64.zip
+          unzip -q duckdb.zip
+          CARDO_SAMPLE_DIR="$PWD/.sample" go test ./test/ -run TestGenerateSampleStore
+          ./duckdb -init /dev/null <<'SQL'
+          SET VARIABLE cardo_root = '.sample';
+          .read sql/duckdb/010_bronze.sql
+          .read sql/duckdb/020_silver.sql
+          .read sql/duckdb/030_gold.sql
+          SELECT 'bronze', count(*) FROM bronze_actor_day;
+          SELECT 'silver', count(*) FROM silver_actor_day;
+          SELECT 'gold',   count(*) FROM gold_fleet_adoption;
+          SQL
+
+  clickhouse:
+    # The ClickHouse store is verified against a real server rather than a mock. Everything it
+    # relies on -- REPLACE PARTITION being atomic, ClickHouse's JSON extraction, the cyclic-alias
+    # rule that ILLEGAL_AGGREGATION enforces -- is server behaviour that a mock would simply agree
+    # with. See risks.md #11 for what a single node still does not prove.
+    runs-on: ubuntu-latest
+    services:
+      clickhouse:
+        image: clickhouse/clickhouse-server:26.6
+        ports:
+          - 8123:8123
+        env:
+          CLICKHOUSE_USER: cardo
+          CLICKHOUSE_PASSWORD: cardo-ci
+          CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+        options: >-
+          --health-cmd "clickhouse-client --query 'SELECT 1'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+
+      - name: Store and SQL tests against a live ClickHouse
+        env:
+          CARDO_CLICKHOUSE_URL: http://127.0.0.1:8123
+          CARDO_CLICKHOUSE_USER: cardo
+          CARDO_CLICKHOUSE_PASSWORD: cardo-ci
+        run: |
+          # -count=1: Go caches test results without knowing about the network, and setup-go
+          # restores the build cache that holds them. A cached "--- PASS" line would satisfy the
+          # greps below without a single query reaching the server.
+          go test -count=1 ./internal/store/clickhouse/ -v | tee out.txt
+          # These tests skip silently when CARDO_CLICKHOUSE_URL is unset, which is right locally
+          # and dangerous here: one mistyped variable would turn this whole job into a green
+          # no-op that proves nothing. Assert that the real assertions ran.
+          grep -q "PASS: TestGoldMartsOverRealClickHouse" out.txt
+          grep -q "PASS: TestINV2_NoEmailReachesClickHouse" out.txt
+          grep -q "PASS: TestCollectorSilverViews" out.txt
+          grep -q "PASS: TestCollectorGoldAppliesTheMinimumGroupSize" out.txt
+          grep -q "PASS: TestViewSettingsLastWriteWins" out.txt
+
+  collector:
+    # deploy/collector/config.yaml is the privacy contract for the whole Phase 2 path, and it is
+    # configuration rather than code: the only way to know what it does is to run it. This job runs
+    # the pinned collector against a real ClickHouse, sends it every documented hook shape and an
+    # OTel payload loaded with identity and content, and checks what arrived.
+    runs-on: ubuntu-latest
+    services:
+      clickhouse:
+        image: clickhouse/clickhouse-server:26.6
+        ports:
+          - 8123:8123
+          - 9000:9000
+        env:
+          CLICKHOUSE_USER: cardo
+          CLICKHOUSE_PASSWORD: cardo-ci
+          CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+        options: >-
+          --health-cmd "clickhouse-client --query 'SELECT 1'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      CARDO_CLICKHOUSE_URL: http://127.0.0.1:8123
+      CARDO_CLICKHOUSE_USER: cardo
+      CARDO_CLICKHOUSE_PASSWORD: cardo-ci
+      # The repository's public test salt. Fine here, where the only identities are invented;
+      # never anywhere a real session could reach.
+      CARDO_SALT: "0123456789abcdef0123456789abcdef"
+      CARDO_ORG_ARTIFACTS: "^acme-"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+
+      - name: Apply the schema
+        run: go run ./cmd/cardo migrate
+
+      - name: Start the collector
+        run: |
+          docker run -d --name collector --network host \
+            -e CARDO_SALT -e CARDO_ORG_ARTIFACTS \
+            -e CARDO_CLICKHOUSE_ENDPOINT=tcp://127.0.0.1:9000 \
+            -e CARDO_CLICKHOUSE_USER -e CARDO_CLICKHOUSE_PASSWORD \
+            -v "$PWD/deploy/collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro" \
+            otel/opentelemetry-collector-contrib:0.161.0
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8088/health && exit 0; sleep 1; done
+          docker logs collector
+          exit 1
+
+      - name: Collector contract tests
+        env:
+          CARDO_COLLECTOR_HOOKS_URL: http://127.0.0.1:8088/v1/hooks
+          CARDO_COLLECTOR_OTLP_URL: http://127.0.0.1:4318
+        run: |
+          go test -count=1 ./test/ -run 'TestCollector_|TestINV2_Collector' -v | tee out.txt
+          # Same guard as the clickhouse job: these skip without their environment, so assert
+          # that the real assertions ran rather than trusting a green job.
+          grep -q "PASS: TestCollector_HookPayloadsReduceToTheAllowlist" out.txt
+          grep -q "PASS: TestCollector_OTelIdentityIsThePollersPseudonym" out.txt
+          grep -q "PASS: TestINV2_CollectorTripwireDropsWhatTheTransformsMissed" out.txt
+
+      # The strict naming mode (ADR-0025) is the one an organization chooses for privacy, so it is
+      # tested against a real collector too, not only read.
+      - name: Restart the collector in strict naming mode
+        run: |
+          docker logs collector 2>&1 | tail -50
+          docker rm -f collector
+          docker run -d --name collector --network host \
+            -e CARDO_SALT -e CARDO_ORG_ARTIFACTS -e CARDO_ARTIFACT_NAMES=org-only \
+            -e CARDO_CLICKHOUSE_ENDPOINT=tcp://127.0.0.1:9000 \
+            -e CARDO_CLICKHOUSE_USER -e CARDO_CLICKHOUSE_PASSWORD \
+            -v "$PWD/deploy/collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro" \
+            otel/opentelemetry-collector-contrib:0.161.0
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8088/health && exit 0; sleep 1; done
+          docker logs collector
+          exit 1
+
+      - name: Collector contract tests, strict naming
+        env:
+          CARDO_COLLECTOR_HOOKS_URL: http://127.0.0.1:8088/v1/hooks
+          CARDO_COLLECTOR_OTLP_URL: http://127.0.0.1:4318
+          CARDO_ARTIFACT_NAMES: org-only
+        run: |
+          go test -count=1 ./test/ -run 'TestCollector_HookPayloadsReduceToTheAllowlist|TestCollector_OTelIdentityIsThePollersPseudonym' -v | tee strict.txt
+          grep -q "PASS: TestCollector_HookPayloadsReduceToTheAllowlist" strict.txt
+          grep -q "PASS: TestCollector_OTelIdentityIsThePollersPseudonym" strict.txt
+
+      - name: Collector log
+        if: always()
+        run: docker logs collector 2>&1 | tail -50

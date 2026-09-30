@@ -1,0 +1,19 @@
+{
+  "session_id": "SESSION",
+  "transcript_path": "C:\\Users\\marker-user\\.claude\\projects\\C--Users-marker-user-src-payments-service\\SESSION.jsonl",
+  "cwd": "C:\\Users\\marker-user\\src\\payments-service",
+  "scratchpad_dir": "C:\\Users\\marker-user\\AppData\\Local\\Temp\\claude\\C--Users-marker-user-src-payments-service\\SESSION\\scratchpad",
+  "hook_event_name": "SubagentStop",
+  "prompt_id": "5f0c1a3e-0000-4000-8000-000000000001",
+  "permission_mode": "default",
+  "effort": {
+    "level": "xhigh"
+  },
+  "agent_id": "a01a866142f42cf56",
+  "agent_type": "acme-security-reviewer",
+  "agent_transcript_path": "C:\\Users\\marker-user\\.claude\\projects\\C--Users-marker-user-src-payments-service\\SESSION\\subagents\\agent.jsonl",
+  "last_assistant_message": "CONTENT-MARKER the file exports one function",
+  "background_tasks": [],
+  "session_crons": [],
+  "stop_hook_active": false
+}

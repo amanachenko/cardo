@@ -1,0 +1,15 @@
+{
+  "session_id": "SESSION",
+  "prompt_id": "5f0c1a3e-0000-4000-8000-000000000001",
+  "transcript_path": "/home/marker-user/.claude/projects/-home-marker-user-src-payments-service/SESSION.jsonl",
+  "cwd": "/home/marker-user/src/payments-service",
+  "scratchpad_dir": "/tmp/claude-1000/-home-marker-user-src-payments-service/SESSION/scratchpad",
+  "permission_mode": "default",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "SessionStart",
+  "session_start_reason": "resume",
+  "model": "claude-opus-5",
+  "a_field_from_a_future_release": "CONTENT-MARKER nobody reviewed this field"
+}

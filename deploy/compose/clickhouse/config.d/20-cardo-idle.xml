@@ -1,0 +1,152 @@
+<?xml version="1.0"?>
+<!--
+  Idle-WAKEUP overlay for the Cardo reference stack.
+
+  This is a different problem from its neighbour 10-cardo-quiet.xml, which is about how much
+  ClickHouse WRITES about itself. This file is about how often it WAKES UP to check whether there is
+  anything to do. Silencing the system logs removed the disk churn and left roughly 5% of one core
+  burning on a server with no traffic at all.
+
+  MEASURED, on this stack, idle, by sampling utime+stime per thread out of /proc over 30 seconds and
+  grouping by thread name:
+
+      ThreadPool         133 ticks   4.43% of one core   (16 threads)
+      MemoryWorker        10 ticks   0.33% of one core
+      clickhouse-serv      3 ticks   0.10% of one core
+      ExternalLoader       2 ticks   0.07% of one core
+      ConfigReloader       2 ticks   0.07% of one core
+      AsyncMetrics         1 tick    0.03% of one core
+
+  Note what is NOT there: no merges, no log flushing, no query work. 10-cardo-quiet.xml had already
+  dealt with those. What is left is pure polling, and the dominant term is a handful of periodic
+  tasks that fire per table whether or not that table has changed. The defaults below were read out
+  of system.merge_tree_settings and system.server_settings on the running server rather than guessed:
+
+    merge_tree_clear_old_parts_interval_seconds = 1
+
+  Once a second, per MergeTree table, forever. Cardo has seven of them. That single default is the
+  largest contributor here, and on a store that is written once a day it is checking for stale parts
+  about 86,000 times between writes.
+
+  WHY THE DEFAULTS ARE LIKE THIS, so nobody reads them as a bug: they are correct for the machine
+  ClickHouse is designed for, a dedicated multi-node cluster under continuous ingest where a part
+  becomes collectable within seconds of arriving and 512 scheduling threads are all doing real work.
+  Cardo's reference box is the opposite: one node, seven tables, one write per day. Nothing here is a
+  fix for ClickHouse. It is a statement that this deployment is idle nearly all of the time.
+
+  TRADE-OFF: background housekeeping now happens on the order of minutes rather than seconds, so
+  merged-away source parts linger a few minutes longer on disk and a merge may be selected up to
+  five minutes after the write that made it worthwhile. For a store written once a day by a poller,
+  neither is observable. Under continuous ingest both would matter, which is why this file is scoped
+  to the evaluation stack and not advice for a production cluster.
+-->
+<clickhouse>
+    <!-- Per-table periodic housekeeping. These fire on a timer per MergeTree table regardless of
+         whether the table was touched, so their cost scales with table count, not write volume. -->
+    <merge_tree>
+        <merge_tree_clear_old_parts_interval_seconds>300</merge_tree_clear_old_parts_interval_seconds>
+        <merge_tree_clear_old_temporary_directories_interval_seconds>300</merge_tree_clear_old_temporary_directories_interval_seconds>
+
+        <!-- How long a table waits before re-asking "is a merge worth doing". The idle backoff
+             multiplies this by merge_selecting_sleep_slowdown_factor up to the max, so raising the
+             ceiling is what actually lets a quiet table go properly quiet. -->
+        <merge_selecting_sleep_ms>30000</merge_selecting_sleep_ms>
+        <max_merge_selecting_sleep_ms>300000</max_merge_selecting_sleep_ms>
+
+        <cleanup_delay_period>300</cleanup_delay_period>
+        <max_cleanup_delay_period>900</max_cleanup_delay_period>
+    </merge_tree>
+
+    <!-- Thread pools. A parked thread is nearly free, but the scheduler still walks these pools, and
+         512 is sized for a replicated cluster coordinating fetches, mutations and a replication
+         queue. None of that exists on a single node: see risks.md #11, which is the note saying this
+         stack has only ever run on one. -->
+    <background_schedule_pool_size>16</background_schedule_pool_size>
+
+    <!-- background_pool_size and background_common_pool_size are deliberately LEFT AT DEFAULTS.
+         Lowering background_pool_size to 4 makes ClickHouse refuse to start:
+
+           Code: 36. The value of 'number_of_free_entries_in_pool_to_execute_mutation' setting (20)
+           is greater than the value of 'background_pool_size' *
+           'background_merges_mutations_concurrency_ratio' (8). This indicates incorrect
+           configuration because mutations cannot work with these settings. (BAD_ARGUMENTS)
+
+         The server sanity-checks the ratio, so the change is not one setting but four. It is also
+         not where the cost is: unlike the schedule pool, these threads are created on demand for
+         actual merges, and the measurement above found no merge activity to speak of. Paying for
+         three coupled threshold changes to shrink a pool that is empty at idle is how a tuning file
+         turns into a liability. -->
+
+    <!-- Pools for features this deployment does not use at all: no replicas to fetch from, no
+         tiered storage to move between, no Distributed tables, no Kafka or RabbitMQ engines, no
+         Buffer tables. Sized to the minimum rather than removed, so the features still work if a
+         future deployment turns one on. -->
+    <background_fetches_pool_size>2</background_fetches_pool_size>
+    <background_move_pool_size>2</background_move_pool_size>
+    <background_distributed_schedule_pool_size>2</background_distributed_schedule_pool_size>
+    <background_message_broker_schedule_pool_size>2</background_message_broker_schedule_pool_size>
+    <background_buffer_flush_schedule_pool_size>2</background_buffer_flush_schedule_pool_size>
+
+    <!-- The heavy async metrics walk the data directory and stat every part. 10-cardo-quiet.xml
+         already stopped the RESULT being recorded; this stops it being computed so often. -->
+    <asynchronous_heavy_metrics_update_period_s>600</asynchronous_heavy_metrics_update_period_s>
+
+    <!-- Auto-sized from host RAM, which on a developer laptop means ClickHouse reserves gigabytes of
+         address space to cache a dataset measured in tens of kilobytes. The uncompressed cache is
+         not used for MergeTree reads unless a query asks for it, so it is switched off outright. -->
+    <mark_cache_size>536870912</mark_cache_size>
+    <uncompressed_cache_size>0</uncompressed_cache_size>
+
+    <!-- Nothing here resolves a hostname after startup: the poller connects by address and there are
+         no remote replicas. -->
+    <dns_cache_update_period>600</dns_cache_update_period>
+
+    <!-- THE ACTUAL ANSWER, and the reason the rest of this file moved the number so little.
+         Everything above was inferred from timer defaults and was worth roughly half a percent. The
+         dominant cost was found instead by taking stack traces of the busy threads:
+
+           SELECT thread_id, thread_name,
+                  arrayStringConcat(arrayMap(x -> demangle(addressToSymbol(x)), trace), ' <- ')
+           FROM system.stack_trace WHERE thread_id IN (...)
+
+         Every busy thread, without exception, was parked in pthread_cond_timedwait inside
+         DB::AsynchronousInsertQueue. Sixteen of them, the default async_insert_threads, each waking
+         on async_insert_busy_timeout_ms, which is 200ms. Eighty wakeups a second on a server with
+         no traffic, for a feature that coalesces small concurrent inserts from many clients.
+
+         Cardo writes one batch per source per day. There is nothing to coalesce, and the poller now
+         sends async_insert=0 on its own inserts regardless of what any server is configured to do
+         (see Insert in internal/store/clickhouse/client.go, where the reason is correctness rather
+         than cost). Zero here disables the queue outright, which is what removes the threads.
+
+         Worth noting for anyone reading this on a different version: async_insert defaults to ON in
+         26.x. It did not always, and the flip is invisible until you go looking for it. -->
+    <async_insert_threads>0</async_insert_threads>
+
+    <!-- With the queue gone this log has no writer left, and an enabled system log still owns a
+         flush timer that fires on its own schedule whether or not it has rows. -->
+    <asynchronous_insert_log remove="1"/>
+
+    <!-- The two logs 10-cardo-quiet.xml deliberately keeps. Flushing them once a minute instead of
+         every 7.5 seconds costs nothing: they are read by a human after something went wrong, never
+         by a dashboard. -->
+    <query_log>
+        <flush_interval_milliseconds>60000</flush_interval_milliseconds>
+    </query_log>
+    <error_log>
+        <flush_interval_milliseconds>60000</flush_interval_milliseconds>
+    </error_log>
+    <!-- Last term. With the insert queue gone, the busiest remaining thread was MemoryWorker, which
+         reconciles the memory tracker against the cgroup and purges unused jemalloc pages. Left at
+         0 it picks its own period from the memory source, and on this box that was frequent enough
+         to be two thirds of everything left. Measured, same 30s sampler:
+
+             async_insert_threads=0 alone            0.40% of one core
+             plus memory_worker_period_ms=2000       0.17% of one core
+
+         TRADE-OFF: ClickHouse notices memory pressure up to two seconds later and returns freed
+         pages to the OS less eagerly. On a box holding tens of kilobytes under a multi-gigabyte
+         limit that is not a trade at all. On a server actually near its memory ceiling it would be,
+         which is the line at which this whole file stops being appropriate. -->
+    <memory_worker_period_ms>2000</memory_worker_period_ms>
+</clickhouse>
