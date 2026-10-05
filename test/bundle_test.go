@@ -99,8 +99,8 @@ func TestBundleConfiguresTelemetryAndNothingElse(t *testing.T) {
 	}
 }
 
-// INV-5 — every content flag is present and off, and repository identity (tier 0 material,
-// ADR-0002) is not attached.
+// INV-5 — every content flag is present and off. Repository identity is attached: the collector
+// classifies it and drops the URL before storage (ADR-0035, pinned in test/collector_test.go).
 func TestINV5_BundlePinsEveryContentFlagOff(t *testing.T) {
 	for _, b := range bundles(t) {
 		for _, f := range contentFlags {
@@ -113,9 +113,9 @@ func TestINV5_BundlePinsEveryContentFlagOff(t *testing.T) {
 				t.Errorf("INV-5: %s sets %s=%q. Content never enters tiers 0 or 1.", b.path, f, v)
 			}
 		}
-		if b.env["OTEL_METRICS_INCLUDE_REPOSITORY"] != "false" {
-			t.Errorf("%s must set OTEL_METRICS_INCLUDE_REPOSITORY=false: repository identity belongs "+
-				"to the security tier (ADR-0002), not the fleet tier", b.path)
+		if b.env["OTEL_METRICS_INCLUDE_REPOSITORY"] != "true" {
+			t.Errorf("%s must set OTEL_METRICS_INCLUDE_REPOSITORY=true: which repository a session "+
+				"worked in is classified at the collector (ADR-0035)", b.path)
 		}
 		if b.env["CLAUDE_CODE_ENABLE_TELEMETRY"] != "1" {
 			t.Errorf("%s does not enable telemetry", b.path)

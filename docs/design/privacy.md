@@ -39,6 +39,13 @@ Short by design, and this list is the boundary — adding to it requires a recor
 - the skills, slash commands, subagents and MCP servers you used, **by name, including ones you
   wrote yourself** (below)
 - your team, as set in the bundle your organization deployed
+- **which repository you worked in**, if it is one of your organization's, by name (such as
+  `github.com/acme/widgets`). Any other repository is recorded only as "external" plus its host,
+  such as `github.com`, and **never by its full address**
+  ([ADR-0035](../adr/0035-repository-identity-classified.md)). Your organization lists its own
+  repositories in `CARDO_ORG_REPOS`; until it does, every repository is "external". Nothing is
+  recorded when you work outside a repository. No view shows repositories yet, and a real Claude
+  Code has not yet been seen sending one
 
 **About names.** Cardo records the names of commands, subagents and MCP servers that you defined
 yourself. **That is more than Claude Code's own telemetry sends by default**, and it is deliberate
@@ -68,8 +75,8 @@ prompt text, the commands and file contents of tool calls, subagent output, and 
 directory. It crosses your organization's network to the collector. **The collector discards all of
 it before anything is written**, and keeps only the list above
 ([ADR-0023](../adr/0023-hook-payload-allowlist.md)). It also drops your Anthropic account
-identifiers and your machine's hostname. It keeps your organization's Anthropic ID, which is the
-same for everyone in the organization.
+identifiers, your machine's hostname, and the full address of the repository you work in. It keeps
+your organization's Anthropic ID, which is the same for everyone in the organization.
 
 For any field it did not keep, the collector records the field's *name*, never its value. That is
 how a new field in a future Claude Code release gets noticed without its contents being stored.
@@ -88,11 +95,6 @@ telemetry endpoint centrally, any telemetry endpoint you had configured yourself
 
 Recorded here so you know what is coming before it arrives. Each links to the decision behind it.
 
-- **The repository you worked in** ([ADR-0035](../adr/0035-repository-identity-classified.md)).
-  - Your organization's own repositories are recorded by name.
-  - Any other repository is recorded only as "external" plus its host, such as `github.com`.
-  - Working outside any repository is recorded as "none".
-  - The full address of a repository outside your organization is never recorded in this tier.
 - **Which instructions files your sessions loaded in your organization's repositories:** whether
   any loaded, and how many. Your organization can choose to record the names of project-level
   files, and this document will say if it has. The names of your own personal files are never
@@ -119,9 +121,9 @@ you.
 
 **Not installed by default.** It is a separate module, and its arrival is a deliberate, announced act
 ([ADR-0003](../adr/0003-efficiency-before-security.md)). When present it collects policy decisions, MCP
-server inventory, repository identity, denied tool calls, login and org identity, and bypass-mode usage
-— for the security team only, under the same governance as endpoint detection tooling. **No prompts and
-no code** ([ADR-0002](../adr/0002-three-tier-data-model.md)).
+server inventory, the full address of repositories outside your organization, denied tool calls,
+login and org identity, and bypass-mode usage — for the security team only, under the same
+governance as endpoint detection tooling. **No prompts and no code** ([ADR-0002](../adr/0002-three-tier-data-model.md)).
 
 ## Redaction settings, in full
 

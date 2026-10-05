@@ -188,6 +188,25 @@ func TestCollectorStrictNamesFailClosed(t *testing.T) {
 	}
 }
 
+// A blank CARDO_ORG_REPOS classifies every repository as external (ADR-0035). An empty regex
+// matches every string, so each match on the pattern has to rule the blank value out itself, or a
+// collector started without the variable would record every repository by name, customers' and
+// side projects' included.
+func TestCollectorBlankOrgReposIsExternal(t *testing.T) {
+	cfg := collectorConfig(t)
+	uses := strings.Count(cfg, "${env:CARDO_ORG_REPOS")
+	guarded := regexp.MustCompile(
+		`"\$\{env:CARDO_ORG_REPOS:-\}" != "" and IsMatch\([^,]+, "\$\{env:CARDO_ORG_REPOS:-\}"\)`).FindAllString(cfg, -1)
+	if len(guarded) == 0 {
+		t.Fatal("no statement classifies a repository by CARDO_ORG_REPOS; the classification is gone (ADR-0035)")
+	}
+	if uses != 2*len(guarded) {
+		t.Errorf("CARDO_ORG_REPOS is used %d times, and only %d of them are in the guarded form "+
+			`"${env:CARDO_ORG_REPOS:-}" != "" and IsMatch(x, "${env:CARDO_ORG_REPOS:-}")`,
+			uses, 2*len(guarded))
+	}
+}
+
 // The hook receiver's own limit is 100 KiB, refused with a 400 and no log line on the collector.
 // Real payloads carry whole prompts and subagent replies and cross it, and the event is lost.
 func TestCollectorAcceptsRealisticHookBodies(t *testing.T) {
@@ -285,6 +304,7 @@ type liveStack struct {
 	salt              string
 	orgArtifacts      *regexp.Regexp
 	strictNames       bool
+	orgRepos          *regexp.Regexp
 }
 
 func liveCollector(t *testing.T) *liveStack {
@@ -306,6 +326,10 @@ func liveCollector(t *testing.T) *liveStack {
 	}
 	if mode := os.Getenv("CARDO_ARTIFACT_NAMES"); mode != "" && mode != "all" {
 		s.strictNames = true
+	}
+	// An unset or empty CARDO_ORG_REPOS makes every repository external.
+	if pattern := os.Getenv("CARDO_ORG_REPOS"); pattern != "" {
+		s.orgRepos = regexp.MustCompile(pattern)
 	}
 
 	c, err := clickhouse.NewClient(clickhouse.Config{
@@ -696,7 +720,7 @@ func TestCollector_OTelIdentityIsThePollersPseudonym(t *testing.T) {
 	}
 	resource := map[string]any{"attributes": otlpAttrs(append([]string{
 		"service.name", "claude-code", "host.name", "marker-user-laptop", "cardo.cohort", "payments",
-		"vcs.repository.url.full", "https://git.example-corp.com/marker-user/secret",
+		"vcs.repository.url.full", "https://gitlab.com/marker-user/secret",
 	}, identifying...)...)}
 
 	logs := map[string]any{"resourceLogs": []any{map[string]any{
@@ -782,6 +806,116 @@ func TestCollector_OTelIdentityIsThePollersPseudonym(t *testing.T) {
 		if a := stringMap(r["Attributes"]); a["skill.name"] != "acme-review" {
 			t.Errorf("skill.name was not kept: %v", a)
 		}
+	}
+}
+
+// ADR-0035: a repository is recorded by name only when it is the organization's. Any other is
+// reduced to its host, a blank CARDO_ORG_REPOS makes every repository external, and the URL itself
+// is never stored. The form Claude Code sends the URL in has not been observed, so every form a git
+// remote can take is sent, on the resource and on the record, and each must reduce to the same
+// host/owner/name before it is matched.
+func TestCollector_RepositoriesAreClassified(t *testing.T) {
+	s := liveCollector(t)
+	run := fmt.Sprintf("cardo-test-repo-%d", time.Now().UnixNano())
+	now := fmt.Sprint(time.Now().UnixNano())
+
+	cases := []struct{ url, path, host string }{
+		{"https://GitHub.com/Acme/Widgets", "github.com/acme/widgets", "github.com"},
+		{"git@github.com:acme/widgets.git", "github.com/acme/widgets", "github.com"},
+		{"ssh://git@github.com:22/acme/tools.git/", "github.com/acme/tools", "github.com"},
+		{"https://x-access-token:CONTENT-MARKER@github.com/acme/infra?ref=CONTENT-MARKER", "github.com/acme/infra", "github.com"},
+		{"https://gitlab.com/marker-user/side-project", "gitlab.com/marker-user/side-project", "gitlab.com"},
+		{"file:///home/marker-user/scratch", "/home/marker-user/scratch", ""},
+		// A session outside any repository, carrying a class of its own making.
+		{"", "", ""},
+	}
+	want := func(i int) (class, repo string, ok bool) {
+		c := cases[i]
+		switch {
+		case c.url == "":
+			return "", "", false
+		case s.orgRepos != nil && s.orgRepos.MatchString(c.path):
+			return "org", c.path, true
+		default:
+			return "external", c.host, true
+		}
+	}
+	if s.orgRepos == nil {
+		t.Log("CARDO_ORG_REPOS is unset: every repository should be external")
+	}
+
+	var resourceLogs, resourceMetrics []any
+	for i, c := range cases {
+		session := fmt.Sprintf("%s.%d", run, i)
+		vcs := []string{"vcs.repository.url.full", c.url, "vcs.owner.name", "marker-user",
+			"vcs.repository.name", "marker-user-repo", "vcs.provider.name", "github"}
+		if c.url == "" {
+			vcs = []string{"cardo.repo.class", "org", "cardo.repo", "gitlab.com/marker-user/x"}
+		}
+		resource := map[string]any{"attributes": otlpAttrs(append([]string{"service.name", "claude-code"}, vcs...)...)}
+		resourceLogs = append(resourceLogs, map[string]any{
+			"resource": resource,
+			"scopeLogs": []any{map[string]any{"scope": map[string]any{"name": "com.anthropic.claude_code.events"},
+				"logRecords": []any{map[string]any{"timeUnixNano": now,
+					"attributes": otlpAttrs(append([]string{"event.name", "tool_result", "session.id", session}, vcs...)...),
+				}}}}})
+		resourceMetrics = append(resourceMetrics, map[string]any{
+			"resource": resource,
+			"scopeMetrics": []any{map[string]any{"scope": map[string]any{"name": "com.anthropic.claude_code"},
+				"metrics": []any{map[string]any{"name": "claude_code.cost.usage", "unit": "USD",
+					"sum": map[string]any{"aggregationTemporality": 1, "isMonotonic": true,
+						"dataPoints": []any{map[string]any{
+							"asDouble": 0.01, "startTimeUnixNano": now, "timeUnixNano": now,
+							"attributes": otlpAttrs(append([]string{"session.id", session}, vcs...)...),
+						}}}}}}}})
+	}
+	for path, body := range map[string]any{
+		"/v1/logs":    map[string]any{"resourceLogs": resourceLogs},
+		"/v1/metrics": map[string]any{"resourceMetrics": resourceMetrics},
+	} {
+		b, _ := json.Marshal(body)
+		if code := s.post(t, s.otlpURL+path, b); code != http.StatusOK {
+			t.Fatalf("POST %s answered %d", path, code)
+		}
+	}
+
+	check := func(what, session string, attrs map[string]string) {
+		t.Helper()
+		var i int
+		fmt.Sscanf(strings.TrimPrefix(session, run+"."), "%d", &i)
+		for k := range attrs {
+			if strings.HasPrefix(k, "vcs.") {
+				t.Errorf("%s of %q: %q reached storage", what, cases[i].url, k)
+			}
+		}
+		class, okClass := attrs["cardo.repo.class"]
+		repo, okRepo := attrs["cardo.repo"]
+		wantClass, wantRepo, ok := want(i)
+		if !ok {
+			if okClass || okRepo {
+				t.Errorf("%s with no repository: stored cardo.repo.class=%q cardo.repo=%q, want neither",
+					what, class, repo)
+			}
+			return
+		}
+		if class != wantClass || repo != wantRepo || !okRepo {
+			t.Errorf("%s of %q: stored cardo.repo.class=%q cardo.repo=%q, want %q and %q",
+				what, cases[i].url, class, repo, wantClass, wantRepo)
+		}
+	}
+	for _, r := range s.rows(t, "bronze_otel_logs", "LogAttributes, ResourceAttributes",
+		fmt.Sprintf("startsWith(LogAttributes['session.id'], '%s.')", run), len(cases)) {
+		assertNoMarkers(t, "otel log", r)
+		a := stringMap(r["LogAttributes"])
+		check("log attributes", a["session.id"], a)
+		check("log resource", a["session.id"], stringMap(r["ResourceAttributes"]))
+	}
+	for _, r := range s.rows(t, "bronze_otel_metrics_sum", "Attributes, ResourceAttributes",
+		fmt.Sprintf("startsWith(Attributes['session.id'], '%s.')", run), len(cases)) {
+		assertNoMarkers(t, "otel metric", r)
+		a := stringMap(r["Attributes"])
+		check("datapoint attributes", a["session.id"], a)
+		check("metric resource", a["session.id"], stringMap(r["ResourceAttributes"]))
 	}
 }
 

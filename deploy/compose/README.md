@@ -90,8 +90,9 @@ Run it on an always-on machine inside the organization's network. Every step is 
    Copy `fullchain.pem` and `privkey.pem` into one directory outside the repository.
    A publicly trusted certificate is the point: Claude Code trusts the operating system's store
    and its own bundled one, so engineers configure nothing.
-4. **Add to `.env`:** `CARDO_HOSTNAME`, `CARDO_TLS_DIR` (that directory, as an absolute path), and
-   the `CARDO_SALT` you generated.
+4. **Add to `.env`:** `CARDO_HOSTNAME`, `CARDO_TLS_DIR` (that directory, as an absolute path), the
+   `CARDO_SALT` you generated, and `CARDO_ORG_REPOS`, the pattern naming the organization's
+   repositories (`.env.example` explains it). Without it, every repository is recorded as external.
 5. **Start it:** `make stack-up-network`, from the repository root.
 6. **Open ports 4318 and 8088** on the machine's firewall, to the office and VPN ranges only. The
    collector does not authenticate senders ([risks.md](../../risks.md) #19).
@@ -113,6 +114,26 @@ Run it on an always-on machine inside the organization's network. Every step is 
    Hook rows are the thing to look for. HTTP hooks had only ever been seen over plain
    `http://127.0.0.1` before this overlay. If OTel arrives and hooks do not, the hooks are failing,
    and Claude Code reports that only in its own hook error count.
+
+   Then the repository, which no real Claude Code had been seen sending
+   ([ADR-0035](../../docs/adr/0035-repository-identity-classified.md)). Work in one of the
+   organization's repositories for this check:
+
+   ```sql
+   SELECT EventName, ResourceAttributes['cardo.repo.class'] AS on_resource,
+          LogAttributes['cardo.repo.class'] AS on_record, any(LogAttributes['cardo.repo']), count()
+   FROM cardo.bronze_otel_logs GROUP BY ALL;
+   SELECT MetricName, ResourceAttributes['cardo.repo.class'] AS on_resource,
+          Attributes['cardo.repo.class'] AS on_record, count()
+   FROM cardo.bronze_otel_metrics_sum GROUP BY ALL;
+   SELECT count() FROM cardo.bronze_otel_logs
+   WHERE arrayExists(k -> startsWith(k, 'vcs.'), mapKeys(LogAttributes))
+      OR arrayExists(k -> startsWith(k, 'vcs.'), mapKeys(ResourceAttributes));
+   ```
+
+   The class should be `org`. Which column it is in says where Claude Code puts the repository.
+   If it is empty everywhere, Claude Code sent none. If it is `external`, the pattern does not
+   match the organization's URLs. The last query must return 0.
 
 ## Three things in here that are deliberate
 

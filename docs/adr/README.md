@@ -44,7 +44,7 @@ The hard rules that these decisions produce live in
 | [0032](0032-engineer-coach-by-shared-link.md) | The engineer's view is a coach, and in pilots it is a shared link | Accepted | 2026-09-25 |
 | [0033](0033-per-person-cost-for-budget-owners.md) | A budget owner may see cost per person, and nothing more | Accepted, not built | 2026-09-25 |
 | [0034](0034-identity-in-pilots.md) | In the pilots, pseudonyms stay, the operator holds the salt, and teams come from a directory | Accepted | 2026-09-25 |
-| [0035](0035-repository-identity-classified.md) | Repository identity is collected, classified at the collector | Accepted, not built | 2026-09-25 |
+| [0035](0035-repository-identity-classified.md) | Repository identity is collected, classified at the collector | Accepted, collection built | 2026-09-25 |
 | [0036](0036-service-runs-are-not-people.md) | Service runs are labelled, and are never counted as people | Accepted, not built | 2026-09-25 |
 | [0037](0037-policy-evidence.md) | Policy evidence: conformance, coverage and other organizations | Accepted, not built | 2026-09-25 |
 | [0038](0038-public-before-the-adoption-pilot.md) | Publish before the adoption pilot, under a collective copyright | Accepted | 2026-09-30 |

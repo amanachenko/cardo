@@ -134,6 +134,9 @@ jobs:
       # never anywhere a real session could reach.
       CARDO_SALT: "0123456789abcdef0123456789abcdef"
       CARDO_ORG_ARTIFACTS: "^acme-"
+      # [.] rather than a backslash, as an operator must write it: the collector pastes the
+      # pattern into a quoted OTTL string, where a backslash is an invalid escape.
+      CARDO_ORG_REPOS: "^github[.]com/acme/"
     steps:
       - uses: actions/checkout@v4
 
@@ -148,7 +151,7 @@ jobs:
       - name: Start the collector
         run: |
           docker run -d --name collector --network host \
-            -e CARDO_SALT -e CARDO_ORG_ARTIFACTS \
+            -e CARDO_SALT -e CARDO_ORG_ARTIFACTS -e CARDO_ORG_REPOS \
             -e CARDO_CLICKHOUSE_ENDPOINT=tcp://127.0.0.1:9000 \
             -e CARDO_CLICKHOUSE_USER -e CARDO_CLICKHOUSE_PASSWORD \
             -v "$PWD/deploy/collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro" \
@@ -167,10 +170,12 @@ jobs:
           # that the real assertions ran rather than trusting a green job.
           grep -q "PASS: TestCollector_HookPayloadsReduceToTheAllowlist" out.txt
           grep -q "PASS: TestCollector_OTelIdentityIsThePollersPseudonym" out.txt
+          grep -q "PASS: TestCollector_RepositoriesAreClassified" out.txt
           grep -q "PASS: TestINV2_CollectorTripwireDropsWhatTheTransformsMissed" out.txt
 
       # The strict naming mode (ADR-0025) is the one an organization chooses for privacy, so it is
-      # tested against a real collector too, not only read.
+      # tested against a real collector too, not only read. This run also leaves CARDO_ORG_REPOS
+      # unset, where every repository must be external (ADR-0035).
       - name: Restart the collector in strict naming mode
         run: |
           docker logs collector 2>&1 | tail -50
@@ -190,10 +195,12 @@ jobs:
           CARDO_COLLECTOR_HOOKS_URL: http://127.0.0.1:8088/v1/hooks
           CARDO_COLLECTOR_OTLP_URL: http://127.0.0.1:4318
           CARDO_ARTIFACT_NAMES: org-only
+          CARDO_ORG_REPOS: ""
         run: |
-          go test -count=1 ./test/ -run 'TestCollector_HookPayloadsReduceToTheAllowlist|TestCollector_OTelIdentityIsThePollersPseudonym' -v | tee strict.txt
+          go test -count=1 ./test/ -run 'TestCollector_HookPayloadsReduceToTheAllowlist|TestCollector_OTelIdentityIsThePollersPseudonym|TestCollector_RepositoriesAreClassified' -v | tee strict.txt
           grep -q "PASS: TestCollector_HookPayloadsReduceToTheAllowlist" strict.txt
           grep -q "PASS: TestCollector_OTelIdentityIsThePollersPseudonym" strict.txt
+          grep -q "PASS: TestCollector_RepositoriesAreClassified" strict.txt
 
       - name: Collector log
         if: always()

@@ -1,6 +1,7 @@
 # ADR-0035 — Repository identity is collected, classified at the collector
 
-**Status:** Accepted — **not built**
+**Status:** Accepted — **partly built**: collection and classification (decisions 1 and 2). No view
+reads them yet, and decisions 3 and 4 are not built.
 **Date:** 2026-09-25
 **Evidence:** `2026-09-20-claude-code-telemetry-surfaces.md` (the `vcs.*` attributes and their flag,
 **documented, not observed**); `2026-09-24-first-real-hook-payloads.md` (what `InstructionsLoaded`

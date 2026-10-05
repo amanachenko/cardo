@@ -27,7 +27,7 @@ deployed, and this page explains every line of it.
 | `OTEL_METRICS_INCLUDE_SESSION_ID` | `true` | Lets hook events and metrics be joined per session |
 | `OTEL_METRICS_INCLUDE_VERSION` | `true` | Claude Code version, for the compatibility matrix |
 | `OTEL_METRICS_INCLUDE_ACCOUNT_UUID` | `false` | Account identifiers are not needed and are dropped anyway |
-| `OTEL_METRICS_INCLUDE_REPOSITORY` | `false` | Which repository you work in is not collected |
+| `OTEL_METRICS_INCLUDE_REPOSITORY` | `true` | Which repository you work in. The collector keeps your organization's repositories by name and reduces any other to its host. See *Naming your organization's repositories* below |
 | `OTEL_RESOURCE_ATTRIBUTES` | `cardo.cohort=unassigned` | Your team, for team-level views. See *Cohorts* below |
 
 **Content logging, every flag explicitly off** (INV-5). Claude Code already defaults all of these
@@ -137,6 +137,22 @@ Set `CARDO_ORG_ARTIFACTS` on the collector to a regex that matches what you ship
 `CARDO_ARTIFACT_NAMES=org-only`. Every command, subagent and MCP server name that does not match
 `CARDO_ORG_ARTIFACTS` is then recorded as `custom`, as Claude Code's own telemetry does by default.
 Say which mode you run when you tell engineers about the rollout.
+
+### Naming your organization's repositories
+
+Set `CARDO_ORG_REPOS` on the collector to a regex that matches your repositories, written against
+the lowercased `host/owner/name`: for example `^github[.]com/acme/`. Write a dot as `[.]`, not
+`\.` ([why](../collector/README.md#environment)). Claude Code sends the repository's full URL, and
+the collector stores, in place of it
+([ADR-0035](../../docs/adr/0035-repository-identity-classified.md)):
+
+- **A repository that matches**, by name: `github.com/acme/widgets`.
+- **Any other repository** as `external` plus its host, such as `gitlab.com`. Open source work, a
+  side project or a customer's code are all legitimate, and the repository is not named.
+- **Nothing** when a session is not in a repository.
+
+**Leave it unset and every repository is external.** It never falls back to keeping every name.
+No dashboard shows repositories yet.
 
 ## Trying it on your own machine (one engineer, no MDM)
 

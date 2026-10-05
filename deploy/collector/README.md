@@ -10,14 +10,15 @@ written to be read. Start there. This page covers only how to run it.
 | Pipeline | From | Processing | To |
 |---|---|---|---|
 | `logs/hooks` | the hook pack, `POST /v1/hooks` on 8088 | allowlist and derive, tag, INV-2 tripwire | `cardo.bronze_hook_events` |
-| `logs/otel` | Claude Code OTel, OTLP/HTTP on 4318 | refuse a weak salt, pseudonymize, strip content, tag, tripwire | `cardo.bronze_otel_logs` |
+| `logs/otel` | Claude Code OTel, OTLP/HTTP on 4318 | refuse a weak salt, pseudonymize, classify the repository, strip content, tag, tripwire | `cardo.bronze_otel_logs` |
 | `metrics/otel` | the same | the same | `cardo.bronze_otel_metrics_sum` |
 
 Why the hook path is an allowlist and the OTel path is not:
 [ADR-0023](../../docs/adr/0023-hook-payload-allowlist.md). What it keeps of names, instructions
 files and model switches: [ADR-0025](../../docs/adr/0025-artifact-names-kept-with-guardrails.md),
 [ADR-0026](../../docs/adr/0026-stale-instructions-by-versioned-name.md) and
-[ADR-0027](../../docs/adr/0027-model-switch-cost.md).
+[ADR-0027](../../docs/adr/0027-model-switch-cost.md). What it keeps of the repository a session
+works in: [ADR-0035](../../docs/adr/0035-repository-identity-classified.md).
 
 The hook receiver accepts bodies up to 16 MiB. Its default is 100 KiB, and it refuses anything
 larger with a 400 and **no log line on the collector**. Real payloads carry whole prompts and
@@ -34,6 +35,11 @@ subagent replies, and cross it. The only trace of a lost hook is on the client, 
 | `CARDO_CLICKHOUSE_USER`, `CARDO_CLICKHOUSE_PASSWORD` | yes | Needs INSERT on the three bronze tables, nothing else |
 | `CARDO_ORG_ARTIFACTS` | no | A regex naming your own commands, subagents, MCP servers and instructions files. It labels what you shipped, and it is the only way an instructions file's name is kept. Unset or empty names nothing |
 | `CARDO_ARTIFACT_NAMES` | no | `all` (default) keeps the names of commands, subagents and MCP servers engineers define themselves. Any other value is the strict mode: every name not matching `CARDO_ORG_ARTIFACTS` is stored as `custom`, on hooks and on OTel `skill.name` |
+| `CARDO_ORG_REPOS` | no | A regex naming your repositories, matched against the lowercased `host/owner/name` (`github.com/acme/widgets`), whatever form the remote URL takes. A match is stored as `cardo.repo.class=org` with that name. Anything else is `external` with only its host. Unset or empty: every repository is external. The full URL is never stored |
+
+**Write a literal dot as `[.]` in either pattern**, as in `^github[.]com/acme/`. The collector
+pastes the pattern into its configuration inside a quoted string, where a backslash is an invalid
+escape and the collector does not start. A double quote breaks it the same way.
 
 **Without a usable salt the collector does not stop.** It refuses every OTel batch with HTTP 503,
 and logs a line starting `REFUSED - CARDO_SALT is unset or shorter than 32 characters`. Hook events
