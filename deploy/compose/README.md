@@ -135,6 +135,20 @@ Run it on an always-on machine inside the organization's network. Every step is 
    If it is empty everywhere, Claude Code sent none. If it is `external`, the pattern does not
    match the organization's URLs. The last query must return 0.
 
+   Last, the metrics. Have Claude Code edit a file during the session, so that lines of code are
+   counted:
+
+   ```sql
+   SELECT MetricName, AggregationTemporality AS temporality, Attributes['type'] AS type,
+          Attributes['session.id'] != '' AS has_session, count()
+   FROM cardo.bronze_otel_metrics_sum GROUP BY ALL ORDER BY ALL;
+   ```
+
+   `temporality` must be 1, which is delta, on every row. A 2 means that metric is cumulative,
+   and adding its points up counts the same lines again on every export: check that the settings
+   file still has `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE` set to `delta`. `claude_code.lines_of_code.count`
+   should have rows for `added` and `removed`, each with a session.
+
 ## Three things in here that are deliberate
 
 **Every published port is bound to loopback.** This stack holds pseudonymous engineering telemetry.

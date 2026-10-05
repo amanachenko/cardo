@@ -35,7 +35,8 @@ against those two real sessions.
 them needs ([ADR-0030](../adr/0030-stakeholders-and-questions.md) to
 [ADR-0037](../adr/0037-policy-evidence.md)). The main changes:
 
-- an efficiency family replaces the friction index;
+- an efficiency family replaces the friction index: its first version reads only what is already
+  collected, with metrics pinned to delta, and its views are not built;
 - a coach page for each engineer;
 - repository identity, classified at the collector: collection is built (below), and no view
   reads it yet;
@@ -316,6 +317,7 @@ events, refused with a 400 that the collector does not log.
 | **ADR-0025** strict naming | Every statement reading `CARDO_ARTIFACT_NAMES` must use the fail-closed form, and CI runs the real collector in both modes |
 | **ADR-0035** repositories | Every match on `CARDO_ORG_REPOS` must rule out a blank pattern. CI runs the real collector with a pattern and without one. It sends each form a git remote takes, credentials included, on the resource, the record and the data point. Organization repositories must be kept as `host/owner/name` and every other reduced to its host. No `vcs.*` key and no credential may be stored |
 | **INV-5** in the bundle | Every content flag must be present and `"0"`. Repository identity must be on, because the collector classifies it |
+| Delta temporality | The bundle must pin metrics to delta, because a count is the sum of a metric's points |
 | **INV-4** hook pack | The bundle must hook exactly the thirteen published events |
 | **INV-6** | Nothing under `deploy/` or `dashboards/` may mention `requiredMaximumVersion` |
 | **INV-7** on the collector | Every exporter must be ClickHouse; no extensions; the collector's own metrics off |

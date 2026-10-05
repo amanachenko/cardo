@@ -23,6 +23,7 @@ deployed, and this page explains every line of it.
 | `CLAUDE_CODE_ENABLE_TELEMETRY` | `1` | Turns telemetry on |
 | `OTEL_METRICS_EXPORTER`, `OTEL_LOGS_EXPORTER` | `otlp` | Metrics and events go to the collector. Traces stay off: they are beta and not needed |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` | The one protocol the collector accepts |
+| `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE` | `delta` | Each metric point is the change since the last export, so points add up to a count. Already Claude Code's default, written out so that a change of default cannot inflate every count |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | your collector | **Inside your network.** Never a third party (INV-7) |
 | `OTEL_METRICS_INCLUDE_SESSION_ID` | `true` | Lets hook events and metrics be joined per session |
 | `OTEL_METRICS_INCLUDE_VERSION` | `true` | Claude Code version, for the compatibility matrix |
