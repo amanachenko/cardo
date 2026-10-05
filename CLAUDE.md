@@ -18,8 +18,8 @@ rule and not a key-type one. See
 [the measurement](docs/research/2026-09-23-admin-api-individual-account.md); the practical effect is
 that Phase 1 cannot be validated without an organization.
 
-**What comes next was decided on 2026-09-25 and is not built.** A design review settled who Cardo
-serves and what each of them needs:
+**What comes next was decided on 2026-09-25, and only its first collection is built.** A design
+review settled who Cardo serves and what each of them needs:
 
 - engineering leadership, deciding which team-grown approaches everyone should use and what they
   cost;
@@ -28,8 +28,10 @@ serves and what each of them needs:
 
 The decisions are [ADR-0030](docs/adr/0030-stakeholders-and-questions.md) to
 [ADR-0037](docs/adr/0037-policy-evidence.md). Their order is **[docs/roadmap.md](docs/roadmap.md)**:
-an internal trial, then an adoption pilot, then an evidence pilot. The version written for the
-organizations that run it is [docs/overview.md](docs/overview.md).
+an internal trial, then an adoption pilot, then an evidence pilot. What the internal trial must
+collect from its first day is built: the collector served over the network behind TLS, repository
+identity classified at the collector, and metrics pinned to delta. Its views and the coach are
+not. The version written for the organizations that run it is [docs/overview.md](docs/overview.md).
 
 ## Read before changing anything
 

@@ -45,6 +45,7 @@ names them in its INSERT. Everything of interest lives in three maps:
 | `cardo.repo.class`, `cardo.repo` | OTel only, on whichever map Claude Code put the repository on (not yet observed). `org` with `host/owner/name` for a repository matching `CARDO_ORG_REPOS`; `external` with the host alone, or empty, for any other. Absent outside a repository, or from a client too old to send it. Never the URL ([ADR-0035](../adr/0035-repository-identity-classified.md)). No view reads it yet |
 | `LogAttributes` / `Attributes` | OTel: Claude Code's attributes, minus identity, `vcs.*`, paths and content. Hooks: the allowlist, plus `cardo.received_keys` |
 | `EventName` | `claude_code.<event>` for OTel logs; the hook event name for hooks |
+| `AggregationTemporality` | Metrics only. `1`, delta, because the bundle pins it: each point is the change since the previous export, so a count is the sum of its points. A `2` would be a running total, repeated on every export |
 | `Body` | Always empty. It is the one field a log record lets carry arbitrary text, so the collector empties it rather than trusting it |
 
 **Hook rows carry no identity.** The payloads never had one. A hook row reaches a person only

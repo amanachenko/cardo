@@ -123,6 +123,20 @@ func TestINV5_BundlePinsEveryContentFlagOff(t *testing.T) {
 	}
 }
 
+// A count taken from a metric, such as lines of code per session, is the sum of its points. That
+// is right only when each point is the change since the previous export: a cumulative series
+// repeats its running total every minute, and summing it counts the same lines again on every
+// export. Delta is Claude Code's documented default; the bundle writes it out so the decision is
+// on the page and a change of default cannot inflate every count.
+func TestBundlePinsDeltaTemporality(t *testing.T) {
+	for _, b := range bundles(t) {
+		if v := b.env["OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE"]; v != "delta" {
+			t.Errorf("%s must set OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta (found %q): "+
+				"a count is the sum of a metric's points", b.path, v)
+		}
+	}
+}
+
 // INV-4 — the bundle hooks exactly the published mandatory events.
 func TestINV4_BundleHooksExactlyTheMandatoryEvents(t *testing.T) {
 	want := append([]string(nil), mandatoryHookEvents...)
