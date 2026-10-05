@@ -1,0 +1,32 @@
+# Opt-in overlay: serves the collector to a team over the network, with TLS in front of it.
+#
+#   make stack-up-network
+#   # which is: docker compose -f docker-compose.yml -f docker-compose.network.yml up -d
+#
+# The base stack binds every port to loopback, and stays that way. This overlay adds one service,
+# `edge`, that publishes the collector's two ports on every interface and terminates TLS for them.
+# ClickHouse and Grafana stay on loopback: nothing here routes to them. Claude Code sends email
+# addresses unhashed to the collector, which hashes them on arrival, so the hop across the network
+# is the part TLS exists for.
+#
+# The ports are the ones the shipped bundle already uses (deploy/managed-settings/managed-settings.json),
+# so the bundle needs only its hostname changed.
+#
+# Requires two .env entries, neither of which belongs in git: CARDO_HOSTNAME, the name the
+# certificate is for, and CARDO_TLS_DIR, a directory holding fullchain.pem and privkey.pem. The
+# runbook is "Serving a team over the network" in README.md.
+
+services:
+  edge:
+    image: caddy:2.11.6
+    restart: unless-stopped
+    depends_on:
+      - collector
+    environment:
+      CARDO_HOSTNAME: ${CARDO_HOSTNAME:?set CARDO_HOSTNAME in .env}
+    ports:
+      - "4318:4318"   # OTLP/HTTP from Claude Code
+      - "8088:8088"   # the hook pack
+    volumes:
+      - ./edge/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${CARDO_TLS_DIR:?set CARDO_TLS_DIR in .env}:/certs:ro

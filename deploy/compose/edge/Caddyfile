@@ -1,0 +1,28 @@
+# TLS in front of the collector, for docker-compose.network.yml.
+#
+# Caddy's defaults are built for a public website: it fetches certificates from an ACME CA,
+# staples OCSP responses fetched from the CA, and runs an admin API. Each of those is an outbound
+# call or an open endpoint this deployment does not need, so each is off (INV-7). The certificate
+# is obtained by hand and mounted; Caddy only serves it. TestINV7_EdgeProxyMakesNoOutboundCalls in
+# test/deploy_test.go fails if any of these lines goes.
+#
+# No request-body limit is set here, and none must be: Caddy has none by default, and the collector
+# enforces its own (16 MiB on the hook receiver). A proxy limit below that would refuse large
+# SubagentStop payloads with no trace anywhere but Claude Code's own hook error count.
+#
+# No access log either. Caddy writes none unless a `log` directive asks for one.
+{
+	admin off
+	auto_https off
+	ocsp_stapling off
+}
+
+https://{$CARDO_HOSTNAME}:4318 {
+	tls /certs/fullchain.pem /certs/privkey.pem
+	reverse_proxy collector:4318
+}
+
+https://{$CARDO_HOSTNAME}:8088 {
+	tls /certs/fullchain.pem /certs/privkey.pem
+	reverse_proxy collector:8088
+}

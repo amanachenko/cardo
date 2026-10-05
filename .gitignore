@@ -31,6 +31,8 @@ vendor/
 # placeholders rather than secrets.
 !.env.example
 *.salt
+# TLS certificates and keys for the network overlay (deploy/compose/docker-compose.network.yml).
+*.pem
 *secret*
 *credentials*
 admin-key*

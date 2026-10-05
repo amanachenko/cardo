@@ -53,8 +53,11 @@ collector waits for.
 
 ## Exposure
 
-- **TLS.** Terminate it at the collector (the receivers' `tls:` block) or at a proxy in front of it.
-  Hook payloads cross the network carrying prompt text before the collector discards it.
+- **TLS.** The reference stack's network overlay terminates it at a Caddy proxy
+  ([Serving a team over the network](../compose/README.md#serving-a-team-over-the-network)).
+  Elsewhere, terminate it at the collector (the receivers' `tls:` block) or at your own proxy, with
+  no request-body limit below the collector's. Hook payloads cross the network carrying prompt text
+  before the collector discards it.
 - **Network.** Reachable from developer machines and from nowhere else. The hook endpoint has no
   authentication, and a token in the bundle would not be a secret
   ([ADR-0024](../../docs/adr/0024-bundle-configures-telemetry-only.md)).

@@ -76,6 +76,13 @@ CH_USER   ?= cardo
 stack-up:
 	$(COMPOSE) up -d
 
+# The same stack, with the collector also served to a team over the network through TLS. Needs
+# CARDO_HOSTNAME and CARDO_TLS_DIR in deploy/compose/.env; see "Serving a team over the network"
+# in deploy/compose/README.md.
+.PHONY: stack-up-network
+stack-up-network:
+	$(COMPOSE) -f deploy/compose/docker-compose.network.yml up -d
+
 .PHONY: stack-down
 stack-down:
 	$(COMPOSE) down
@@ -118,10 +125,13 @@ migrate:
 # and what reached ClickHouse is checked. CARDO_SALT must be the one the collector is running
 # with -- one of these tests exists to prove the collector's pseudonym is the poller's -- and
 # CARDO_ORG_ARTIFACTS and CARDO_ARTIFACT_NAMES, if set, must match too.
+COLLECTOR_HOOKS_URL ?= http://127.0.0.1:8089/v1/hooks
+COLLECTOR_OTLP_URL  ?= http://127.0.0.1:4319
+
 .PHONY: collector-test
 collector-test:
-	CARDO_COLLECTOR_HOOKS_URL=http://127.0.0.1:8089/v1/hooks \
-		CARDO_COLLECTOR_OTLP_URL=http://127.0.0.1:4319 \
+	CARDO_COLLECTOR_HOOKS_URL=$(COLLECTOR_HOOKS_URL) \
+		CARDO_COLLECTOR_OTLP_URL=$(COLLECTOR_OTLP_URL) \
 		CARDO_CLICKHOUSE_URL=$(CH_URL) CARDO_CLICKHOUSE_USER=$(CH_USER) \
 		CARDO_CLICKHOUSE_PASSWORD=$$CLICKHOUSE_PASSWORD \
 		go test -count=1 ./test/ -run 'TestCollector_|TestINV2_Collector' -v

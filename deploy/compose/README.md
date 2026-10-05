@@ -6,8 +6,9 @@ see the whole pipeline working before being asked to approve anything, so one en
 their own Claude Code at it without asking anyone, and so the SQL in `sql/clickhouse/` and the
 collector config have somewhere to be tested for real.
 
-It is **not** a production topology. No replication, no backups, no TLS, no auth in front of
-Grafana beyond an admin password.
+It is **not** a production topology. No replication, no backups, no auth in front of Grafana
+beyond an admin password, and no TLS unless you add the network overlay
+([below](#serving-a-team-over-the-network)).
 
 ## Run it
 
@@ -61,11 +62,64 @@ The schema is applied automatically on every run, from migrations embedded in th
 No key yet? `make sample-seed` writes invented data under `source='sample'` so the dashboards have
 something to draw. `make sample-drop` removes it.
 
+## Serving a team over the network
+
+The stack above serves one machine. For a group of engineers, such as the dogfood in
+[`docs/roadmap.md`](../../docs/roadmap.md), an overlay adds a Caddy proxy
+(`docker-compose.network.yml`, `edge/Caddyfile`). It publishes the collector's two ports on every
+interface, with TLS in front of them. ClickHouse and Grafana stay on loopback; reach Grafana over
+SSH (`ssh -L 3001:127.0.0.1:3001 <host>`).
+
+Run it on an always-on machine inside the organization's network. Every step is the operator's:
+
+1. **Pick a name** under a domain you control, such as `cardo.<your-domain>`. Keep it generic.
+   Every publicly trusted certificate is published in Certificate Transparency logs, so the name
+   should not say which organization or customer it serves.
+2. **Point it at the machine's internal address** with an A record in the public zone. Some
+   resolvers refuse a public name that resolves to a private address, as DNS-rebinding protection:
+   dnsmasq, some corporate DNS, some VPN clients. If a laptop on the VPN cannot resolve the name,
+   ask for an entry on the internal DNS instead.
+3. **Obtain a certificate by hand, with a DNS challenge.** The machine is not reachable from the
+   internet, so the challenge is a TXT record rather than an HTTP request. With certbot:
+
+   ```bash
+   certbot certonly --manual --preferred-challenges dns -d cardo.<your-domain>
+   ```
+
+   It is valid for 90 days; renew it the same way before then. Caddy fetches nothing itself.
+   Copy `fullchain.pem` and `privkey.pem` into one directory outside the repository.
+   A publicly trusted certificate is the point: Claude Code trusts the operating system's store
+   and its own bundled one, so engineers configure nothing.
+4. **Add to `.env`:** `CARDO_HOSTNAME`, `CARDO_TLS_DIR` (that directory, as an absolute path), and
+   the `CARDO_SALT` you generated.
+5. **Start it:** `make stack-up-network`, from the repository root.
+6. **Open ports 4318 and 8088** on the machine's firewall, to the office and VPN ranges only. The
+   collector does not authenticate senders ([risks.md](../../risks.md) #19).
+7. **Make the settings file.** Copy
+   [`managed-settings.json`](../managed-settings/managed-settings.json), replace both occurrences
+   of `cardo-collector.internal.example` with your name, and set `cardo.cohort`. Keep the copy
+   outside the repository, because its hostname is the organization's
+   ([ADR-0038](../../docs/adr/0038-public-before-the-adoption-pilot.md)). Engineers run
+   `claude --settings <that file>` and install nothing.
+8. **Check one laptop before anyone else joins.** From a laptop on the VPN, start Claude Code with
+   that file and work for a few minutes. Then, on the machine:
+
+   ```sql
+   SELECT EventName, count() FROM cardo.bronze_hook_events GROUP BY EventName;
+   SELECT EventName, count() FROM cardo.bronze_otel_logs GROUP BY EventName;
+   SELECT MetricName, count() FROM cardo.bronze_otel_metrics_sum GROUP BY MetricName;
+   ```
+
+   Hook rows are the thing to look for. HTTP hooks had only ever been seen over plain
+   `http://127.0.0.1` before this overlay. If OTel arrives and hooks do not, the hooks are failing,
+   and Claude Code reports that only in its own hook error count.
+
 ## Three things in here that are deliberate
 
 **Every published port is bound to loopback.** This stack holds pseudonymous engineering telemetry.
 A `0.0.0.0` binding would put it on every network the host is attached to, including hotel wifi.
-INV-7 is a property of the deployment as much as of the code.
+INV-7 is a property of the deployment as much as of the code. The network overlay is the one
+opt-in exception: it publishes the collector's two ports, through TLS, and nothing else.
 
 **Non-default host ports** (8124, 3001 rather than 8123, 3000), so this can coexist with whatever
 already took the obvious ports on a developer's machine. Inside the compose network the containers

@@ -273,3 +273,79 @@ func TestDeployOverlaysAreAllMounted(t *testing.T) {
 	}
 	t.Logf("checked %d ClickHouse overlay files against the compose mounts", checked)
 }
+
+// INV-7 at the edge proxy that serves the collector over the network (docker-compose.network.yml).
+//
+// Caddy's defaults suit a public website: it fetches certificates from an ACME CA, staples OCSP
+// responses fetched from the CA, and listens with an admin API. Here the certificate is obtained
+// by hand and only served, so all three stay off. The proxy routes to the collector and nothing
+// else: ClickHouse on the network is every pseudonymous row one query away. It sets no request-body
+// limit, because a limit below the collector's own loses large hook payloads without a trace. And
+// the image is pinned to an exact version, as the collector's is.
+func TestINV7_EdgeProxyMakesNoOutboundCalls(t *testing.T) {
+	root := repoRoot(t)
+	raw, err := os.ReadFile(filepath.Join(root, "deploy", "compose", "edge", "Caddyfile"))
+	if err != nil {
+		t.Skip("no edge proxy yet:", err)
+	}
+	var lines []string
+	for _, l := range strings.Split(string(raw), "\n") {
+		l = strings.TrimSpace(l)
+		if l != "" && !strings.HasPrefix(l, "#") {
+			lines = append(lines, l)
+		}
+	}
+	has := func(want string) bool {
+		for _, l := range lines {
+			if l == want {
+				return true
+			}
+		}
+		return false
+	}
+
+	for _, want := range []string{"admin off", "auto_https off", "ocsp_stapling off"} {
+		if !has(want) {
+			t.Errorf("INV-7: the Caddyfile's global options lack %q. Without it Caddy calls out "+
+				"or listens where nothing here needs it to.", want)
+		}
+	}
+
+	allowed := map[string]bool{"collector:4318": true, "collector:8088": true}
+	var proxies, certs int
+	for _, l := range lines {
+		f := strings.Fields(l)
+		switch f[0] {
+		case "reverse_proxy":
+			proxies++
+			for _, up := range f[1:] {
+				if !allowed[up] {
+					t.Errorf("the edge proxy routes to %q. It serves the collector's two ports only; "+
+						"ClickHouse or Grafana on the network needs its own decision (risks.md #15).", up)
+				}
+			}
+		case "tls":
+			certs++
+			if len(f) != 3 || !strings.HasSuffix(f[1], ".pem") || !strings.HasSuffix(f[2], ".pem") {
+				t.Errorf("INV-7: %q. Each site serves a mounted certificate and key; any other form "+
+					"of the tls directive has Caddy obtain one itself.", l)
+			}
+		case "request_body", "max_size":
+			t.Errorf("the edge proxy sets a request-body limit (%q). The collector enforces its own; "+
+				"a lower one here refuses large hook payloads with no log line.", l)
+		}
+	}
+	if proxies == 0 || certs == 0 {
+		t.Fatalf("found %d reverse_proxy and %d tls lines; the parser is wrong or the Caddyfile is",
+			proxies, certs)
+	}
+
+	compose, err := os.ReadFile(filepath.Join(root, "deploy", "compose", "docker-compose.network.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`(?m)^\s*image:\s*caddy:\d+\.\d+\.\d+\s*$`).Match(compose) {
+		t.Error("docker-compose.network.yml must pin the caddy image to an exact version, as the " +
+			"collector's is. A floating tag changes the proxy under a running deployment.")
+	}
+}
