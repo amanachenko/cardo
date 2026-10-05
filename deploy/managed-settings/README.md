@@ -90,7 +90,8 @@ were exporting telemetry to a personal tool, that stops.
 ## Deploying it (platform team)
 
 1. Stand up the collector ([`deploy/collector/`](../collector/)) inside your network, behind TLS,
-   and reachable **only** from developer machines. The hook endpoint has no authentication of its
+   and reachable **only** from developer machines. The reference stack's network overlay does this
+   ([Serving a team over the network](../compose/README.md#serving-a-team-over-the-network)). The hook endpoint has no authentication of its
    own. A token placed in this file would be readable by every engineer, so it would not be a
    secret ([ADR-0024](../../docs/adr/0024-bundle-configures-telemetry-only.md)).
 2. Copy `managed-settings.json`, replace both occurrences of `cardo-collector.internal.example`,

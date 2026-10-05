@@ -443,3 +443,20 @@ can turn off, and other tools' marks have not been checked.
 
 **Would settle it:** checking what each tool leaves in the git history when the first organization asks
 for a comparison, and reporting the share of PRs whose tool is unknown beside every comparison.
+
+### 19. Anyone who can reach the collector can write to it
+
+**Threatens:** the credibility of every view, and
+[ADR-0024](docs/adr/0024-bundle-configures-telemetry-only.md).
+
+The collector accepts hooks and OTel from any machine that can reach ports 4318 and 8088. Nothing
+authenticates the sender, by design: a token in the settings file would be readable by every
+engineer who has the file, so it would not be a secret (ADR-0024). The collector serves nothing
+back, so nothing can be read through it. But anyone on the network can post invented events: push
+a home-grown artifact past five people, or add sessions that never happened.
+
+**Mitigation:** the network overlay's runbook opens the two ports to the office and VPN ranges
+only, and the dogfood is one team. **Would close it:** a decision before the adoption pilot,
+between per-machine client certificates pushed by MDM (Claude Code supports
+`CLAUDE_CODE_CLIENT_CERT` for its exporter), an address allowlist at the proxy, and accepting the
+risk in writing.

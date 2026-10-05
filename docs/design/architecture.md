@@ -219,7 +219,7 @@ developer machine                     organization's infrastructure
 | SQL layers (ClickHouse) | `sql/clickhouse/` | **built**, verified against a live server | [0010](../adr/0010-layered-schema.md), [0016](../adr/0016-retention.md) |
 | Fixture corpus + contract tests | `test/fixtures/` | **built**. Console: from documentation. Hooks: field names observed from 2.1.281 with synthetic values, plus the documented shapes | [0014](../adr/0014-version-drift.md) |
 | Invariant tests | `test/invariants_test.go`, `test/deploy_test.go`, `test/collector_test.go`, `test/bundle_test.go` | **built** — INV-1 through INV-7 | `invariants.md` |
-| Reference stack | `deploy/compose/` | **built** — ClickHouse + Grafana + collector, loopback-bound | [0009](../adr/0009-storage-agnostic-clickhouse-reference.md) |
+| Reference stack | `deploy/compose/` | **built** — ClickHouse + Grafana + collector, loopback-bound; an opt-in overlay serves the collector's two ports over the network through a TLS proxy (Caddy), never run with a team | [0009](../adr/0009-storage-agnostic-clickhouse-reference.md) |
 | Dashboards | `dashboards/` | **built** — the fleet dashboard (Admin API, 9 panels) and the enablement dashboard (collector, 13 panels) | [0009](../adr/0009-storage-agnostic-clickhouse-reference.md), [0008](../adr/0008-outcome-variable.md), [0029](../adr/0029-minimum-group-size.md) |
 
 ## The hook pack
