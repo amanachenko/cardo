@@ -246,6 +246,9 @@ Template and full rules: [docs/adr/0000-adr-process.md](docs/adr/0000-adr-proces
   organization's repositories by name and reduces everything else to `external` plus the host.
   A blank `CARDO_ORG_REPOS` means everything is external, never everything is the organization's
   (ADR-0035).
+- A backslash or a double quote in `CARDO_ORG_REPOS` or `CARDO_ORG_ARTIFACTS`. The collector pastes
+  the value into a quoted OTTL string, and either one stops it from starting. Write a dot as `[.]`,
+  as in `^github[.]com/acme/`. ADR-0035's own example, `^github\.com/acme/`, is the form that fails.
 - Joining delivery outcomes per person, or by commit SHA. No surface carries a commit id, and per
   person it is a performance review. Join by repository and week (ADR-0031).
 - Hashing a migration's raw bytes. On Windows, git rewrites line endings when it touches a file,

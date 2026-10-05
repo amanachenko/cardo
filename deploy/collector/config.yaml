@@ -18,6 +18,9 @@
 #                           and, in strict mode, which artifact names are. See transform/hooks.
 #   CARDO_ARTIFACT_NAMES    "all" (default) keeps artifact names; anything else is the strict mode,
 #                           which records every name not matching CARDO_ORG_ARTIFACTS as "custom".
+#   CARDO_ORG_REPOS         regex naming your organization's repositories, matched against the
+#                           lowercased host/owner/name. Unset or empty: every repository is
+#                           external. See transform/otel_repo.
 
 receivers:
   # Native OTel from Claude Code. HTTP only: one protocol, one port, one thing to put behind TLS.
@@ -102,6 +105,72 @@ processors:
           - 'delete_matching_keys(datapoint.attributes, "(?i)email")'
           - 'delete_matching_keys(datapoint.attributes, "^user\\.(account_uuid|account_id|id|groups)$")'
 
+  # ---- OTel: repository identity, classified (ADR-0035) -------------------------------------
+  #
+  # The bundle sets OTEL_METRICS_INCLUDE_REPOSITORY, so Claude Code sends vcs.repository.url.full
+  # (with vcs.owner.name, vcs.repository.name, vcs.provider.name). Not yet observed, so it may come
+  # on the resource or on each record; both are handled. The URL is reduced here and then dropped
+  # with the rest of vcs.* by transform/otel_content. The full URL is never stored:
+  #
+  #   cardo.repo.class  org        the URL matches CARDO_ORG_REPOS
+  #                     external   anything else, including every repository when the pattern is
+  #                                blank: an empty regex matches everything, so blank is checked
+  #   cardo.repo        org        host/owner/name, e.g. github.com/acme/widgets
+  #                     external   the host alone, e.g. gitlab.com; empty if the URL has no host
+  #
+  # A session outside any repository has neither key. The URL is normalized before it is matched,
+  # so one pattern covers every form: lowercased; scheme, credentials, port and a trailing .git
+  # removed; git@host:owner/name read as host/owner/name. A cardo.repo* key that arrives from the
+  # client is deleted first, so the class is always the collector's.
+  transform/otel_repo:
+    error_mode: propagate
+    log_statements:
+      - context: resource
+        statements:
+          - 'delete_matching_keys(resource.attributes, "^cardo\\.repo(\\.class)?$")'
+          - 'set(resource.attributes["cardo.repo"], ToLowerCase(resource.attributes["vcs.repository.url.full"])) where IsString(resource.attributes["vcs.repository.url.full"])'
+          - 'replace_pattern(resource.attributes["cardo.repo"], "^([a-z][a-z0-9+.-]*://)?([^@/]*@)?", "")'
+          - 'replace_pattern(resource.attributes["cardo.repo"], "^([^/:]*):([0-9]*/)?", "$$1/")'
+          - 'replace_pattern(resource.attributes["cardo.repo"], "(\\.git)?/*([?#].*)?$", "")'
+          - 'set(resource.attributes["cardo.repo.class"], "external") where IsString(resource.attributes["cardo.repo"])'
+          - 'set(resource.attributes["cardo.repo.class"], "org") where IsString(resource.attributes["cardo.repo"]) and "${env:CARDO_ORG_REPOS:-}" != "" and IsMatch(resource.attributes["cardo.repo"], "${env:CARDO_ORG_REPOS:-}")'
+          - 'replace_pattern(resource.attributes["cardo.repo"], "/.*$", "") where resource.attributes["cardo.repo.class"] == "external"'
+          - 'set(resource.attributes["cardo.repo"], "") where resource.attributes["cardo.repo.class"] == "external" and not IsMatch(resource.attributes["cardo.repo"], "^[a-z0-9.-]{1,253}$")'
+      - context: log
+        statements:
+          - 'delete_matching_keys(log.attributes, "^cardo\\.repo(\\.class)?$")'
+          - 'set(log.attributes["cardo.repo"], ToLowerCase(log.attributes["vcs.repository.url.full"])) where IsString(log.attributes["vcs.repository.url.full"])'
+          - 'replace_pattern(log.attributes["cardo.repo"], "^([a-z][a-z0-9+.-]*://)?([^@/]*@)?", "")'
+          - 'replace_pattern(log.attributes["cardo.repo"], "^([^/:]*):([0-9]*/)?", "$$1/")'
+          - 'replace_pattern(log.attributes["cardo.repo"], "(\\.git)?/*([?#].*)?$", "")'
+          - 'set(log.attributes["cardo.repo.class"], "external") where IsString(log.attributes["cardo.repo"])'
+          - 'set(log.attributes["cardo.repo.class"], "org") where IsString(log.attributes["cardo.repo"]) and "${env:CARDO_ORG_REPOS:-}" != "" and IsMatch(log.attributes["cardo.repo"], "${env:CARDO_ORG_REPOS:-}")'
+          - 'replace_pattern(log.attributes["cardo.repo"], "/.*$", "") where log.attributes["cardo.repo.class"] == "external"'
+          - 'set(log.attributes["cardo.repo"], "") where log.attributes["cardo.repo.class"] == "external" and not IsMatch(log.attributes["cardo.repo"], "^[a-z0-9.-]{1,253}$")'
+    metric_statements:
+      - context: resource
+        statements:
+          - 'delete_matching_keys(resource.attributes, "^cardo\\.repo(\\.class)?$")'
+          - 'set(resource.attributes["cardo.repo"], ToLowerCase(resource.attributes["vcs.repository.url.full"])) where IsString(resource.attributes["vcs.repository.url.full"])'
+          - 'replace_pattern(resource.attributes["cardo.repo"], "^([a-z][a-z0-9+.-]*://)?([^@/]*@)?", "")'
+          - 'replace_pattern(resource.attributes["cardo.repo"], "^([^/:]*):([0-9]*/)?", "$$1/")'
+          - 'replace_pattern(resource.attributes["cardo.repo"], "(\\.git)?/*([?#].*)?$", "")'
+          - 'set(resource.attributes["cardo.repo.class"], "external") where IsString(resource.attributes["cardo.repo"])'
+          - 'set(resource.attributes["cardo.repo.class"], "org") where IsString(resource.attributes["cardo.repo"]) and "${env:CARDO_ORG_REPOS:-}" != "" and IsMatch(resource.attributes["cardo.repo"], "${env:CARDO_ORG_REPOS:-}")'
+          - 'replace_pattern(resource.attributes["cardo.repo"], "/.*$", "") where resource.attributes["cardo.repo.class"] == "external"'
+          - 'set(resource.attributes["cardo.repo"], "") where resource.attributes["cardo.repo.class"] == "external" and not IsMatch(resource.attributes["cardo.repo"], "^[a-z0-9.-]{1,253}$")'
+      - context: datapoint
+        statements:
+          - 'delete_matching_keys(datapoint.attributes, "^cardo\\.repo(\\.class)?$")'
+          - 'set(datapoint.attributes["cardo.repo"], ToLowerCase(datapoint.attributes["vcs.repository.url.full"])) where IsString(datapoint.attributes["vcs.repository.url.full"])'
+          - 'replace_pattern(datapoint.attributes["cardo.repo"], "^([a-z][a-z0-9+.-]*://)?([^@/]*@)?", "")'
+          - 'replace_pattern(datapoint.attributes["cardo.repo"], "^([^/:]*):([0-9]*/)?", "$$1/")'
+          - 'replace_pattern(datapoint.attributes["cardo.repo"], "(\\.git)?/*([?#].*)?$", "")'
+          - 'set(datapoint.attributes["cardo.repo.class"], "external") where IsString(datapoint.attributes["cardo.repo"])'
+          - 'set(datapoint.attributes["cardo.repo.class"], "org") where IsString(datapoint.attributes["cardo.repo"]) and "${env:CARDO_ORG_REPOS:-}" != "" and IsMatch(datapoint.attributes["cardo.repo"], "${env:CARDO_ORG_REPOS:-}")'
+          - 'replace_pattern(datapoint.attributes["cardo.repo"], "/.*$", "") where datapoint.attributes["cardo.repo.class"] == "external"'
+          - 'set(datapoint.attributes["cardo.repo"], "") where datapoint.attributes["cardo.repo.class"] == "external" and not IsMatch(datapoint.attributes["cardo.repo"], "^[a-z0-9.-]{1,253}$")'
+
   # ---- OTel: content and paths (INV-5) ------------------------------------------------------
   #
   # Claude Code redacts content at source, and the managed-settings bundle pins every OTEL_LOG_*
@@ -110,8 +179,8 @@ processors:
   # the OTel surface is designed to be safe by default and gates every content field behind a
   # flag; the hook surface is not, which is why the hook path below works the other way round.
   #
-  # host.name is dropped because laptop hostnames are routinely the owner's name. vcs.* is repo
-  # identity, which ADR-0002 places in the security tier, not this one.
+  # host.name is dropped because laptop hostnames are routinely the owner's name. vcs.* is dropped
+  # once transform/otel_repo has classified it: the full URL stays out of this tier (ADR-0035).
   transform/otel_content:
     error_mode: propagate
     log_statements:
@@ -339,9 +408,9 @@ service:
       exporters: [clickhouse/hooks]
     logs/otel:
       receivers: [otlp]
-      processors: [transform/refuse_weak_salt, transform/otel_identity, transform/otel_content, transform/otel_names, transform/tag, filter/inv2_tripwire]
+      processors: [transform/refuse_weak_salt, transform/otel_identity, transform/otel_repo, transform/otel_content, transform/otel_names, transform/tag, filter/inv2_tripwire]
       exporters: [clickhouse/otel]
     metrics/otel:
       receivers: [otlp]
-      processors: [transform/refuse_weak_salt, transform/otel_identity, transform/otel_content, transform/otel_names, transform/tag, filter/inv2_tripwire]
+      processors: [transform/refuse_weak_salt, transform/otel_identity, transform/otel_repo, transform/otel_content, transform/otel_names, transform/tag, filter/inv2_tripwire]
       exporters: [clickhouse/otel]

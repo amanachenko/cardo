@@ -42,7 +42,8 @@ names them in its INSERT. Everything of interest lives in three maps:
 | `LogAttributes['user.pseudonym']`, `Attributes['user.pseudonym']` | OTel only. The same construction as the poller, so one engineer has one pseudonym across both paths. The collector hashes the email where it finds it. Claude Code 2.1.281 sends it on each record and data point, so that is where the pseudonym is. An email sent on the resource would leave it in `ResourceAttributes`, and silver reads both |
 | `ResourceAttributes['cardo.tier']`, `['cardo.salt_version']` | Every row, on both tables |
 | `ResourceAttributes['cardo.cohort']` | OTel only: the team, from the bundle's `OTEL_RESOURCE_ATTRIBUTES` |
-| `LogAttributes` / `Attributes` | OTel: Claude Code's attributes, minus identity, paths and content. Hooks: the allowlist, plus `cardo.received_keys` |
+| `cardo.repo.class`, `cardo.repo` | OTel only, on whichever map Claude Code put the repository on (not yet observed). `org` with `host/owner/name` for a repository matching `CARDO_ORG_REPOS`; `external` with the host alone, or empty, for any other. Absent outside a repository, or from a client too old to send it. Never the URL ([ADR-0035](../adr/0035-repository-identity-classified.md)). No view reads it yet |
+| `LogAttributes` / `Attributes` | OTel: Claude Code's attributes, minus identity, `vcs.*`, paths and content. Hooks: the allowlist, plus `cardo.received_keys` |
 | `EventName` | `claude_code.<event>` for OTel logs; the hook event name for hooks |
 | `Body` | Always empty. It is the one field a log record lets carry arbitrary text, so the collector empties it rather than trusting it |
 

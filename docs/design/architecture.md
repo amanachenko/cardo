@@ -37,7 +37,8 @@ them needs ([ADR-0030](../adr/0030-stakeholders-and-questions.md) to
 
 - an efficiency family replaces the friction index;
 - a coach page for each engineer;
-- repository identity, classified at the collector;
+- repository identity, classified at the collector: collection is built (below), and no view
+  reads it yet;
 - teams from a directory file;
 - service runs labelled apart from people;
 - policy evidence.
@@ -122,7 +123,8 @@ an appending poller would silently double every total.
   |           async HTTP      |  /v1/hooks    |    names of every received field kept         |
   |                           |               |  logs/otel, metrics/otel    otlp receiver     |
   | nothing installed         |               |    refuse weak salt -> SHA256 pseudonym ->    |
-  +---------------------------+               |    drop ids, paths, content                   |
+  +---------------------------+               |    classify repository -> drop ids, URLs,     |
+                                              |    paths, content                             |
                                               |  every pipeline: tier tag, INV-2 tripwire     |
                                               +----------------------+-----------------------+
                                                                      | INSERT only
@@ -171,6 +173,16 @@ matches the `session.id` on that session's OTel records, and those carry the pse
 processor fails closed (`error_mode: propagate`). A missing or short salt refuses OTel batches with
 a log line saying why, rather than storing reversible pseudonyms.
 
+**Repositories ([ADR-0035](../adr/0035-repository-identity-classified.md)).** The bundle asks
+Claude Code for the repository a session works in, and the collector reduces the URL before
+anything is stored. One that matches `CARDO_ORG_REPOS` is kept as `host/owner/name` in
+`cardo.repo`, with `cardo.repo.class=org`. Any other is `external`, with only its host, and a blank
+pattern makes every repository external. The URL is normalized first, so one pattern covers every
+form a git remote takes, and credentials in it are dropped with the scheme. The `vcs.*` attributes
+themselves are then deleted. A session outside any repository has neither key. The attributes have
+never been seen from a real Claude Code, so which records carry them, and in what URL form, is
+still to be confirmed. No view reads them yet.
+
 ## Target shape
 
 ```
@@ -203,7 +215,7 @@ developer machine                     organization's infrastructure
 |---|---|---|---|
 | Managed settings bundle | `deploy/managed-settings/` | **built** — production template and a local-evaluation variant | [0007](../adr/0007-enrollment-posture.md), [0024](../adr/0024-bundle-configures-telemetry-only.md) |
 | Hook pack (13 HTTP hooks) | inside the bundle's `hooks` block | **built**, observed from Claude Code 2.1.281: 11 of 13 events arrive | [0005](../adr/0005-collection-mechanism.md), [0024](../adr/0024-bundle-configures-telemetry-only.md) |
-| Collector config | `deploy/collector/` | **built**, verified against a running collector 0.161.0 and two real Claude Code sessions | [0006](../adr/0006-pseudonymization.md), [0012](../adr/0012-ingest-implementation.md), [0025](../adr/0025-artifact-names-kept-with-guardrails.md), [0026](../adr/0026-stale-instructions-by-versioned-name.md), [0027](../adr/0027-model-switch-cost.md) |
+| Collector config | `deploy/collector/` | **built**, verified against a running collector 0.161.0 and two real Claude Code sessions; repository classification verified against the collector only | [0006](../adr/0006-pseudonymization.md), [0012](../adr/0012-ingest-implementation.md), [0025](../adr/0025-artifact-names-kept-with-guardrails.md), [0026](../adr/0026-stale-instructions-by-versioned-name.md), [0027](../adr/0027-model-switch-cost.md), [0035](../adr/0035-repository-identity-classified.md) |
 | Collector bronze tables | `sql/clickhouse/004_bronze_collector.sql` | **built** | [0016](../adr/0016-retention.md), [0025](../adr/0025-artifact-names-kept-with-guardrails.md) |
 | Silver views over collector data | `sql/clickhouse/006_silver_collector.sql` | **built** — seven views; verified against seeded rows, the fixture corpus through the collector, and two real sessions | [0025](../adr/0025-artifact-names-kept-with-guardrails.md), [0028](../adr/0028-file-store-is-admin-api-only.md) |
 | Gold marts over collector data | `sql/clickhouse/007_gold_collector.sql` | **built** — artifact usage, instructions versions, friction, context; the minimum group size applied | [0008](../adr/0008-outcome-variable.md), [0026](../adr/0026-stale-instructions-by-versioned-name.md), [0027](../adr/0027-model-switch-cost.md), [0029](../adr/0029-minimum-group-size.md) |
@@ -302,7 +314,8 @@ events, refused with a 400 that the collector does not log.
 | **INV-5** on hook payloads | Every observed and documented hook shape goes through the running collector carrying marker strings in each content field, including one past 100 KiB; CI byte-searches what reached ClickHouse for the markers. The allowlist itself is pinned in a test, so adding a field is a two-place change |
 | **INV-5** on generic hook fields | A statement that reads `reason`, `trigger`, `source`, `prompt`, `message` or `error` must name the event it applies to. Prose under an enum's name, and text under a numeric name, are dropped, and live fixtures check both |
 | **ADR-0025** strict naming | Every statement reading `CARDO_ARTIFACT_NAMES` must use the fail-closed form, and CI runs the real collector in both modes |
-| **INV-5** in the bundle | Every content flag must be present and `"0"`; repository identity must be off |
+| **ADR-0035** repositories | Every match on `CARDO_ORG_REPOS` must rule out a blank pattern. CI runs the real collector with a pattern and without one. It sends each form a git remote takes, credentials included, on the resource, the record and the data point. Organization repositories must be kept as `host/owner/name` and every other reduced to its host. No `vcs.*` key and no credential may be stored |
+| **INV-5** in the bundle | Every content flag must be present and `"0"`. Repository identity must be on, because the collector classifies it |
 | **INV-4** hook pack | The bundle must hook exactly the thirteen published events |
 | **INV-6** | Nothing under `deploy/` or `dashboards/` may mention `requiredMaximumVersion` |
 | **INV-7** on the collector | Every exporter must be ClickHouse; no extensions; the collector's own metrics off |

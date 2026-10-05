@@ -124,7 +124,7 @@ migrate:
 # The collector contract tests, against the running reference stack: fixtures go in over HTTP,
 # and what reached ClickHouse is checked. CARDO_SALT must be the one the collector is running
 # with -- one of these tests exists to prove the collector's pseudonym is the poller's -- and
-# CARDO_ORG_ARTIFACTS and CARDO_ARTIFACT_NAMES, if set, must match too.
+# CARDO_ORG_ARTIFACTS, CARDO_ARTIFACT_NAMES and CARDO_ORG_REPOS, if set, must match too.
 COLLECTOR_HOOKS_URL ?= http://127.0.0.1:8089/v1/hooks
 COLLECTOR_OTLP_URL  ?= http://127.0.0.1:4319
 
