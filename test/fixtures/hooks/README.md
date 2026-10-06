@@ -42,7 +42,7 @@ provoked. `2.1.290/` has `PermissionDenied`, and `documented/` has `SessionStart
 
 The test adds one payload of its own: a `SubagentStop` past the receiver's default 100 KiB limit.
 
-## `2.1.289/` and `2.1.290/`: one event each, observed later
+## `2.1.289/` to `2.1.291/`: one event each, observed later
 
 Field names recorded the same way, values invented.
 
@@ -54,6 +54,11 @@ Field names recorded the same way, values invented.
 - **`2.1.290/PermissionDenied`**: the keys Claude Code 2.1.290 sent on 2026-10-06 when auto mode
   denied a `Bash` call ([note](../../../docs/research/2026-10-06-first-permission-denied.md)). It
   carries a `reason` the documentation's shape did not, under a generic name, so it is not kept.
+- **`2.1.291/PostModelSwitch`**: the keys Claude Code 2.1.291 sent on 2026-10-06 for a `/model`
+  before the session's first request
+  ([note](../../../docs/research/2026-10-06-model-switch-observed.md)). It has two keys more than
+  2.1.289's, `prompt_id` and `scratchpad_dir`. The source (`command`) and the zero and false
+  values of the cost fields are the ones observed.
 
 ## `documented/`: from the documentation of 2026-09-23
 

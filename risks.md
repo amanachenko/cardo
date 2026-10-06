@@ -217,6 +217,13 @@ is dropped. All twelve hooked events have now arrived from a real Claude Code.
 
 **Still open:** the value of `PostModelSwitch`'s `source` on a real `/model`.
 
+**Status 2026-10-06, a real `/model`: nothing on this list is open**
+([note](docs/research/2026-10-06-model-switch-observed.md)). Two `/model` commands on 2.1.291 each
+sent `PostModelSwitch` with `source` `command`, which the views count. The event now also carries
+`prompt_id` and `scratchpad_dir`, which the 2.1.289 resume did not. A switch made before a
+session's first request has the session's start as its next request, and the view reports that as
+the switch's cost.
+
 ### 8. The Claude Enterprise Analytics adapter is specified but unevidenced
 
 **Threatens:** [ADR-0021](docs/adr/0021-analytics-source-scope.md).

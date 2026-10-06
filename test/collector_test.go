@@ -441,11 +441,11 @@ func assertNoMarkers(t *testing.T, what string, row map[string]any) {
 	}
 }
 
-// hookFixtureDirs are replayed together. 2.1.281, 2.1.289 and 2.1.290 hold the key sets observed
-// from a real Claude Code. documented holds what the documentation said before that, still
-// accepted so an older client keeps working, and the one event never observed: SessionStart,
-// which Claude Code runs no HTTP hook for and the bundle no longer hooks (ADR-0039).
-var hookFixtureDirs = []string{"2.1.281", "2.1.289", "2.1.290", "documented"}
+// hookFixtureDirs are replayed together. 2.1.281, 2.1.289, 2.1.290 and 2.1.291 hold the key sets
+// observed from a real Claude Code. documented holds what the documentation said before that,
+// still accepted so an older client keeps working, and the one event never observed:
+// SessionStart, which Claude Code runs no HTTP hook for and the bundle no longer hooks (ADR-0039).
+var hookFixtureDirs = []string{"2.1.281", "2.1.289", "2.1.290", "2.1.291", "documented"}
 
 // Every observed and documented hook shape goes in carrying content; only allowlisted,
 // content-free fields come out, and the facts Cardo derives from content are right.
@@ -624,6 +624,17 @@ func TestCollector_HookPayloadsReduceToTheAllowlist(t *testing.T) {
 			want["tool_name"], want["tool_use_id"] = "Bash", "toolu_01PERMDEN290"
 			want["permission_mode"], want["effort_level"] = "auto", "xhigh"
 			want["reason"], want["session_end_reason"] = "", ""
+
+		// Observed shape, Claude Code 2.1.291: a /model switch before the session's first request.
+		// It carries a prompt_id, the /model command's own, which the 2.1.289 resume did not; and
+		// with no context yet, a zero estimate and a cold cache, which the type guards must keep
+		// rather than mistake for missing values.
+		case "2.1.291/PostModelSwitch":
+			want["from_model"], want["to_model"] = "claude-opus-5-5", "claude-sonnet-5-5"
+			want["requested_model"], want["model_switch_source"] = "sonnet", "command"
+			want["prompt_id"] = "5f0c1a3e-0000-4000-8000-000000000001"
+			want["context_tokens"], want["prompt_cache_warm"] = "0", "false"
+			want["cache_ttl"], want["estimated_cache_write_usd"] = "1h", "0"
 
 		// Documented shapes: the names the documentation used are still understood.
 		case "documented/UserPromptSubmit":
