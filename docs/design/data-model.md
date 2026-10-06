@@ -115,8 +115,10 @@ reports. Both are NULL or empty for a session that sent no OTel.
 call. The end of a wait a person answered is the `tool_decision` event
 ([note](../research/2026-09-23-hooks-otel-collector-surfaces.md)), on the client's clock, so the
 start is taken from the client too. `hook_execution_start` is undocumented, which is why the
-fallback exists and labels itself. `PermissionDenied` is not yet read by any view: it has never been
-observed.
+fallback exists and labels itself. `PermissionDenied` is not yet read by any view. It is the only
+thing that says a denial was auto mode's. OTel records it as `tool_decision` `reject` with
+`source=config`, the source of any permission rule or mode, and the hook joins it on `tool_use_id`
+([note](../research/2026-10-06-first-permission-denied.md)).
 
 **Compaction token counts are not context sizes.** OTel's `pre_tokens` was 6,505 against a
 51,788-token context in the session observed, apparently the conversation without the fixed

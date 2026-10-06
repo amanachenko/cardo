@@ -441,11 +441,11 @@ func assertNoMarkers(t *testing.T, what string, row map[string]any) {
 	}
 }
 
-// hookFixtureDirs are replayed together. 2.1.281 and 2.1.289 hold the key sets observed from a
-// real Claude Code. documented holds what the documentation said before that, still accepted so an
-// older client keeps working, and two events not observed: PermissionDenied, and SessionStart,
+// hookFixtureDirs are replayed together. 2.1.281, 2.1.289 and 2.1.290 hold the key sets observed
+// from a real Claude Code. documented holds what the documentation said before that, still
+// accepted so an older client keeps working, and the one event never observed: SessionStart,
 // which Claude Code runs no HTTP hook for and the bundle no longer hooks (ADR-0039).
-var hookFixtureDirs = []string{"2.1.281", "2.1.289", "documented"}
+var hookFixtureDirs = []string{"2.1.281", "2.1.289", "2.1.290", "documented"}
 
 // Every observed and documented hook shape goes in carrying content; only allowlisted,
 // content-free fields come out, and the facts Cardo derives from content are right.
@@ -617,6 +617,13 @@ func TestCollector_HookPayloadsReduceToTheAllowlist(t *testing.T) {
 			want["cache_ttl"], want["estimated_cache_write_usd"] = "1h", "0.05"
 		case "2.1.289/PostModelSwitch.resume":
 			want["model_switch_source"] = "resume"
+
+		// Observed shape, Claude Code 2.1.290: an auto-mode denial. Its reason is under a generic
+		// name, so it is neither kept nor mapped onto another event's field.
+		case "2.1.290/PermissionDenied":
+			want["tool_name"], want["tool_use_id"] = "Bash", "toolu_01PERMDEN290"
+			want["permission_mode"], want["effort_level"] = "auto", "xhigh"
+			want["reason"], want["session_end_reason"] = "", ""
 
 		// Documented shapes: the names the documentation used are still understood.
 		case "documented/UserPromptSubmit":

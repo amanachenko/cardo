@@ -18,10 +18,11 @@ against those two real sessions.
   parity with the poller, and **against two real Claude Code 2.1.281 sessions** on an individual
   account ([first](../research/2026-09-24-first-real-hook-payloads.md),
   [second](../research/2026-09-24-second-real-session.md)), and since then on 2.1.289 to 2.1.291
-  ([note](../research/2026-10-06-http-hooks-wait.md)). Eleven of the twelve hooked events have
-  arrived; auto mode has not yet denied anything, so `PermissionDenied` is unobserved. OTel arrives
-  on an individual account. **Claude Code waits for every HTTP hook**, so each one gives up after
-  one second ([ADR-0039](../adr/0039-hooks-wait-at-most-one-second.md)).
+  ([note](../research/2026-10-06-http-hooks-wait.md)). All twelve hooked events have arrived, the
+  last being `PermissionDenied` on 2.1.290
+  ([note](../research/2026-10-06-first-permission-denied.md)). OTel arrives on an individual
+  account. **Claude Code waits for every HTTP hook**, so each one gives up after one second
+  ([ADR-0039](../adr/0039-hooks-wait-at-most-one-second.md)).
 - **Collector path (Phase 2, analysis).** Seven silver views and four gold marts over the
   collector's bronze, and an enablement dashboard. They are verified three ways:
   - against a live ClickHouse with seeded rows, including each rule broken on purpose;
@@ -255,7 +256,7 @@ What each event gives Cardo, as observed from Claude Code 2.1.281 in two session
 | `UserPromptSubmit` | **Metadata only**: length and `permission_mode`. Never the text (INV-5) |
 | `UserPromptExpansion` | Slash command name and source: which commands are used, the organization's and engineers' own |
 | `PermissionRequest` | Start of permission-wall timing. Carries the tool and, inside a subagent, the agent. **No `tool_use_id`** |
-| `PermissionDenied` | Auto-mode denials only. It does **not** fire when a person answers a prompt. Not yet observed |
+| `PermissionDenied` | Auto-mode denials only. It does **not** fire when a person answers a prompt. Carries the tool and `tool_use_id`, which OTel's `tool_decision` (`reject`, `source=config`) shares. Not yet read by any view |
 | `PreCompact` | Compaction trigger. The token counts are on OTel's `claude_code.compaction` event, not here |
 | `PostCompact` | Compaction trigger |
 | `InstructionsLoaded` | Load reason, memory type, kind of file, and the name of the organization's own files ([ADR-0026](../adr/0026-stale-instructions-by-versioned-name.md)). Fires for files a `CLAUDE.md` imports with `@` (`load_reason=include`) and for path-scoped rules when a matching file is read (`path_glob_match`). **No content hash is sent** |
