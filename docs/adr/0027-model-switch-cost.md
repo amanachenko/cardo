@@ -1,6 +1,6 @@
 # ADR-0027 — The cost of a model switch joins the mandatory tier
 
-**Status:** Accepted
+**Status:** Superseded by [ADR-0039](0039-hooks-wait-at-most-one-second.md)
 **Date:** 2026-09-24
 **Evidence:** `2026-09-24-first-real-hook-payloads.md`, section 2. The field names were observed
 from Claude Code 2.1.281; their types and values were not, since none of them were kept.

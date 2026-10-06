@@ -33,10 +33,10 @@ The hard rules that these decisions produce live in
 | [0021](0021-analytics-source-scope.md) | Support both analytics sources; build the Console adapter first | Accepted | 2026-09-23 |
 | [0022](0022-clickhouse-access.md) | ClickHouse over the HTTP interface, standard library only | Accepted | 2026-09-23 |
 | [0023](0023-hook-payload-allowlist.md) | Hook payloads are reduced to an allowlist at the collector | Superseded by 0025 | 2026-09-23 |
-| [0024](0024-bundle-configures-telemetry-only.md) | The managed-settings bundle configures telemetry and nothing else | Accepted | 2026-09-23 |
+| [0024](0024-bundle-configures-telemetry-only.md) | The managed-settings bundle configures telemetry and nothing else | Superseded by 0039 | 2026-09-23 |
 | [0025](0025-artifact-names-kept-with-guardrails.md) | Artifact names are kept; the views decide who sees them | Accepted | 2026-09-24 |
 | [0026](0026-stale-instructions-by-versioned-name.md) | Stale instructions are detected by versioned file names, not content hashes | Accepted | 2026-09-24 |
-| [0027](0027-model-switch-cost.md) | The cost of a model switch joins the mandatory tier | Accepted | 2026-09-24 |
+| [0027](0027-model-switch-cost.md) | The cost of a model switch joins the mandatory tier | Superseded by 0039 | 2026-09-24 |
 | [0028](0028-file-store-is-admin-api-only.md) | The file store serves the Admin API path only | Accepted | 2026-09-25 |
 | [0029](0029-minimum-group-size.md) | Views name a group only once five people are in it | Accepted | 2026-09-25 |
 | [0030](0030-stakeholders-and-questions.md) | Who Cardo serves, and the questions it will and will not answer | Accepted | 2026-09-25 |
@@ -48,6 +48,7 @@ The hard rules that these decisions produce live in
 | [0036](0036-service-runs-are-not-people.md) | Service runs are labelled, and are never counted as people | Accepted, not built | 2026-09-25 |
 | [0037](0037-policy-evidence.md) | Policy evidence: conformance, coverage and other organizations | Accepted, not built | 2026-09-25 |
 | [0038](0038-public-before-the-adoption-pilot.md) | Publish before the adoption pilot, under a collective copyright | Accepted | 2026-09-30 |
+| [0039](0039-hooks-wait-at-most-one-second.md) | Every hook waits at most one second, and a model switch is read after it happens | Accepted | 2026-10-06 |
 
 ADR-0030 to ADR-0037 came out of one design review on 2026-09-25, which asked who Cardo is for and
 what each of them needs. Its evidence is
@@ -73,7 +74,7 @@ Recorded here so a future session knows these were considered and postponed, not
 - **Full adapters for other agents** — as organizations need them, for comparing tools against each
   other (ADR-0004, ADR-0030).
 - **Per-tier salt rotation** — stable salt in v0.1; rotation is the better long-term design (ADR-0006).
-- **Local-spool hook fallback** — build when an organization asks (ADR-0011, upheld by ADR-0024).
+- **Local-spool hook fallback** — build when an organization asks (ADR-0011, upheld by ADR-0024 and ADR-0039).
 - **Content hashes of instructions files** — Claude Code 2.1.281 sends none. The field stays on the
   allowlist, so the hash-based design returns without a decision if it appears (ADR-0026).
 - **Cross-org benchmark feed** — only ever as a separate opt-in product with its own consent story

@@ -1,6 +1,6 @@
 # ADR-0024 — The managed-settings bundle configures telemetry and nothing else
 
-**Status:** Accepted
+**Status:** Superseded by [ADR-0039](0039-hooks-wait-at-most-one-second.md)
 **Date:** 2026-09-23
 **Evidence:** `2026-09-23-hooks-otel-collector-surfaces.md` (current settings documentation).
 **Supersedes:** [ADR-0011](0011-hook-transport-http.md).
