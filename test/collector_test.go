@@ -441,10 +441,11 @@ func assertNoMarkers(t *testing.T, what string, row map[string]any) {
 	}
 }
 
-// hookFixtureDirs are replayed together. 2.1.281 holds the key sets observed from a real Claude
-// Code; documented holds what the documentation said before that, still accepted so an older
-// client keeps working, and the two events not yet observed (SessionStart, PermissionDenied).
-var hookFixtureDirs = []string{"2.1.281", "documented"}
+// hookFixtureDirs are replayed together. 2.1.281 and 2.1.289 hold the key sets observed from a
+// real Claude Code. documented holds what the documentation said before that, still accepted so an
+// older client keeps working, and two events not observed: PermissionDenied, and SessionStart,
+// which Claude Code runs no HTTP hook for and the bundle no longer hooks (ADR-0039).
+var hookFixtureDirs = []string{"2.1.281", "2.1.289", "documented"}
 
 // Every observed and documented hook shape goes in carrying content; only allowlisted,
 // content-free fields come out, and the facts Cardo derives from content are right.
@@ -470,8 +471,8 @@ func TestCollector_HookPayloadsReduceToTheAllowlist(t *testing.T) {
 	}
 	for _, dir := range hookFixtureDirs {
 		files, _ := filepath.Glob(filepath.Join(repoRoot(t), "test", "fixtures", "hooks", dir, "*.json"))
-		if len(files) < 11 {
-			t.Fatalf("expected a fixture per hook event in test/fixtures/hooks/%s, found %d", dir, len(files))
+		if len(files) == 0 {
+			t.Fatalf("no fixtures in test/fixtures/hooks/%s", dir)
 		}
 		for _, f := range files {
 			b, err := os.ReadFile(f)
@@ -607,6 +608,16 @@ func TestCollector_HookPayloadsReduceToTheAllowlist(t *testing.T) {
 				want[k] = ""
 			}
 
+		// Observed shapes, Claude Code 2.1.289. The bundle hooks PostModelSwitch, which cannot
+		// block a switch (ADR-0039); it also fires on resume, which the views leave out.
+		case "2.1.289/PostModelSwitch":
+			want["from_model"], want["to_model"] = "claude-opus-5-5", "claude-haiku-4-5-20251001"
+			want["requested_model"], want["model_switch_source"] = "haiku", "picker"
+			want["context_tokens"], want["prompt_cache_warm"] = "48213", "true"
+			want["cache_ttl"], want["estimated_cache_write_usd"] = "1h", "0.05"
+		case "2.1.289/PostModelSwitch.resume":
+			want["model_switch_source"] = "resume"
+
 		// Documented shapes: the names the documentation used are still understood.
 		case "documented/UserPromptSubmit":
 			want["prompt_length"] = fmt.Sprint(len(in["user_input"].(string)))
@@ -692,6 +703,26 @@ func TestCollector_HookPayloadsReduceToTheAllowlist(t *testing.T) {
 		if kinds[kind] != n {
 			t.Errorf("silver_artifact_load holds %d %s rows from the fixtures, want %d", kinds[kind], kind, n)
 		}
+	}
+
+	// A model switch is one the engineer or a client asked for: every PreModelSwitch, and a
+	// PostModelSwitch unless Claude Code changed the model itself or restored it on resume.
+	wantSwitches := 0
+	for _, in := range sent {
+		switch in["hook_event_name"] {
+		case "PreModelSwitch":
+			wantSwitches++
+		case "PostModelSwitch":
+			if src := in["source"]; src != "auto" && src != "resume" {
+				wantSwitches++
+			}
+		}
+	}
+	switches := count(fmt.Sprintf("SELECT 'switches', count() FROM cardo.silver_context_event "+
+		"WHERE kind = 'model_switch' AND startsWith(session_id, '%s.')", run))
+	if switches["switches"] != wantSwitches {
+		t.Errorf("silver_context_event holds %d model switches from the fixtures, want %d",
+			switches["switches"], wantSwitches)
 	}
 }
 

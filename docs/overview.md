@@ -107,8 +107,9 @@ what the console shows, and each engineer sees their own position first.
   fact about the skill. A ranking of engineers is a number people learn to game.
 - **It runs entirely in your network.** No phone-home, no hosted version, no benchmark upload.
 - **Nothing is installed on laptops.** Your device management pushes one settings file, which turns
-  on Claude Code's own telemetry and a set of fire-and-forget hooks. It never makes a session wait,
-  and it changes nothing else about how Claude Code behaves.
+  on Claude Code's own telemetry and a set of hooks. Claude Code waits for each hook's answer: a few
+  milliseconds normally, and at most one second if the collector is out of reach. No hook can block
+  anything, and the file changes nothing else about how Claude Code behaves.
 - **Identity is hashed before storage,** and data is kept for 90 days. Pseudonymous data is still
   personal data, and the documentation says so plainly. Retention is what bounds it.
 - **Small groups are never shown.** A team or a home-grown tool is named only once five people are

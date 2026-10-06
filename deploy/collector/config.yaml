@@ -1,4 +1,4 @@
-# Cardo org-edge collector (ADR-0006, ADR-0012, ADR-0023, ADR-0025, ADR-0026, ADR-0027).
+# Cardo org-edge collector (ADR-0006, ADR-0012, ADR-0023, ADR-0025, ADR-0026, ADR-0035, ADR-0039).
 #
 # This file IS the privacy contract for the collector path. Everything Claude Code sends -- native
 # OTel from every session, and the hook pack's HTTP POSTs -- passes through here before anything is
@@ -267,7 +267,7 @@ processors:
           - 'set(log.cache["session_end_reason"], log.cache["reason"]) where log.cache["hook_event_name"] == "SessionEnd" and IsString(log.cache["reason"]) and IsMatch(log.cache["reason"], "^[A-Za-z_-]{1,40}$")'
           - 'set(log.cache["compaction_reason"], log.cache["trigger"]) where (log.cache["hook_event_name"] == "PreCompact" or log.cache["hook_event_name"] == "PostCompact") and IsString(log.cache["trigger"]) and IsMatch(log.cache["trigger"], "^[A-Za-z_-]{1,40}$")'
           - 'set(log.cache["config_source"], log.cache["source"]) where log.cache["hook_event_name"] == "ConfigChange" and IsString(log.cache["source"]) and IsMatch(log.cache["source"], "^[A-Za-z_-]{1,40}$")'
-          - 'set(log.cache["model_switch_source"], log.cache["source"]) where log.cache["hook_event_name"] == "PreModelSwitch" and IsString(log.cache["source"]) and IsMatch(log.cache["source"], "^[A-Za-z_-]{1,40}$")'
+          - 'set(log.cache["model_switch_source"], log.cache["source"]) where (log.cache["hook_event_name"] == "PreModelSwitch" or log.cache["hook_event_name"] == "PostModelSwitch") and IsString(log.cache["source"]) and IsMatch(log.cache["source"], "^[A-Za-z_-]{1,40}$")'
           - 'set(log.cache["prompt_length"], Len(log.cache["prompt"])) where log.cache["hook_event_name"] == "UserPromptSubmit" and IsString(log.cache["prompt"])'
           - 'set(log.cache["prompt_length"], Len(log.cache["user_input"])) where IsString(log.cache["user_input"])'
 
@@ -305,9 +305,11 @@ processors:
           - 'set(log.cache["agent_type"], "custom") where "${env:CARDO_ARTIFACT_NAMES:-all}" != "all" and IsString(log.cache["agent_type"]) and not IsMatch(log.cache["agent_type"], "^(general-purpose|Explore|Plan|statusline-setup|claude-code-guide)$") and ("${env:CARDO_ORG_ARTIFACTS:-}" == "" or not IsMatch(log.cache["agent_type"], "${env:CARDO_ORG_ARTIFACTS:-}"))'
           - 'set(log.cache["tool_name"], "mcp__custom") where "${env:CARDO_ARTIFACT_NAMES:-all}" != "all" and IsString(log.cache["tool_name"]) and IsMatch(log.cache["tool_name"], "^mcp__") and ("${env:CARDO_ORG_ARTIFACTS:-}" == "" or not IsMatch(log.cache["tool_name"], "${env:CARDO_ORG_ARTIFACTS:-}"))'
 
-          # What a model switch costs (ADR-0027). Each is kept only when its value has the type the
-          # name means, so text cannot ride in under a numeric name. A real switch on 2026-09-24
-          # passed every guard: an integer, a number, a boolean, and "1h".
+          # What a model switch costs (ADR-0027, carried into ADR-0039). Each is kept only when its
+          # value has the type the name means, so text cannot ride in under a numeric name. A real
+          # switch on 2026-09-24 passed every guard: an integer, a number, a boolean, and "1h". The
+          # bundle hooks PostModelSwitch, which carries the same fields and cannot block the switch;
+          # PreModelSwitch is still accepted from bundles deployed before ADR-0039.
           - 'delete_key(log.cache, "context_tokens") where log.cache["context_tokens"] != nil and not IsInt(log.cache["context_tokens"]) and not IsDouble(log.cache["context_tokens"])'
           - 'delete_key(log.cache, "estimated_cache_write_usd") where log.cache["estimated_cache_write_usd"] != nil and not IsInt(log.cache["estimated_cache_write_usd"]) and not IsDouble(log.cache["estimated_cache_write_usd"])'
           - 'delete_key(log.cache, "prompt_cache_warm") where log.cache["prompt_cache_warm"] != nil and not IsBool(log.cache["prompt_cache_warm"])'

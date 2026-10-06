@@ -12,14 +12,16 @@ against those two real sessions.
   each, and a Grafana dashboard. The ClickHouse half is verified against a real server; the DuckDB
   half against a generated store. No adapter has parsed a live response: an individual account
   gets 403 on every Admin endpoint ([note](../research/2026-09-23-admin-api-individual-account.md)).
-- **Collector path (Phase 2, collection).** The managed-settings bundle, the thirteen-event hook
+- **Collector path (Phase 2, collection).** The managed-settings bundle, the twelve-event hook
   pack, and the org-edge collector config writing to three ClickHouse bronze tables. Verified
   against a running collector 0.161.0 and ClickHouse 26.6, including byte-for-byte pseudonym
   parity with the poller, and **against two real Claude Code 2.1.281 sessions** on an individual
   account ([first](../research/2026-09-24-first-real-hook-payloads.md),
-  [second](../research/2026-09-24-second-real-session.md)). 11 of the 13 hook events arrive.
-  `SessionStart`'s HTTP hook is registered and never run, and auto mode has not yet denied anything,
-  so `PermissionDenied` is unobserved. OTel arrives on an individual account.
+  [second](../research/2026-09-24-second-real-session.md)), and since then on 2.1.289 to 2.1.291
+  ([note](../research/2026-10-06-http-hooks-wait.md)). Eleven of the twelve hooked events have
+  arrived; auto mode has not yet denied anything, so `PermissionDenied` is unobserved. OTel arrives
+  on an individual account. **Claude Code waits for every HTTP hook**, so each one gives up after
+  one second ([ADR-0039](../adr/0039-hooks-wait-at-most-one-second.md)).
 - **Collector path (Phase 2, analysis).** Seven silver views and four gold marts over the
   collector's bronze, and an enablement dashboard. They are verified three ways:
   - against a live ClickHouse with seeded rows, including each rule broken on purpose;
@@ -120,8 +122,8 @@ an appending poller would silently double every total.
   |  + managed-settings.json  |-------------->| otelcol-contrib 0.161.0   deploy/collector/   |
   |    env:   native OTel on, |               |                                              |
   |           content flags 0 |   POST        |  logs/hooks    webhook_event receiver         |
-  |    hooks: 13 events,      |-------------->|    allowlist + derived facts, raw body gone   |
-  |           async HTTP      |  /v1/hooks    |    names of every received field kept         |
+  |    hooks: 12 events,      |-------------->|    allowlist + derived facts, raw body gone   |
+  |           HTTP, 1 s max   |  /v1/hooks    |    names of every received field kept         |
   |                           |               |  logs/otel, metrics/otel    otlp receiver     |
   | nothing installed         |               |    refuse weak salt -> SHA256 pseudonym ->    |
   +---------------------------+               |    classify repository -> drop ids, URLs,     |
@@ -193,7 +195,7 @@ developer machine                     organization's infrastructure
 |  - native OTel --------+-- OTLP --->|  receivers: otlp, webhookevent       |
 |  - managed hook pack   |            |  processors: transform (OTTL)        |
 |    (type:"http",       +-- HTTPS -->|    - SHA256(email+salt) -> pseudonym  |
-|     async:true)        |            |    - delete_key(user.email)          |
+|     timeout:1)         |            |    - delete_key(user.email)          |
 |                        |            |    - tier tagging                    |
 | NO INSTALLED BINARY    |            |  exporters: clickhouse               |
 +------------------------+            +---------------+----------------------+
@@ -202,9 +204,9 @@ developer machine                     organization's infrastructure
         | (MDM / GPO / Intune)                 | ClickHouse      |
         |  - CLAUDE_CODE_ENABLE_TELEMETRY      |  bronze: raw    |
         |  - OTEL_EXPORTER_OTLP_ENDPOINT       |  silver: views  |
-        |  - 13 async HTTP hooks               |  gold:   marts  |
+        |  - 12 HTTP hooks, 1 s each at most   |  gold:   marts  |
         |  - OTEL_LOG_* all at 0 (redacted)    +--------+--------+
-        |  - and nothing else (ADR-0024)                v
+        |  - and nothing else (ADR-0039)                v
                                                +-----------------+
   Anthropic Admin API ---> cardo poller ------>| Grafana         |
   (zero-install tier)                          +-----------------+
@@ -214,12 +216,12 @@ developer machine                     organization's infrastructure
 
 | Component | Path | Status | ADR |
 |---|---|---|---|
-| Managed settings bundle | `deploy/managed-settings/` | **built** — production template and a local-evaluation variant | [0007](../adr/0007-enrollment-posture.md), [0024](../adr/0024-bundle-configures-telemetry-only.md) |
-| Hook pack (13 HTTP hooks) | inside the bundle's `hooks` block | **built**, observed from Claude Code 2.1.281: 11 of 13 events arrive | [0005](../adr/0005-collection-mechanism.md), [0024](../adr/0024-bundle-configures-telemetry-only.md) |
-| Collector config | `deploy/collector/` | **built**, verified against a running collector 0.161.0 and two real Claude Code sessions; repository classification verified against the collector only | [0006](../adr/0006-pseudonymization.md), [0012](../adr/0012-ingest-implementation.md), [0025](../adr/0025-artifact-names-kept-with-guardrails.md), [0026](../adr/0026-stale-instructions-by-versioned-name.md), [0027](../adr/0027-model-switch-cost.md), [0035](../adr/0035-repository-identity-classified.md) |
+| Managed settings bundle | `deploy/managed-settings/` | **built** — production template and a local-evaluation variant | [0007](../adr/0007-enrollment-posture.md), [0039](../adr/0039-hooks-wait-at-most-one-second.md) |
+| Hook pack (12 HTTP hooks) | inside the bundle's `hooks` block | **built**, observed from Claude Code 2.1.281 to 2.1.291: 11 of 12 events have arrived | [0005](../adr/0005-collection-mechanism.md), [0039](../adr/0039-hooks-wait-at-most-one-second.md) |
+| Collector config | `deploy/collector/` | **built**, verified against a running collector 0.161.0 and two real Claude Code sessions; repository classification verified against the collector only | [0006](../adr/0006-pseudonymization.md), [0012](../adr/0012-ingest-implementation.md), [0025](../adr/0025-artifact-names-kept-with-guardrails.md), [0026](../adr/0026-stale-instructions-by-versioned-name.md), [0035](../adr/0035-repository-identity-classified.md), [0039](../adr/0039-hooks-wait-at-most-one-second.md) |
 | Collector bronze tables | `sql/clickhouse/004_bronze_collector.sql` | **built** | [0016](../adr/0016-retention.md), [0025](../adr/0025-artifact-names-kept-with-guardrails.md) |
-| Silver views over collector data | `sql/clickhouse/006_silver_collector.sql` | **built** — seven views; verified against seeded rows, the fixture corpus through the collector, and two real sessions | [0025](../adr/0025-artifact-names-kept-with-guardrails.md), [0028](../adr/0028-file-store-is-admin-api-only.md) |
-| Gold marts over collector data | `sql/clickhouse/007_gold_collector.sql` | **built** — artifact usage, instructions versions, friction, context; the minimum group size applied | [0008](../adr/0008-outcome-variable.md), [0026](../adr/0026-stale-instructions-by-versioned-name.md), [0027](../adr/0027-model-switch-cost.md), [0029](../adr/0029-minimum-group-size.md) |
+| Silver views over collector data | `sql/clickhouse/006_silver_collector.sql`, `008_silver_model_switch.sql` | **built** — seven views; verified against seeded rows, the fixture corpus through the collector, and two real sessions | [0025](../adr/0025-artifact-names-kept-with-guardrails.md), [0028](../adr/0028-file-store-is-admin-api-only.md) |
+| Gold marts over collector data | `sql/clickhouse/007_gold_collector.sql` | **built** — artifact usage, instructions versions, friction, context; the minimum group size applied | [0008](../adr/0008-outcome-variable.md), [0026](../adr/0026-stale-instructions-by-versioned-name.md), [0029](../adr/0029-minimum-group-size.md), [0039](../adr/0039-hooks-wait-at-most-one-second.md) |
 | View settings | `sql/clickhouse/005_settings.sql`, `internal/store/clickhouse/settings.go` | **built** — the org pattern and the minimum group size, written by `cardo migrate` | [0029](../adr/0029-minimum-group-size.md) |
 | `cardo poll` CLI | `cmd/cardo/` | **built** | [0017](../adr/0017-v01-scope.md) |
 | `cardo migrate` CLI | `cmd/cardo/` | **built** — the schema, and the two view settings; the collector path needs it because the exporter never creates tables | [0019](../adr/0019-sql-tooling.md), [0029](../adr/0029-minimum-group-size.md) |
@@ -237,15 +239,18 @@ developer machine                     organization's infrastructure
 
 ## The hook pack
 
-13 events. This list is the mandatory-tier boundary and changing it requires an ADR (INV-4).
+12 events. This list is the mandatory-tier boundary and changing it requires an ADR (INV-4).
+[ADR-0039](../adr/0039-hooks-wait-at-most-one-second.md) took out `SessionStart`, which Claude Code
+runs no HTTP hook for, and read model switches from `PostModelSwitch` instead of `PreModelSwitch`.
+Each hook gives up after one second, because Claude Code waits for it.
 
 What each event gives Cardo, as observed from Claude Code 2.1.281 in two sessions
 ([first](../research/2026-09-24-first-real-hook-payloads.md),
-[second](../research/2026-09-24-second-real-session.md)):
+[second](../research/2026-09-24-second-real-session.md)), and `PostModelSwitch` from 2.1.289
+([note](../research/2026-10-06-http-hooks-wait.md)):
 
 | Event | Why it is here |
 |---|---|
-| `SessionStart` | Session boundary and start reason. **Its HTTP hook is registered and never run in 2.1.281**, so session start comes from OTel `claude_code.session.count` and each session's first event |
 | `SessionEnd` | Session boundary and end reason. Arrives even on `/exit` |
 | `UserPromptSubmit` | **Metadata only**: length and `permission_mode`. Never the text (INV-5) |
 | `UserPromptExpansion` | Slash command name and source: which commands are used, the organization's and engineers' own |
@@ -256,7 +261,7 @@ What each event gives Cardo, as observed from Claude Code 2.1.281 in two session
 | `InstructionsLoaded` | Load reason, memory type, kind of file, and the name of the organization's own files ([ADR-0026](../adr/0026-stale-instructions-by-versioned-name.md)). Fires for files a `CLAUDE.md` imports with `@` (`load_reason=include`) and for path-scoped rules when a matching file is read (`path_glob_match`). **No content hash is sent** |
 | `SubagentStart` | Subagent usage |
 | `SubagentStop` | Subagent end. Also fires for Claude Code's own helpers, prompt suggestion and compaction, with no `SubagentStart`: count subagents by pairing the two on `agent_id` |
-| `PreModelSwitch` | Model policy, and what the switch cost: cache warmth and Claude Code's own estimate of the cache rewrite ([ADR-0027](../adr/0027-model-switch-cost.md)) |
+| `PostModelSwitch` | Model policy, and what the switch cost: cache warmth and Claude Code's own estimate of the cache rewrite. Read after the switch, because a timed-out `PreModelSwitch` hook blocks it; only switches someone asked for are counted, not a fallback or a resume ([ADR-0039](../adr/0039-hooks-wait-at-most-one-second.md)) |
 | `ConfigChange` | Which settings source changed during a session |
 
 **Skill usage needs no hook**: `skill.name` is already an attribute on the native
@@ -320,11 +325,12 @@ busy running two other hooks, and Claude Code showed "socket hang up" under the 
 | **ADR-0035** repositories | Every match on `CARDO_ORG_REPOS` must rule out a blank pattern. CI runs the real collector with a pattern and without one. It sends each form a git remote takes, credentials included, on the resource, the record and the data point. Organization repositories must be kept as `host/owner/name` and every other reduced to its host. No `vcs.*` key and no credential may be stored |
 | **INV-5** in the bundle | Every content flag must be present and `"0"`. Repository identity must be on, because the collector classifies it |
 | Delta temporality | The bundle must pin metrics to delta, because a count is the sum of a metric's points |
-| **INV-4** hook pack | The bundle must hook exactly the thirteen published events |
+| **INV-4** hook pack | The bundle must hook exactly the twelve published events, and never `SessionStart` or `PreModelSwitch` |
 | **INV-6** | Nothing under `deploy/` or `dashboards/` may mention `requiredMaximumVersion` |
 | **INV-7** on the collector | Every exporter must be ClickHouse; no extensions; the collector's own metrics off |
 | Fail-closed collector | Every processor must use `error_mode: propagate`; identity pipelines must start with the salt refusal and the hash, and every pipeline must end with the tripwire |
-| **ADR-0024** | The bundle may set only `env` (telemetry variables) and `hooks`; each hook only `type`, `url`, `async: true` |
+| **ADR-0039** | The bundle may set only `env` (telemetry variables) and `hooks`; each hook only `type: "http"`, `url` and a `timeout` of at most one second |
+| Slow hook senders | The collector's hook receiver must wait 10 s for a request. CI sends one with its headers late and one with its body late, and both must be answered and stored |
 
 Each of these was verified to fail when the invariant is deliberately broken, rather than merely
 observed to pass. For the collector that meant breaking the running config, not just the file:
@@ -355,7 +361,8 @@ view, which the old pattern had never read.
   ([ADR-0011](../adr/0011-hook-transport-http.md)).
 - **No policy in the bundle.** No `allowManagedHooksOnly`, no `allowedHttpHookUrls`, no permission
   rules, no version pins. Installing Cardo changes nothing about Claude Code for an engineer except
-  that telemetry is sent ([ADR-0024](../adr/0024-bundle-configures-telemetry-only.md)).
+  that telemetry is sent, and each hooked event waits for the collector's answer, a second at most
+  ([ADR-0039](../adr/0039-hooks-wait-at-most-one-second.md)).
 - **No raw hook payload anywhere.** Not in bronze, not in a debug log, not in the fixtures, which
   carry field names observed from a real Claude Code and synthetic values. Drift is detected from
   field *names* ([ADR-0023](../adr/0023-hook-payload-allowlist.md)).

@@ -84,7 +84,7 @@ content-redaction flag Claude Code offers stays at `0` in the shipped bundle
 
 ```
 Claude Code  --- native OTel ------>  OTel Collector  -->  ClickHouse  -->  Grafana
-             --- async HTTP hooks -->  (hashes email
+             --- HTTP hooks, 1 s -->  (hashes email
                                         before storage)
   no installed binary                org-edge, your infra          your infra
 ```
@@ -105,7 +105,7 @@ real server in CI.
 
 The collector path runs end to end too. It has three parts:
 
-- the managed-settings bundle and its thirteen-event hook pack;
+- the managed-settings bundle and its twelve-event hook pack;
 - a collector that pseudonymizes OTel and reduces hook payloads to an allowlist before anything is
   written;
 - views and an enablement dashboard over what it stores.

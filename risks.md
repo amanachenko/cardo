@@ -196,6 +196,20 @@ especially a summary of it, is a hypothesis about field names.
   The permission-wait start now relies on the undocumented `hook_execution_start` event. That is a
   new place for drift to bite, and the hook row's time is the fallback.
 
+**Status 2026-10-06: `SessionStart` is settled, and the design had misread `async`**
+([note](docs/research/2026-10-06-http-hooks-wait.md)).
+
+- **Claude Code runs no HTTP hook on `SessionStart`**, by its own documentation. The bundle no
+  longer hooks it ([ADR-0039](docs/adr/0039-hooks-wait-at-most-one-second.md)).
+- **`async: true` does nothing on an HTTP hook.** Every hook blocked its event until the collector
+  answered, with no limit set. Each now gives up after one second (risk 20).
+- **`PostModelSwitch` was observed on 2.1.289** with the same field names as `PreModelSwitch`,
+  but no `prompt_id`, and a dated `to_model` where Claude Code's hook name has the canonical one.
+  The views match the two spellings.
+
+**Still open:** `PermissionDenied`'s payload, and the value of `PostModelSwitch`'s `source` on a
+real `/model`, which the one-laptop check will show.
+
 ### 8. The Claude Enterprise Analytics adapter is specified but unevidenced
 
 **Threatens:** [ADR-0021](docs/adr/0021-analytics-source-scope.md).
@@ -419,6 +433,11 @@ data source's user is refused a bronze or silver read.
 **Would settle it:** the dogfood, for the first. The first point is a fact about Claude Code, so the
 answer goes in a dated research note.
 
+**Status 2026-10-06: the first is settled on one machine**
+([note](docs/research/2026-10-06-http-hooks-wait.md)). On 2.1.289 to 2.1.291 the repository arrives
+on every log record and every metric data point, never on the resource, and the collector stores
+it classified, with no `vcs.*` key left. A team's URL forms are still to be seen.
+
 ### 17. A coach page can be demanded, or forwarded
 
 **Threatens:** INV-3 in practice, and [ADR-0032](docs/adr/0032-engineer-coach-by-shared-link.md).
@@ -447,7 +466,8 @@ for a comparison, and reporting the share of PRs whose tool is unknown beside ev
 ### 19. Anyone who can reach the collector can write to it
 
 **Threatens:** the credibility of every view, and
-[ADR-0024](docs/adr/0024-bundle-configures-telemetry-only.md).
+[ADR-0024](docs/adr/0024-bundle-configures-telemetry-only.md), carried into
+[ADR-0039](docs/adr/0039-hooks-wait-at-most-one-second.md).
 
 The collector accepts hooks and OTel from any machine that can reach ports 4318 and 8088. Nothing
 authenticates the sender, by design: a token in the settings file would be readable by every
@@ -460,3 +480,19 @@ only, and the dogfood is one team. **Would close it:** a decision before the ado
 between per-machine client certificates pushed by MDM (Claude Code supports
 `CLAUDE_CODE_CLIENT_CERT` for its exporter), an address allowlist at the proxy, and accepting the
 risk in writing.
+
+### 20. A hook waits for the collector, up to a second
+
+**Threatens:** [ADR-0039](docs/adr/0039-hooks-wait-at-most-one-second.md), and the promise that
+installing Cardo changes nothing an engineer would notice.
+
+Claude Code waits for every HTTP hook. A working collector answers in milliseconds. One that is
+down, out of reach or stuck costs each hooked event up to the one-second timeout, and Claude Code
+shows a hook error or a timeout notice under the message. An engineer off the VPN sees one on every
+prompt. A hook that times out also loses its event, so a slow network costs data as well.
+
+**Mitigation:** the collector's name resolves only inside the network where it can, so an
+off-network lookup fails in about 0.2 s. **Would settle it:** the one-laptop check's round-trip
+time over the VPN, and whether engineers in the dogfood report the notices. If healthy hooks come
+near a second, the timeout is revisited with that measurement; if the notices annoy people, the
+answer is a reachable collector, not a longer timeout.

@@ -84,9 +84,15 @@ how a new field in a future Claude Code release gets noticed without its content
 ## What installing Cardo changes on your machine
 
 Your organization deploys one JSON file ([`deploy/managed-settings/`](../../deploy/managed-settings/)).
-It turns on Claude Code's own telemetry and adds thirteen hooks that fire and forget: **Cardo never
-makes your session wait**. It sets nothing else. Your own hooks, plugins, permissions and version
-all stay as they were ([ADR-0024](../adr/0024-bundle-configures-telemetry-only.md)).
+It turns on Claude Code's own telemetry and adds twelve hooks. It sets nothing else. Your own hooks,
+plugins, permissions and version all stay as they were
+([ADR-0039](../adr/0039-hooks-wait-at-most-one-second.md)).
+
+**Claude Code waits for each hook's answer.** From a working collector that takes a few
+milliseconds. Each hook gives up after one second, so a collector that is down or out of reach
+costs each event at most that, and shows a hook error or a timeout notice under your message. Your
+session carries on either way, and that event is not recorded. No hook can block a prompt, a
+permission or a model switch.
 
 One side effect is Claude Code's behaviour, and cannot be avoided: when an organization sets the
 telemetry endpoint centrally, any telemetry endpoint you had configured yourself stops being used.

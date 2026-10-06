@@ -1,0 +1,15 @@
+{
+  "session_id": "SESSION",
+  "transcript_path": "C:\\Users\\marker-user\\.claude\\projects\\C--Users-marker-user-src-payments-service\\SESSION.jsonl",
+  "cwd": "C:\\Users\\marker-user\\src\\payments-service",
+  "hook_event_name": "PostModelSwitch",
+  "from_model": "claude-opus-5-5",
+  "to_model": "claude-haiku-4-5-20251001",
+  "requested_model": "claude-haiku-4-5-20251001",
+  "source": "resume",
+  "pricing": "catalog",
+  "context_tokens": 0,
+  "prompt_cache_warm": false,
+  "cache_ttl": "1h",
+  "estimated_cache_write_usd": 0
+}

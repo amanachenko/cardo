@@ -75,10 +75,14 @@ Run it on an always-on machine inside the organization's network. Every step is 
 1. **Pick a name** under a domain you control, such as `cardo.<your-domain>`. Keep it generic.
    Every publicly trusted certificate is published in Certificate Transparency logs, so the name
    should not say which organization or customer it serves.
-2. **Point it at the machine's internal address** with an A record in the public zone. Some
-   resolvers refuse a public name that resolves to a private address, as DNS-rebinding protection:
-   dnsmasq, some corporate DNS, some VPN clients. If a laptop on the VPN cannot resolve the name,
-   ask for an entry on the internal DNS instead.
+2. **Point it at the machine's internal address on the internal DNS,** so that the name resolves
+   only inside the network. Claude Code waits for each hook, up to its one-second timeout
+   ([ADR-0039](../../docs/adr/0039-hooks-wait-at-most-one-second.md)). Off the network, a name that
+   does not resolve fails in about 0.2 s. A public A record pointing at a private address makes a
+   laptop off the VPN wait out the full second on every hooked event instead. Use a public record
+   only where internal DNS is out of reach, and expect some resolvers to refuse it as DNS-rebinding
+   protection: dnsmasq, some corporate DNS, some VPN clients. The certificate's TXT record (step 3)
+   is in the public zone either way.
 3. **Obtain a certificate by hand, with a DNS challenge.** The machine is not reachable from the
    internet, so the challenge is a TXT record rather than an HTTP request. With certbot:
 
@@ -97,7 +101,7 @@ Run it on an always-on machine inside the organization's network. Every step is 
 6. **Open ports 4318 and 8088** on the machine's firewall, to the office and VPN ranges only. The
    collector does not authenticate senders ([risks.md](../../risks.md) #19).
 7. **Make the settings file.** Copy
-   [`managed-settings.json`](../managed-settings/managed-settings.json), replace both occurrences
+   [`managed-settings.json`](../managed-settings/managed-settings.json), replace every occurrence
    of `cardo-collector.internal.example` with your name, and set `cardo.cohort`. Keep the copy
    outside the repository, because its hostname is the organization's
    ([ADR-0038](../../docs/adr/0038-public-before-the-adoption-pilot.md)). Engineers run
@@ -148,6 +152,26 @@ Run it on an always-on machine inside the organization's network. Every step is 
    and adding its points up counts the same lines again on every export: check that the settings
    file still has `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE` set to `delta`. `claude_code.lines_of_code.count`
    should have rows for `added` and `removed`, each with a session.
+
+   Then how long Claude Code waited for the hooks, which it does for every one, up to a second
+   ([ADR-0039](../../docs/adr/0039-hooks-wait-at-most-one-second.md)). Switch `/model` once during
+   the session, so that a model switch is among them:
+
+   ```sql
+   SELECT LogAttributes['hook_event'] AS event, count() AS runs,
+          quantile(0.5)(toUInt32OrZero(LogAttributes['total_duration_ms'])) AS p50_ms,
+          max(toUInt32OrZero(LogAttributes['total_duration_ms'])) AS max_ms,
+          sum(toUInt32OrZero(LogAttributes['num_cancelled'])) AS timed_out
+   FROM cardo.bronze_otel_logs
+   WHERE EventName = 'claude_code.hook_execution_complete'
+   GROUP BY event ORDER BY event;
+   SELECT LogAttributes['model_switch_source'] AS source, count()
+   FROM cardo.bronze_hook_events WHERE EventName = 'PostModelSwitch' GROUP BY source;
+   ```
+
+   On a laptop with no hooks of its own, `p50_ms` is the round trip to the collector, and it
+   should be far below 1,000. Every `timed_out` is an event lost. A `/model` switch should show as
+   `command` or `picker`; that value has not yet been seen from a real switch.
 
 ## Three things in here that are deliberate
 

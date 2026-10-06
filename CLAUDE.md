@@ -3,12 +3,13 @@
 Self-hosted observability for Claude Code that measures **enablement artifacts, not engineers**.
 Pre-alpha. Phase 0 (the design record) is complete and Phase 1 is built: the Admin-API poller,
 pseudonymizer, both storage targets, both SQL dialects and a Grafana dashboard run end to end.
-**Phase 2 is built** too. Its collection half is the managed-settings bundle, the 13-event hook
+**Phase 2 is built** too. Its collection half is the managed-settings bundle, the 12-event hook
 pack and the org-edge collector, verified against a running collector and ClickHouse **and against
 two real Claude Code 2.1.281 sessions** ([first](docs/research/2026-09-24-first-real-hook-payloads.md),
-[second](docs/research/2026-09-24-second-real-session.md)): 11 of 13 hook events arrive, OTel
-arrives on an individual account, and the hook fixtures carry the observed field names. Its
-analysis half is seven silver views, four gold marts (`sql/clickhouse/005` to `007`) and the
+[second](docs/research/2026-09-24-second-real-session.md)), and since then 2.1.289 to 2.1.291
+([note](docs/research/2026-10-06-http-hooks-wait.md)): 11 of the 12 hooked events have arrived,
+OTel arrives on an individual account, and the hook fixtures carry the observed field names. Its
+analysis half is seven silver views, four gold marts (`sql/clickhouse/005` to `008`) and the
 enablement dashboard, checked against those sessions. Nothing has run against a fleet.
 **No adapter has yet parsed a live Anthropic API response** — the console adapter's field names are
 still documentation, and documentation was wrong about four of the hook events' fields and about
@@ -104,10 +105,11 @@ Template and full rules: [docs/adr/0000-adr-process.md](docs/adr/0000-adr-proces
   organization shipped; `CARDO_ARTIFACT_NAMES=org-only` is the strict mode, and anything but `all`
   is strict. Instructions-file names are kept only when they are the organization's
   ([ADR-0026](docs/adr/0026-stale-instructions-by-versioned-name.md)).
-- **The managed-settings bundle is `env` and `hooks`, nothing else**
-  ([ADR-0024](docs/adr/0024-bundle-configures-telemetry-only.md)). Installing Cardo must not change
-  how Claude Code behaves for an engineer beyond sending telemetry. `test/bundle_test.go` enforces
-  the shape.
+- **The managed-settings bundle is `env` and `hooks`, nothing else, and each hook waits at most a
+  second** ([ADR-0039](docs/adr/0039-hooks-wait-at-most-one-second.md), carrying ADR-0024 forward).
+  Installing Cardo must not change how Claude Code behaves for an engineer beyond sending
+  telemetry, and Claude Code waits for every HTTP hook, so each is `type`, `url` and `timeout: 1`.
+  `test/bundle_test.go` enforces the shape.
 - **SQL is numbered plain `.sql` files** applied in order, not dbt
   ([ADR-0019](docs/adr/0019-sql-tooling.md)). DuckDB views in `sql/duckdb/`, ClickHouse migrations in
   `sql/clickhouse/`, embedded in the binary and applied on every poll. **Migrations are immutable
@@ -204,6 +206,16 @@ Template and full rules: [docs/adr/0000-adr-process.md](docs/adr/0000-adr-proces
 - Leaving `webhook_event`'s `max_request_body_size` at its 100 KiB default. Larger bodies are
   refused with a 400 and no collector log line; the only trace is a hook error count in Claude
   Code's own OTel. Real `SubagentStop` payloads were lost this way.
+- `async: true` on an HTTP hook. Claude Code accepts it and ignores it: `async` exists only on
+  command hooks, and it waits for every HTTP hook. Without a `timeout`, a laptop off the VPN waited
+  21 s per prompt and a hung collector 30 s, and other events allow 600 s. Each Cardo hook sets
+  `timeout: 1` (ADR-0039).
+- A hook on `PreModelSwitch`. One cancelled at its timeout blocks the engineer's model switch.
+  `PostModelSwitch` carries the same fields and cannot block; it also fires on fallback (`auto`) and
+  resume, which the views leave out. Its `to_model` is dated while Claude Code's hook name uses the
+  canonical model name, so match the two with the date and `[1m]` removed.
+- A `SessionStart` HTTP hook. Claude Code does not run HTTP hooks on it, and says so; a session's
+  start comes from OTel.
 - Leaving `webhook_event`'s `read_timeout` and `write_timeout` at their 500 ms defaults. A Claude
   Code busy running other hooks can be slower than that; the receiver then closes the connection
   with no response, Claude Code shows "socket hang up" under the prompt, and late headers lose the
@@ -214,7 +226,7 @@ Template and full rules: [docs/adr/0000-adr-process.md](docs/adr/0000-adr-proces
   time; OTel carries the laptop's. On the reference stack they were 1 to 3 s apart, and not steady,
   which added about 1.3 s to each real permission wait. Both ends of a duration come from one
   clock: a permission wait starts at OTel's `hook_execution_start` for `PermissionRequest:<tool>`.
-- Reporting `PreModelSwitch`'s `estimated_cache_write_usd` as what a switch cost. It assumes the
+- Reporting a model switch's `estimated_cache_write_usd` as what the switch cost. It assumes the
   whole context is rewritten. In the switch observed, most of it was still cached, and the estimate
   was 3.2 times the next request's entire `cost_usd`. The next main-thread `api_request` is the cost.
 - Showing an artifact name that only one or two people use, or any per-person count of

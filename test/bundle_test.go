@@ -18,11 +18,20 @@ import (
 // the README and privacy.md promise.
 
 // mandatoryHookEvents is the hook pack. INV-4: the mandatory event set is published and short,
-// and adding to it requires an ADR. This list is that set; ADR-0005 is where it was decided.
+// and adding to it requires an ADR. This list is that set. ADR-0005 decided it, and ADR-0039
+// took SessionStart out and read model switches from PostModelSwitch instead of PreModelSwitch.
 var mandatoryHookEvents = []string{
-	"SessionStart", "SessionEnd", "UserPromptSubmit", "UserPromptExpansion", "PermissionRequest",
+	"SessionEnd", "UserPromptSubmit", "UserPromptExpansion", "PermissionRequest",
 	"PermissionDenied", "PreCompact", "PostCompact", "InstructionsLoaded", "SubagentStart",
-	"SubagentStop", "PreModelSwitch", "ConfigChange",
+	"SubagentStop", "PostModelSwitch", "ConfigChange",
+}
+
+// neverHooked are events an HTTP hook must not be on, each for a reason a future edit to the list
+// above could miss (ADR-0039).
+var neverHooked = map[string]string{
+	"SessionStart": "Claude Code runs no HTTP hook on SessionStart; the session's start comes from OTel",
+	"PreModelSwitch": "a PreModelSwitch hook cancelled at its timeout blocks the engineer's model switch; " +
+		"PostModelSwitch carries the same fields and cannot block",
 }
 
 // contentFlags are the Claude Code settings that would put content into telemetry. Each must be
@@ -154,10 +163,11 @@ func TestINV4_BundleHooksExactlyTheMandatoryEvents(t *testing.T) {
 	}
 }
 
-// Every hook is async HTTP to the same collector the OTel data goes to. Async is the property
-// that matters most: a synchronous hook blocks the engineer's session on the collector, and on
-// PreModelSwitch a timeout blocks the switch outright. Cardo must never be in the way.
-func TestBundleHooksNeverBlockASession(t *testing.T) {
+// Every hook is HTTP to the same collector the OTel data goes to, and waits for it at most one
+// second. Claude Code waits for every HTTP hook's response: `async` exists only on command hooks.
+// Without a timeout, a laptop off the VPN waited 21 s per prompt and a hung collector 30 s, and
+// most other events allow 600 s (ADR-0039). Cardo may cost the engineer a second, never more.
+func TestBundleHooksWaitAtMostOneSecond(t *testing.T) {
 	for _, b := range bundles(t) {
 		otlp, err := url.Parse(b.env["OTEL_EXPORTER_OTLP_ENDPOINT"])
 		if err != nil || otlp.Hostname() == "" {
@@ -165,6 +175,9 @@ func TestBundleHooksNeverBlockASession(t *testing.T) {
 			continue
 		}
 		for event, groups := range b.hooks {
+			if why, bad := neverHooked[event]; bad {
+				t.Errorf("%s hooks %s: %s (ADR-0039)", b.path, event, why)
+			}
 			for _, g := range groups {
 				if g.Matcher != "" {
 					t.Errorf("%s %s: matcher %q. The pack observes every occurrence; a matcher would "+
@@ -172,10 +185,11 @@ func TestBundleHooksNeverBlockASession(t *testing.T) {
 				}
 				for _, h := range g.Hooks {
 					for k := range h {
-						if k != "type" && k != "url" && k != "async" {
+						if k != "type" && k != "url" && k != "timeout" {
 							// headers / allowedEnvVars would interpolate the engineer's environment
-							// into a request; timeout and statusMessage are for blocking hooks.
-							t.Errorf("%s %s: handler sets %q; a Cardo hook is type, url and async only",
+							// into a request. async does nothing on an HTTP hook and reads like a
+							// promise that it does.
+							t.Errorf("%s %s: handler sets %q; a Cardo hook is type, url and timeout only",
 								b.path, event, k)
 						}
 					}
@@ -183,9 +197,9 @@ func TestBundleHooksNeverBlockASession(t *testing.T) {
 						t.Errorf("%s %s: handler type %v, want http. There is no agent (ADR-0011).",
 							b.path, event, h["type"])
 					}
-					if h["async"] != true {
-						t.Errorf("%s %s: handler is not async. A synchronous hook blocks the "+
-							"engineer's session on the collector.", b.path, event)
+					if s, ok := h["timeout"].(float64); !ok || s <= 0 || s > 1 {
+						t.Errorf("%s %s: handler timeout is %v; it must be a number of seconds, at most 1. "+
+							"Claude Code waits for the hook until then.", b.path, event, h["timeout"])
 					}
 					u, err := url.Parse(h["url"].(string))
 					if err != nil || u.Hostname() != otlp.Hostname() || u.Path != "/v1/hooks" {
@@ -210,7 +224,7 @@ func TestLocalBundleMatchesTheReferenceStack(t *testing.T) {
 			continue
 		}
 		otlp, _ := url.Parse(b.env["OTEL_EXPORTER_OTLP_ENDPOINT"])
-		hookURL, _ := url.Parse(b.hooks["SessionStart"][0].Hooks[0]["url"].(string))
+		hookURL, _ := url.Parse(b.hooks["UserPromptSubmit"][0].Hooks[0]["url"].(string))
 		for _, want := range []string{
 			`"127.0.0.1:` + otlp.Port() + `:4318"`,
 			`"127.0.0.1:` + hookURL.Port() + `:8088"`,

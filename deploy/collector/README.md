@@ -17,7 +17,8 @@ Why the hook path is an allowlist and the OTel path is not:
 [ADR-0023](../../docs/adr/0023-hook-payload-allowlist.md). What it keeps of names, instructions
 files and model switches: [ADR-0025](../../docs/adr/0025-artifact-names-kept-with-guardrails.md),
 [ADR-0026](../../docs/adr/0026-stale-instructions-by-versioned-name.md) and
-[ADR-0027](../../docs/adr/0027-model-switch-cost.md). What it keeps of the repository a session
+[ADR-0039](../../docs/adr/0039-hooks-wait-at-most-one-second.md), which reads model switches from
+`PostModelSwitch` and still accepts `PreModelSwitch` from older bundles. What it keeps of the repository a session
 works in: [ADR-0035](../../docs/adr/0035-repository-identity-classified.md).
 
 The hook receiver accepts bodies up to 16 MiB. Its default is 100 KiB, and it refuses anything
