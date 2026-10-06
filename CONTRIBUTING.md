@@ -14,7 +14,9 @@ Read, in this order:
 3. [docs/design/architecture.md](docs/design/architecture.md): what exists today.
 
 [CLAUDE.md](CLAUDE.md) is written for coding agents. It is also the shortest list of the project's
-conventions, and of the things that look like good ideas and are not.
+conventions, and of the things that look like good ideas and are not. Those that belong to one part
+of the repository, the collector, the managed-settings bundle, ClickHouse, or the views and
+dashboards, are in [.claude/rules/](.claude/rules/).
 
 A change that contradicts an accepted ADR or an invariant needs a new ADR that supersedes it
 ([how](docs/adr/0000-adr-process.md)), not a workaround.
