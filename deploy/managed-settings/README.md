@@ -12,8 +12,8 @@ deployed, and this page explains every line of it.
 
 ## What the bundle does
 
-**It turns on Claude Code's own OpenTelemetry and adds thirteen hooks. Nothing else.**
-[ADR-0024](../../docs/adr/0024-bundle-configures-telemetry-only.md) makes that a rule, and
+**It turns on Claude Code's own OpenTelemetry and adds twelve hooks. Nothing else.**
+[ADR-0039](../../docs/adr/0039-hooks-wait-at-most-one-second.md) makes that a rule, and
 `test/bundle_test.go` enforces it.
 
 ### `env`: Claude Code's native telemetry
@@ -43,20 +43,27 @@ off. They are written out anyway, so that the decision is on the page rather tha
 | `OTEL_LOG_RAW_API_BODIES` | complete API requests and responses |
 | `OTEL_LOG_MANAGED_SETTINGS` | the organization's resolved managed settings |
 
-### `hooks`: thirteen events, async HTTP
+### `hooks`: twelve events, HTTP, one second at most
 
-`SessionStart`, `SessionEnd`, `UserPromptSubmit`, `UserPromptExpansion`, `PermissionRequest`,
-`PermissionDenied`, `PreCompact`, `PostCompact`, `InstructionsLoaded`, `SubagentStart`,
-`SubagentStop`, `PreModelSwitch`, `ConfigChange`. That list is the mandatory tier, and adding to it
-needs a recorded decision (INV-4).
+`SessionEnd`, `UserPromptSubmit`, `UserPromptExpansion`, `PermissionRequest`, `PermissionDenied`,
+`PreCompact`, `PostCompact`, `InstructionsLoaded`, `SubagentStart`, `SubagentStop`,
+`PostModelSwitch`, `ConfigChange`. That list is the mandatory tier, and changing it needs a
+recorded decision (INV-4).
 
-Every hook is `async: true`, so it fires and forgets. **Cardo never waits on the network during
-your session, and never blocks anything.** If the collector is down, the event is lost and your
-session does not notice.
+Each hook posts the event to the collector, and **Claude Code waits for the answer**. From a
+working collector that takes a few milliseconds. Every hook sets `timeout: 1`, so a collector that
+is down, out of reach or stuck costs each event at most one second
+([ADR-0039](../../docs/adr/0039-hooks-wait-at-most-one-second.md)). When that happens you see a
+hook error or a timeout notice under your message, the event is not recorded, and your session
+carries on. No hook can block a prompt, a permission or a model switch. There is no `async`:
+Claude Code honours it only on command hooks.
 
-In Claude Code 2.1.281 the `SessionStart` hook is registered and never run, so twelve of the
-thirteen can arrive. The session's start is taken from Claude Code's own OTel instead
-([note](../../docs/research/2026-09-24-first-real-hook-payloads.md)).
+Two events are deliberately not hooked:
+
+- **`SessionStart`.** Claude Code does not run HTTP hooks on it. The session's start comes from
+  Claude Code's own OTel.
+- **`PreModelSwitch`.** A hook that times out there blocks your model switch. Cardo reads the same
+  facts from `PostModelSwitch`, after the switch, where it cannot get in the way.
 
 Claude Code sends each hook its full input, and that input includes your prompt text, command
 lines and file paths. **The collector discards all of that before anything is written**, keeping
@@ -95,8 +102,10 @@ were exporting telemetry to a personal tool, that stops.
    ([Serving a team over the network](../compose/README.md#serving-a-team-over-the-network)). The hook endpoint has no authentication of its
    own. A token placed in this file would be readable by every engineer, so it would not be a
    secret ([ADR-0024](../../docs/adr/0024-bundle-configures-telemetry-only.md)).
-2. Copy `managed-settings.json`, replace both occurrences of `cardo-collector.internal.example`,
-   and set `cardo.cohort` (below).
+2. Copy `managed-settings.json`, replace every occurrence of `cardo-collector.internal.example`,
+   and set `cardo.cohort` (below). Give the collector a name that resolves only on your network's
+   DNS: off the network, each hook then fails in a fraction of a second, instead of waiting out
+   its one-second timeout on an address it cannot reach.
 3. Deploy it to the managed-settings path:
 
    | OS | Path |
@@ -175,7 +184,6 @@ claude --settings /path/to/cardo/deploy/managed-settings/local-evaluation.json
 
 Work normally. To see the other events, also: run a slash command, ask for a subagent, answer a
 permission prompt, `/compact`, switch `/model`, edit a settings file mid-session, and try auto mode.
-`SessionStart` will not appear on Claude Code 2.1.281 (see above).
 Then see what arrived:
 
 ```sql

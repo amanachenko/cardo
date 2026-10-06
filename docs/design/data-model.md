@@ -67,8 +67,9 @@ its value was dropped.
   `command_name`, `agent_type`, and MCP `tool_name` on hooks; `skill.name` on OTel. The exception is
   the strict mode, `CARDO_ARTIFACT_NAMES=org-only`.
 - **The cost of a model switch:** `requested_model`, `context_tokens`, `prompt_cache_warm`,
-  `cache_ttl` and `estimated_cache_write_usd` on `PreModelSwitch`, each kept only when its value has
-  the expected type ([ADR-0027](../adr/0027-model-switch-cost.md)).
+  `cache_ttl` and `estimated_cache_write_usd` on `PostModelSwitch`, and on `PreModelSwitch` from
+  bundles deployed before ADR-0039, each kept only when its value has the expected type
+  ([ADR-0039](../adr/0039-hooks-wait-at-most-one-second.md)).
 
 **Attribute values are strings.** The exporter stores every attribute in a `Map(String, String)`,
 so numbers and booleans arrive as text and silver casts them.
@@ -106,7 +107,7 @@ reports. Both are NULL or empty for a session that sent no OTel.
 | `silver_turn` | one row per user prompt, built-in commands included | `claude_code.user_prompt` (command, the laptop's time) and the `UserPromptSubmit` hook (`permission_mode`), joined on `prompt.id` = `prompt_id`. `first_context_tokens` and `peak_context_tokens` come from the prompt's main-thread requests |
 | `silver_tool_call` | one row per tool call | `claude_code.tool_decision` and `claude_code.tool_result`, joined on `tool_use_id`. `is_edit` for Edit, MultiEdit, Write and NotebookEdit; `mcp_server` from `mcp__<server>__<tool>` |
 | `silver_policy_decision` | one row per permission prompt | `claude_code.hook_execution_start` with `hook_name=PermissionRequest:<tool>`, as-of joined to the next `claude_code.tool_decision` with a person's `source` for the same session, prompt and tool. `wait_ms` is NULL for a prompt nobody answered. The hook row adds `permission_mode` and the asking subagent. A session with no `hook_execution_start` falls back to the hook row's time, with `clock = 'two_clocks'` |
-| `silver_context_event` | one row per compaction or model switch | Compaction: OTel `claude_code.compaction` (`tokens_before`, `tokens_after`), or the `PreCompact` hook alone for a session that sent no OTel compaction. Switch: the `PreModelSwitch` hook's fields, timed by its `hook_execution_start`, and `next_request_*`, the next main-thread request on the new model, which is what the switch cost |
+| `silver_context_event` | one row per compaction or model switch | Compaction: OTel `claude_code.compaction` (`tokens_before`, `tokens_after`), or the `PreCompact` hook alone for a session that sent no OTel compaction. Switch: the `PostModelSwitch` or `PreModelSwitch` hook's fields, timed by its `hook_execution_start`, and `next_request_*`, the next main-thread request on the new model, which is what the switch cost. Only switches someone asked for: a `PostModelSwitch` from a fallback (`auto`) or a resume is left out. Defined in `008` |
 | `silver_artifact_load` | one row per artifact use | `instructions`: each `InstructionsLoaded`. `skill`: `UserPromptExpansion` and `skill.name` on API requests, one row per prompt and name. `subagent`: each `SubagentStart`, never `SubagentStop`. `mcp`: tool calls on `mcp__<server>__*`, one row per prompt and server. `is_org` applies the organization's pattern; an instructions file with a stored name is always the organization's. `is_builtin` marks Claude Code's own subagents and commands |
 | `silver_session_cohort` | one row per session | The cohort each session is reported under: its label, or `other` below the minimum group size that day ([ADR-0029](../adr/0029-minimum-group-size.md)) |
 

@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// The collector-path views (sql/clickhouse/005 to 007), against a real ClickHouse.
+// The collector-path views (sql/clickhouse/005 to 008), against a real ClickHouse.
 //
 // These seed the collector's bronze tables directly, with the attribute names a real Claude Code
 // 2.1.281 sends, and read back silver and gold. The collector itself is tested in test/; what is
@@ -194,6 +194,20 @@ func seedFleet(t *testing.T, st *Store, weeksBack int) *seed {
 	s.request(2, t3.Add(-time.Second), s.prompt(2, "1"), "m1", 10, 900, 90, "0.99")
 	s.request(2, t3.Add(30*time.Second), s.prompt(2, "2"), "m2", 10, 400, 600, "0.05")
 
+	// The same from PostModelSwitch, which the bundle hooks since ADR-0039, as Claude Code 2.1.289
+	// sends it: no prompt id on either side, and a dated to_model where the hook's name has the
+	// canonical one. Kept out of the big cohort, whose gold row counts switches, and out of person
+	// 6's session, which must send no hook_execution_start.
+	t4 := s.at(60 * time.Minute)
+	s.hook(7, t4.Add(-2*time.Second), "PostModelSwitch", "", "from_model", "m1", "to_model", "m3-20251001",
+		"model_switch_source", "picker", "context_tokens", "2000", "estimated_cache_write_usd", "0.7")
+	s.otel(7, t4, "hook_execution_start", "", "hook_event", "PostModelSwitch",
+		"hook_name", "PostModelSwitch:m3", "num_hooks", "1")
+	s.request(7, t4.Add(20*time.Second), s.prompt(7, "2"), "m3-20251001", 10, 0, 1900, "0.30")
+	// A resumed session restoring its model is not a switch anyone asked for.
+	s.hook(6, s.at(61*time.Minute), "PostModelSwitch", "", "from_model", "m1", "to_model", "m3-20251001",
+		"model_switch_source", "resume")
+
 	// Compactions: one with OTel's token counts, and one from a session that sent only the hook.
 	s.otel(3, s.at(55*time.Minute), "compaction", s.prompt(3, "1"), "trigger", "auto",
 		"pre_tokens", "5000", "post_tokens", "1000", "duration_ms", "9000")
@@ -313,6 +327,17 @@ func TestCollectorSilverViews(t *testing.T) {
 		"clock": "client", "at": stamp(s.at(50 * time.Minute)), "to_model": "m2",
 		"estimated_cache_write_usd": "0.4", "next_request_cache_creation_tokens": "600", "next_request_cost_usd": "0.05",
 	})
+	post := oneRow(t, st, "PostModelSwitch", fmt.Sprintf(
+		"SELECT clock, at, to_model, switch_source, estimated_cache_write_usd, next_request_cache_creation_tokens, next_request_cost_usd FROM cardo.silver_context_event WHERE kind = 'model_switch' AND session_id = '%s'",
+		s.session(7)))
+	expect(t, "silver_context_event switch from PostModelSwitch", post, map[string]string{
+		"clock": "client", "at": stamp(s.at(60 * time.Minute)), "to_model": "m3-20251001", "switch_source": "picker",
+		"estimated_cache_write_usd": "0.7", "next_request_cache_creation_tokens": "1900", "next_request_cost_usd": "0.3",
+	})
+	if r := rowsOf(t, st, fmt.Sprintf(
+		"SELECT at FROM cardo.silver_context_event WHERE kind = 'model_switch' AND session_id = '%s'", s.session(6))); len(r) != 0 {
+		t.Errorf("silver_context_event counts a model restored on resume as a switch: %v", r)
+	}
 	compactions := rowsOf(t, st, fmt.Sprintf(
 		"SELECT session_id, clock, compaction_reason, tokens_before, tokens_after FROM cardo.silver_context_event WHERE kind = 'compaction' AND startsWith(session_id, 's-%s-') ORDER BY session_id",
 		s.run))
