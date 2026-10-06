@@ -229,7 +229,9 @@ Template and full rules: [docs/adr/0000-adr-process.md](docs/adr/0000-adr-proces
   clock: a permission wait starts at OTel's `hook_execution_start` for `PermissionRequest:<tool>`.
 - Reporting a model switch's `estimated_cache_write_usd` as what the switch cost. It assumes the
   whole context is rewritten. In the switch observed, most of it was still cached, and the estimate
-  was 3.2 times the next request's entire `cost_usd`. The next main-thread `api_request` is the cost.
+  was 3.2 times the next request's entire `cost_usd`. The next main-thread `api_request` is the cost,
+  except after a switch made before the session's first one (`context_tokens` 0): that request is
+  the session starting, and `silver_context_event` still reports it as the switch's cost.
 - Showing an artifact name that only one or two people use, or any per-person count of
   home-grown commands. Names are stored so that *convergence* is visible (ADR-0025); a name only
   one person uses is a quasi-identifier.
