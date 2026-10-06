@@ -1,11 +1,14 @@
 package test
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -220,6 +223,25 @@ func TestCollectorAcceptsRealisticHookBodies(t *testing.T) {
 	fmt.Sscan(m[1], &n)
 	if n < 4<<20 {
 		t.Errorf("webhook_event max_request_body_size is %d; keep it at 4 MiB or more", n)
+	}
+}
+
+// The hook receiver's timeouts default to 500 ms, after which it closes the connection with no
+// response: Claude Code shows "socket hang up", and late headers lose the event. The receiver
+// ignores a key it does not know, so a misspelt one is silent; TestCollector_SlowHookSendersAreAnswered
+// checks the running collector.
+func TestCollectorWaitsForSlowHookSenders(t *testing.T) {
+	block := sectionBlocks(collectorConfig(t), "receivers")["webhook_event"]
+	for _, key := range []string{"read_timeout", "write_timeout"} {
+		m := regexp.MustCompile(`(?m)^\s+` + key + `:\s*(\S+)\s*$`).FindStringSubmatch(block)
+		if m == nil {
+			t.Errorf("webhook_event sets no %s, so its 500 ms default applies and a slow hook is "+
+				"answered with a closed connection", key)
+			continue
+		}
+		if d, err := time.ParseDuration(m[1]); err != nil || d < 5*time.Second {
+			t.Errorf("webhook_event %s is %q; keep it at 5s or more (the receiver allows up to 10s)", key, m[1])
+		}
 	}
 }
 
@@ -956,4 +978,54 @@ func TestINV2_CollectorTripwireDropsWhatTheTransformsMissed(t *testing.T) {
 		t.Errorf("INV-2: a record carrying an email in an unknown attribute was stored (%s rows).\n"+
 			"  filter/inv2_tripwire must drop anything the transforms did not scrub.", n)
 	}
+}
+
+// A Claude Code running several hooks at once can be slow to send one: a real UserPromptSubmit,
+// sent beside two PowerShell hooks on Windows, was. Under the receiver's 500 ms defaults the
+// collector closes the connection with no response, Claude Code shows "socket hang up" under the
+// prompt, and late headers lose the event. Each request here pauses for longer than that.
+func TestCollector_SlowHookSendersAreAnswered(t *testing.T) {
+	s := liveCollector(t)
+	u, err := url.Parse(s.hooksURL)
+	if err != nil || u.Scheme != "http" {
+		t.Fatalf("CARDO_COLLECTOR_HOOKS_URL must be the collector's own http:// address, not %q: "+
+			"this test writes the request by hand", s.hooksURL)
+	}
+	run := fmt.Sprintf("cardo-test-slow-%d", time.Now().UnixNano())
+	t.Cleanup(func() {
+		s.ch.Exec(context.Background(), fmt.Sprintf(
+			"DELETE FROM cardo.bronze_hook_events WHERE startsWith(LogAttributes['session_id'], '%s.')", run))
+	})
+
+	const pause = 1500 * time.Millisecond
+	send := func(late string) {
+		t.Helper()
+		body := fmt.Sprintf(`{"session_id":%q,"hook_event_name":"UserPromptSubmit","prompt":"slow sender"}`,
+			run+"."+late)
+		conn, err := net.Dial("tcp", u.Host)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+		conn.SetDeadline(time.Now().Add(20 * time.Second))
+		fmt.Fprintf(conn, "POST %s HTTP/1.1\r\nHost: %s\r\nContent-Type: application/json\r\n", u.Path, u.Host)
+		if late == "headers" {
+			time.Sleep(pause)
+		}
+		fmt.Fprintf(conn, "Content-Length: %d\r\n\r\n", len(body))
+		if late == "body" {
+			time.Sleep(pause)
+		}
+		fmt.Fprint(conn, body)
+		status, err := bufio.NewReader(conn).ReadString('\n')
+		if err != nil || !strings.HasPrefix(status, "HTTP/1.1 200") {
+			t.Errorf("a hook whose %s arrived %v late got %q (%v) instead of a 200.\n"+
+				"  webhook_event's read_timeout and write_timeout are too short: Claude Code reports "+
+				"\"socket hang up\".", late, pause, strings.TrimSpace(status), err)
+		}
+	}
+	send("headers")
+	send("body")
+	s.rows(t, "bronze_hook_events", "LogAttributes",
+		fmt.Sprintf("startsWith(LogAttributes['session_id'], '%s.')", run), 2)
 }

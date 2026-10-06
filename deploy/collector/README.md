@@ -25,6 +25,11 @@ larger with a 400 and **no log line on the collector**. Real payloads carry whol
 subagent replies, and cross it. The only trace of a lost hook is on the client, in Claude Code's own
 `claude_code.hook_execution_complete` event (`num_non_blocking_error`).
 
+It also waits up to 10 s, the most it allows, both to receive a request and to answer it. At its
+500 ms default it closed the connection with no response when a real Claude Code, busy running two
+other hooks, was slower than that. Claude Code showed "socket hang up" under the prompt, and the
+event was lost.
+
 ## Environment
 
 | Variable | Required | |
