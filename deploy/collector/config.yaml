@@ -30,19 +30,27 @@ receivers:
       http:
         endpoint: 0.0.0.0:4318
 
-  # The hook pack. Each hook is an async HTTP POST of the hook's JSON input; this receiver turns
-  # each request body into one log record whose body is the raw JSON string. The raw string never
-  # survives transform/hooks.
+  # The hook pack. Each hook is an HTTP POST of the hook's JSON input; this receiver turns each
+  # request body into one log record whose body is the raw JSON string. The raw string never
+  # survives transform/hooks. Claude Code waits for the response: `async` applies only to command
+  # hooks.
   #
   # The receiver's default body limit is 100 KiB, and it refuses anything larger with a 400 and no
   # log line on this side. Payloads carry whole prompts and subagent replies, so real ones cross it:
   # two SubagentStop events were lost that way in the first real session. The content is discarded
   # either way; the limit only decides whether the event's metadata survives.
+  #
+  # Its default timeouts are 500 ms to receive a request's headers and 500 ms to answer it, and
+  # either one closes the connection with no response: Claude Code shows "socket hang up" under the
+  # prompt, and late headers lose the event. A real UserPromptSubmit, sent beside two PowerShell
+  # hooks on Windows, was that late. 10 s is the most this receiver accepts for either.
   webhook_event:
     endpoint: 0.0.0.0:8088
     path: /v1/hooks
     health_path: /health
     max_request_body_size: 16777216
+    read_timeout: 10s
+    write_timeout: 10s
 
 processors:
   # ---- Refuse to pseudonymize with a salt that would not protect anything -------------------

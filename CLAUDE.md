@@ -204,6 +204,10 @@ Template and full rules: [docs/adr/0000-adr-process.md](docs/adr/0000-adr-proces
 - Leaving `webhook_event`'s `max_request_body_size` at its 100 KiB default. Larger bodies are
   refused with a 400 and no collector log line; the only trace is a hook error count in Claude
   Code's own OTel. Real `SubagentStop` payloads were lost this way.
+- Leaving `webhook_event`'s `read_timeout` and `write_timeout` at their 500 ms defaults. A Claude
+  Code busy running other hooks can be slower than that; the receiver then closes the connection
+  with no response, Claude Code shows "socket hang up" under the prompt, and late headers lose the
+  event. The receiver caps both at 10 s, and ignores a misspelt key without a word.
 - Counting subagents from `SubagentStop`. Claude Code's own helpers, prompt suggestion and
   compaction, fire it with no `SubagentStart`. Pair the two on `agent_id`.
 - Subtracting a hook row's time from an OTel row's. A hook row carries the collector's receive

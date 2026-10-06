@@ -295,7 +295,9 @@ name only once enough people use it. `CARDO_ARTIFACT_NAMES=org-only` is the stri
 stores every name not matching `CARDO_ORG_ARTIFACTS` as `custom`, on both paths.
 
 The hook receiver accepts bodies up to 16 MiB. Its default of 100 KiB lost two real `SubagentStop`
-events, refused with a 400 that the collector does not log.
+events, refused with a 400 that the collector does not log. It waits up to 10 s to receive a
+request and to answer it. Its default of 500 ms lost a real `UserPromptSubmit` from a Claude Code
+busy running two other hooks, and Claude Code showed "socket hang up" under the prompt.
 
 ## How the invariants are enforced, not merely stated
 
