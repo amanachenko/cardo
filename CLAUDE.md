@@ -7,10 +7,11 @@ pseudonymizer, both storage targets, both SQL dialects and a Grafana dashboard r
 pack and the org-edge collector, verified against a running collector and ClickHouse **and against
 two real Claude Code 2.1.281 sessions** ([first](docs/research/2026-09-24-first-real-hook-payloads.md),
 [second](docs/research/2026-09-24-second-real-session.md)), and since then 2.1.289 to 2.1.291
-([note](docs/research/2026-10-06-http-hooks-wait.md)): 11 of the 12 hooked events have arrived,
-OTel arrives on an individual account, and the hook fixtures carry the observed field names. Its
-analysis half is seven silver views, four gold marts (`sql/clickhouse/005` to `008`) and the
-enablement dashboard, checked against those sessions. Nothing has run against a fleet.
+([note](docs/research/2026-10-06-http-hooks-wait.md),
+[`PermissionDenied`](docs/research/2026-10-06-first-permission-denied.md)): all 12 hooked events
+have arrived, OTel arrives on an individual account, and the hook fixtures carry the observed field
+names. Its analysis half is seven silver views, four gold marts (`sql/clickhouse/005` to `008`) and
+the enablement dashboard, checked against those sessions. Nothing has run against a fleet.
 **No adapter has yet parsed a live Anthropic API response** — the console adapter's field names are
 still documentation, and documentation was wrong about four of the hook events' fields and about
 two fields the design leaned on. The API itself has been reached: a personal key on an individual

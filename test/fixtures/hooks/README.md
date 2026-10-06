@@ -4,7 +4,7 @@ Replayed through the real collector by `test/collector_test.go`, in CI and via `
 collector-test`, to check that what reaches ClickHouse is what the ADRs say it is
 ([ADR-0023](../../../docs/adr/0023-hook-payload-allowlist.md),
 [ADR-0025](../../../docs/adr/0025-artifact-names-kept-with-guardrails.md) to
-[ADR-0027](../../../docs/adr/0027-model-switch-cost.md)). Both directories are replayed on every
+[ADR-0027](../../../docs/adr/0027-model-switch-cost.md)). Every directory is replayed on every
 run.
 
 Every content-bearing value in a fixture contains a marker: `CONTENT-MARKER`, a path under
@@ -28,7 +28,7 @@ none is here.
   `background_tasks` and `permission_suggestions`.
 
 `SessionStart` and `PermissionDenied` are missing: the first never ran, and the second was not
-provoked. `documented/` covers them.
+provoked. `2.1.290/` has `PermissionDenied`, and `documented/` has `SessionStart`.
 
 | Fixture | Covers |
 |---|---|
@@ -42,13 +42,26 @@ provoked. `documented/` covers them.
 
 The test adds one payload of its own: a `SubagentStop` past the receiver's default 100 KiB limit.
 
+## `2.1.289/` and `2.1.290/`: one event each, observed later
+
+Field names recorded the same way, values invented.
+
+- **`2.1.289/PostModelSwitch`**: the keys Claude Code 2.1.289 sent on 2026-10-06 when a resumed
+  session restored its model ([note](../../../docs/research/2026-10-06-http-hooks-wait.md)). The
+  bundle hooks it in place of `PreModelSwitch`
+  ([ADR-0039](../../../docs/adr/0039-hooks-wait-at-most-one-second.md)). `source` was not kept
+  then, so its values are the documented ones: `picker` here, `resume` in `.resume`.
+- **`2.1.290/PermissionDenied`**: the keys Claude Code 2.1.290 sent on 2026-10-06 when auto mode
+  denied a `Bash` call ([note](../../../docs/research/2026-10-06-first-permission-denied.md)). It
+  carries a `reason` the documentation's shape did not, under a generic name, so it is not kept.
+
 ## `documented/`: from the documentation of 2026-09-23
 
 Transcribed from the hooks documentation as fetched on 2026-09-23. **Several names in them are not
 what Claude Code sends** (`user_input`, `session_end_reason`, `compaction_reason`, `config_source`,
 `content_hash`, `tool_use_id`). They stay because the collector still accepts those names, so an
-older or newer client using them keeps working, and because they are the only shapes for the two
-events not yet observed. Two variants use made-up names: `SubagentStop.private-agent` and
+older or newer client using them keeps working, and because they hold the only shape for
+`SessionStart`, the one event never observed. Two variants use made-up names: `SubagentStop.private-agent` and
 `PermissionRequest.mcp`.
 
 ## Recording the next version

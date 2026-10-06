@@ -36,7 +36,8 @@ This file turns that into pilots.
   - whether any `external` host is not a public one, such as an internal git server the
     pattern misses. That is the evidence on which
     [ADR-0035](adr/0035-repository-identity-classified.md) would be revisited;
-  - whether `PermissionDenied` ever arrives;
+  - whether `PermissionDenied` ever arrives. **Answered 2026-10-06:** it does, on an auto-mode
+    denial ([note](research/2026-10-06-first-permission-denied.md));
   - whether `event.sequence` orders the tool results within a prompt, which a retry loop (the same
     tool failing again and again in one prompt) is counted from;
   - whether `claude_code.lines_of_code.count` arrives by `type` for each session, as delta.

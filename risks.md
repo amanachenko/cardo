@@ -210,6 +210,13 @@ especially a summary of it, is a hypothesis about field names.
 **Still open:** `PermissionDenied`'s payload, and the value of `PostModelSwitch`'s `source` on a
 real `/model`, which the one-laptop check will show.
 
+**Status 2026-10-06, later: `PermissionDenied` is settled**
+([note](docs/research/2026-10-06-first-permission-denied.md)). Two auto-mode denials on 2.1.290
+each sent one. It carries `reason`, which the documented shape did not, under a generic name, so it
+is dropped. All twelve hooked events have now arrived from a real Claude Code.
+
+**Still open:** the value of `PostModelSwitch`'s `source` on a real `/model`.
+
 ### 8. The Claude Enterprise Analytics adapter is specified but unevidenced
 
 **Threatens:** [ADR-0021](docs/adr/0021-analytics-source-scope.md).
