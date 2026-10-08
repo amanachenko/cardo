@@ -100,6 +100,31 @@ func TestScrubDetectsIdentityLeak(t *testing.T) {
 	}
 }
 
+// The safety net also catches someone else's email. Looking for the actor's own identifier misses
+// a reviewer's or an approver's address in a field the adapter does not model, and misses every
+// address beside an API key actor, whose identifier is a key name.
+func TestScrubDetectsAnEmailItDidNotModel(t *testing.T) {
+	h, _ := New(testSalt, "v1")
+	userActor := testRecord(`{"actor":{"type":"user_actor","email_address":"Developer@Example.com"},` +
+		`"approved_by":{"contact":"Someone.Else@corp.example.org"}}`)
+	keyActor := testRecord(`{"actor":{"type":"api_actor","api_key_name":"ci-pipeline-key"},` +
+		`"owner":"key.owner@example.com"}`)
+	keyActor.ActorID, keyActor.ActorPath, keyActor.ActorType = "ci-pipeline-key", []string{"actor", "api_key_name"}, "api_actor"
+
+	for name, rec := range map[string]source.Record{"user actor": userActor, "api key actor": keyActor} {
+		t.Run(name, func(t *testing.T) {
+			got, err := h.Scrub(rec)
+			var leak ErrIdentityLeak
+			if !errors.As(err, &leak) {
+				t.Fatalf("error = %v, want ErrIdentityLeak; the payload would be stored as %s", err, got.Raw())
+			}
+			if strings.Contains(strings.ToLower(err.Error()), "example") {
+				t.Errorf("the leak error repeats the address it found, which puts it in a log: %v", err)
+			}
+		})
+	}
+}
+
 func TestScrubHandlesAPIKeyActor(t *testing.T) {
 	h, _ := New(testSalt, "v1")
 	rec := testRecord(`{"actor":{"type":"api_actor","api_key_name":"ci-pipeline-key"}}`)
