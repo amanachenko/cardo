@@ -40,9 +40,10 @@ arguments are visible to every other process on the machine:
 
   CARDO_ADMIN_KEY         Admin API key (sk-ant-admin...), provisioned by an
                           organization admin in Console > Settings > Admin keys
-  CARDO_SALT              Pseudonymization salt, at least 32 characters. Held by
-                          the organization's security team; never stored beside
-                          the data it protects and never committed (ADR-0006)
+  CARDO_SALT              Pseudonymization salt, at least 32 hex characters
+                          (openssl rand -hex 32). Held by the organization's
+                          security team; never stored beside the data it
+                          protects and never committed (ADR-0006)
   CARDO_SALT_VERSION      Label for the current salt, stored beside every
                           pseudonym so rotation stays possible. Default: v1
 

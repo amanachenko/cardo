@@ -56,10 +56,13 @@ processors:
   # ---- Refuse to pseudonymize with a salt that would not protect anything -------------------
   #
   # Email addresses are low-entropy and guessable; with a short or missing salt every pseudonym is
-  # reversible by anyone holding the hashes. `cardo poll` refuses to start in this state. The
-  # collector cannot refuse to start on a value's length, so it refuses every identity-bearing
-  # batch instead -- and says so, because "no data" with no explanation is the failure an operator
-  # wastes a day on.
+  # reversible by anyone holding the hashes. The salt must be hex, as `openssl rand -hex 32` prints
+  # it: 32 characters of a passphrase carry a fraction of 32 characters of hex, and a length check
+  # cannot tell them apart. `cardo poll` refuses to start on the same rule, and the two must agree
+  # (TestCollectorRefusesTheSaltsThePollerRefuses), or one salt would pseudonymize one path and be
+  # refused on the other. The collector cannot refuse to start on a value's shape, so it refuses
+  # every identity-bearing batch instead -- and says so, because "no data" with no explanation is
+  # the failure an operator wastes a day on.
   #
   # OTTL has no statement that raises an error on purpose. This uses one that cannot succeed:
   # ParseJSON of a sentence fails, error_mode is propagate, the batch is refused, and the sentence
@@ -70,11 +73,11 @@ processors:
     log_statements:
       - context: log
         statements:
-          - 'set(log.cache["refused"], ParseJSON("REFUSED - CARDO_SALT is unset or shorter than 32 characters, so pseudonyms would be reversible. No OTel data is stored until it is fixed.")) where Len("${env:CARDO_SALT}") < 32'
+          - 'set(log.cache["refused"], ParseJSON("REFUSED - CARDO_SALT is unset, shorter than 32 characters or not hex, so pseudonyms would be reversible. Generate one with openssl rand -hex 32. No OTel data is stored until it is fixed.")) where not IsMatch("${env:CARDO_SALT}", "^[0-9a-fA-F]{32,}$")'
     metric_statements:
       - context: datapoint
         statements:
-          - 'set(datapoint.cache["refused"], ParseJSON("REFUSED - CARDO_SALT is unset or shorter than 32 characters, so pseudonyms would be reversible. No OTel data is stored until it is fixed.")) where Len("${env:CARDO_SALT}") < 32'
+          - 'set(datapoint.cache["refused"], ParseJSON("REFUSED - CARDO_SALT is unset, shorter than 32 characters or not hex, so pseudonyms would be reversible. Generate one with openssl rand -hex 32. No OTel data is stored until it is fixed.")) where not IsMatch("${env:CARDO_SALT}", "^[0-9a-fA-F]{32,}$")'
 
   # ---- OTel: identity (INV-2) ---------------------------------------------------------------
   #

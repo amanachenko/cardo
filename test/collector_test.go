@@ -262,6 +262,41 @@ func TestCollectorProcessorsFailClosed(t *testing.T) {
 	}
 }
 
+// The collector and the poller hash with the same salt, so they must refuse the same ones. A salt
+// one accepts and the other refuses pseudonymizes one path and stops the other. The collector's
+// rule is a regex in refuse_weak_salt, and OTTL's IsMatch is Go's regexp, so the test runs that
+// regex beside pseudonym.New.
+func TestCollectorRefusesTheSaltsThePollerRefuses(t *testing.T) {
+	block := sectionBlocks(collectorConfig(t), "processors")["transform/refuse_weak_salt"]
+	conds := regexp.MustCompile(`where not IsMatch\("\$\{env:CARDO_SALT\}", "([^"]+)"\)`).FindAllStringSubmatch(block, -1)
+	if len(conds) != 2 {
+		t.Fatalf("refuse_weak_salt should refuse on one IsMatch of CARDO_SALT for logs and one for "+
+			"metrics, found %d:\n%s", len(conds), block)
+	}
+	for _, c := range conds {
+		re, err := regexp.Compile(c[1])
+		if err != nil {
+			t.Fatalf("refuse_weak_salt's pattern %q: %v", c[1], err)
+		}
+		for _, salt := range []string{
+			"",
+			strings.Repeat("a", pseudonym.MinSaltLen-1),
+			strings.Repeat("a", pseudonym.MinSaltLen),
+			strings.Repeat("F", 64),
+			"0123456789abcdef0123456789abcdef",
+			"0123456789abcdef0123456789abcdeg",
+			" 0123456789abcdef0123456789abcdef",
+			strings.Repeat("z", 64),
+			"correct horse battery staple, twice over",
+		} {
+			_, err := pseudonym.New(salt, "v1")
+			if poller, collector := err == nil, re.MatchString(salt); poller != collector {
+				t.Errorf("salt %q: the poller accepts it %v, the collector %v", salt, poller, collector)
+			}
+		}
+	}
+}
+
 // Every pipeline ends in the INV-2 tripwire, and every pipeline carrying identity starts by
 // refusing a weak salt and then hashing, before anything else can look at the record.
 func TestCollectorPipelinesOrderTheirSafeguards(t *testing.T) {
@@ -825,7 +860,7 @@ func TestCollector_OTelIdentityIsThePollersPseudonym(t *testing.T) {
 		b, _ := json.Marshal(body)
 		if code := s.post(t, s.otlpURL+path, b); code != http.StatusOK {
 			t.Fatalf("POST %s answered %d -- a 503 with REFUSED in the collector log means its "+
-				"CARDO_SALT is missing or short", path, code)
+				"CARDO_SALT is missing, short or not hex", path, code)
 		}
 	}
 
