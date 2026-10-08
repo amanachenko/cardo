@@ -128,7 +128,7 @@ it ([measurement](docs/research/2026-09-23-admin-api-individual-account.md)).
 | 0 | ADRs, invariants, research snapshots, risks | **done** |
 | 1 | `cardo` poller, pseudonymizer, both storage targets, SQL layers, dashboard, invariant tests | **done except verification** — no live API run |
 | 2 | Managed settings, hook pack, collector config, artifact dashboard | **done**: collection checked against a real Claude Code, views and dashboard against those sessions; no fleet yet |
-| 3 | Three pilots: an internal trial, an adoption pilot, then an evidence pilot at an organization that bans Claude Code. Built for them: the coach page, the efficiency family, repository identity, teams from a directory, service-run labels, the board report, the evidence report ([roadmap](docs/roadmap.md)) | decided 2026-09-25 ([ADR-0030 to 0037](docs/adr/README.md)); not started |
+| 3 | Three pilots: an internal trial, an adoption pilot, then an evidence pilot at an organization that bans Claude Code. Built for them: the coach page, the efficiency family, repository identity, teams from a directory, service-run labels, the board report, the evidence report ([roadmap](docs/roadmap.md)) | decided 2026-09-25 ([ADR-0030 to 0037](docs/adr/README.md)); being built, in the order of the [work items](docs/roadmap.md#work-items) |
 
 ### Try it without a key
 

@@ -4,6 +4,12 @@ Cardo is pre-alpha, and contributions are welcome. Start with the design record:
 look like obvious improvements have already been considered, and the reason they were refused is
 written down.
 
+## Where to help
+
+The order of work is the [work items](docs/roadmap.md#work-items) at the end of the roadmap. Each
+says whether it is taken, open, waiting for something, or needs a decision first. Before starting
+an open one, say so in an issue or a draft pull request.
+
 ## Before changing anything
 
 Read, in this order:

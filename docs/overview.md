@@ -141,7 +141,8 @@ approaches that work from ones that don't is something the pilots exist to find 
 
 ## How the pilots run
 
-1. **Internal trial:** a small team, for two to three weeks.
+1. **Internal trial:** a few engineers, each on their own machine at first, then a small team
+   sharing one machine, for two to three weeks.
 2. **Adoption pilot:** 15 to 30 of your engineers in three or more teams, for four to six weeks. It
    needs, from your side:
    - a small machine in your network;
