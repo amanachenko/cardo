@@ -41,6 +41,9 @@ Instructions-file names are kept only when they are the organization's
   exported anyway — for the identity transform, that is an unhashed email.
 - Treating a blank regex as "no pattern" in OTTL. An empty regex matches everything; a blank
   `CARDO_ORG_ARTIFACTS` kept every private name until each statement special-cased `""`.
+- A `filter` processor for the INV-2 tripwire. It drops the record and answers 200, so a transform
+  that misses a field loses data and nobody hears of it. The tripwire is a transform that refuses
+  the request, as `refuse_weak_salt` does, and logs a REFUSED line.
 - Relying on the collector's `${env:...}` to fail on a missing variable. It expands to empty with a
   startup warning, which is why a missing salt is caught by a statement that refuses the batch.
 - Keeping an external repository's URL, or a salted hash of it, in tier 1. The collector keeps the

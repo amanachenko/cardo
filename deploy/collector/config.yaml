@@ -357,20 +357,29 @@ processors:
   # ---- INV-2 tripwire -----------------------------------------------------------------------
   #
   # Last processor on every pipeline. If anything shaped like an email address is still present
-  # after the transforms, the record is dropped rather than stored. It should never fire; when it
-  # does, a transform above is wrong, and a missing record is the correct failure. The poller has
-  # the same tripwire for the same reason (internal/pseudonym/scrub.go).
-  filter/inv2_tripwire:
+  # after the transforms, the request is refused: the sender is answered with an error (a 503 for
+  # OTLP, which the sender retries), and the collector logs a REFUSED line naming the tripwire,
+  # never the address. Nothing in that request is stored, its clean records included. It should
+  # never fire; when it does, a transform above is wrong, and the operator has to hear about it. A
+  # filter here used to drop the record, which nobody would have noticed. The poller has the same
+  # tripwire for the same reason (internal/pseudonym/scrub.go), and it stops the poll.
+  #
+  # The refusal works as refuse_weak_salt's does: ParseJSON of a sentence fails, error_mode is
+  # propagate, and the sentence is what the log shows. The exporters batch after this, so a
+  # refusal reaches only the request that carried the address.
+  transform/inv2_tripwire:
     error_mode: propagate
-    logs:
-      log_record:
-        - 'IsMatch(String(log.attributes), "[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}")'
-        - 'IsMatch(String(resource.attributes), "[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}")'
-        - 'IsMatch(log.body, "[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}")'
-    metrics:
-      datapoint:
-        - 'IsMatch(String(datapoint.attributes), "[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}")'
-        - 'IsMatch(String(resource.attributes), "[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}")'
+    log_statements:
+      - context: log
+        statements:
+          - 'set(log.cache["refused"], ParseJSON("REFUSED - INV-2 tripwire: an email address is still on a record after the transforms, so a transform above the tripwire misses a field. Nothing in this request is stored.")) where IsMatch(String(log.attributes), "[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}")'
+          - 'set(log.cache["refused"], ParseJSON("REFUSED - INV-2 tripwire: an email address is still on a record after the transforms, so a transform above the tripwire misses a field. Nothing in this request is stored.")) where IsMatch(String(resource.attributes), "[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}")'
+          - 'set(log.cache["refused"], ParseJSON("REFUSED - INV-2 tripwire: an email address is still on a record after the transforms, so a transform above the tripwire misses a field. Nothing in this request is stored.")) where IsMatch(log.body, "[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}")'
+    metric_statements:
+      - context: datapoint
+        statements:
+          - 'set(datapoint.cache["refused"], ParseJSON("REFUSED - INV-2 tripwire: an email address is still on a record after the transforms, so a transform above the tripwire misses a field. Nothing in this request is stored.")) where IsMatch(String(datapoint.attributes), "[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}")'
+          - 'set(datapoint.cache["refused"], ParseJSON("REFUSED - INV-2 tripwire: an email address is still on a record after the transforms, so a transform above the tripwire misses a field. Nothing in this request is stored.")) where IsMatch(String(resource.attributes), "[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}")'
 
 exporters:
   # create_schema is false on both: the DDL is sql/clickhouse/004_bronze_collector.sql, applied by
@@ -417,13 +426,13 @@ service:
   pipelines:
     logs/hooks:
       receivers: [webhook_event]
-      processors: [transform/hooks, transform/tag, filter/inv2_tripwire]
+      processors: [transform/hooks, transform/tag, transform/inv2_tripwire]
       exporters: [clickhouse/hooks]
     logs/otel:
       receivers: [otlp]
-      processors: [transform/refuse_weak_salt, transform/otel_identity, transform/otel_repo, transform/otel_content, transform/otel_names, transform/tag, filter/inv2_tripwire]
+      processors: [transform/refuse_weak_salt, transform/otel_identity, transform/otel_repo, transform/otel_content, transform/otel_names, transform/tag, transform/inv2_tripwire]
       exporters: [clickhouse/otel]
     metrics/otel:
       receivers: [otlp]
-      processors: [transform/refuse_weak_salt, transform/otel_identity, transform/otel_repo, transform/otel_content, transform/otel_names, transform/tag, filter/inv2_tripwire]
+      processors: [transform/refuse_weak_salt, transform/otel_identity, transform/otel_repo, transform/otel_content, transform/otel_names, transform/tag, transform/inv2_tripwire]
       exporters: [clickhouse/otel]

@@ -175,7 +175,7 @@ jobs:
           grep -q "PASS: TestCollector_OTelIdentityIsThePollersPseudonym" out.txt
           grep -q "PASS: TestCollector_RepositoriesAreClassified" out.txt
           grep -q "PASS: TestCollector_SlowHookSendersAreAnswered" out.txt
-          grep -q "PASS: TestINV2_CollectorTripwireDropsWhatTheTransformsMissed" out.txt
+          grep -q "PASS: TestINV2_CollectorTripwireRefusesWhatTheTransformsMissed" out.txt
 
       # The strict naming mode (ADR-0025) is the one an organization chooses for privacy, so it is
       # tested against a real collector too, not only read. This run also leaves CARDO_ORG_REPOS
