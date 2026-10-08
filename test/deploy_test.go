@@ -3,11 +3,14 @@ package test
 import (
 	"encoding/json"
 	"encoding/xml"
+	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -74,59 +77,129 @@ func TestINV3_DashboardsReadOnlyCohortViews(t *testing.T) {
 		t.Skip("no dashboards/ directory yet")
 	}
 
-	var panels int
+	var queries int
 	for _, path := range jsonFiles(t, dir) {
 		rel, _ := filepath.Rel(repoRoot(t), path)
 		b, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatal(err)
 		}
-		var dash struct {
-			Panels []struct {
-				Title   string `json:"title"`
-				Type    string `json:"type"`
-				Targets []struct {
-					RawSQL string `json:"rawSql"`
-				} `json:"targets"`
-			} `json:"panels"`
-		}
-		if err := json.Unmarshal(b, &dash); err != nil {
+		qs, err := dashboardQueries(b)
+		if err != nil {
 			t.Errorf("%s is not valid JSON: %v", rel, err)
 			continue
 		}
 
-		for _, p := range dash.Panels {
-			for _, tgt := range p.Targets {
-				sql := strings.ToLower(tgt.RawSQL)
-				if sql == "" {
-					continue
-				}
-				panels++
+		for _, q := range qs {
+			queries++
+			sql := strings.ToLower(q.sql)
+			if strings.TrimSpace(sql) == "" {
+				t.Errorf("INV-3: %s %s sends a query this test cannot read.\n"+
+					"  A query variable's SQL is its query, or the query's rawSql. A query\n"+
+					"  nobody checked can read whatever the data source's user can.", rel, q.where)
+				continue
+			}
 
-				if strings.Contains(sql, "pseudonym") {
-					t.Errorf("INV-3 violated: %s panel %q names a pseudonym:\n  %s\n"+
-						"  Dashboards are cohort-only. A per-person row on a dashboard is a\n"+
-						"  ranking a manager can sort, which is the thing this project promises\n"+
-						"  not to build.", rel, p.Title, tgt.RawSQL)
+			if strings.Contains(sql, "pseudonym") {
+				t.Errorf("INV-3 violated: %s %s names a pseudonym:\n  %s\n"+
+					"  Dashboards are cohort-only. A per-person row on a dashboard is a\n"+
+					"  ranking a manager can sort, which is the thing this project promises\n"+
+					"  not to build.", rel, q.where, q.sql)
+			}
+			for _, layer := range []string{"bronze_", "silver_"} {
+				if strings.Contains(sql, layer) {
+					t.Errorf("INV-3 violated: %s %s reads %s directly.\n"+
+						"  Dashboards read gold views. Bronze and silver carry a pseudonym\n"+
+						"  column, so reading them is one SELECT away from a leaderboard.",
+						rel, q.where, strings.TrimSuffix(layer, "_"))
 				}
-				for _, layer := range []string{"bronze_", "silver_"} {
-					if strings.Contains(sql, layer) {
-						t.Errorf("INV-3 violated: %s panel %q reads %s directly.\n"+
-							"  Dashboards read gold views. Bronze and silver carry a pseudonym\n"+
-							"  column, so reading them is one SELECT away from a leaderboard.",
-							rel, p.Title, strings.TrimSuffix(layer, "_"))
-					}
-				}
-				if !strings.Contains(sql, "gold_") {
-					t.Errorf("INV-3: %s panel %q reads no gold view:\n  %s",
-						rel, p.Title, tgt.RawSQL)
-				}
+			}
+			if !strings.Contains(sql, "gold_") {
+				t.Errorf("INV-3: %s %s reads no gold view:\n  %s", rel, q.where, q.sql)
 			}
 		}
 	}
-	if panels == 0 {
+	if queries == 0 {
 		t.Fatal("no dashboard queries were checked; this test would pass vacuously")
 	}
+}
+
+// dashboardQuery is one SQL query a dashboard sends, and where in the dashboard it sits.
+type dashboardQuery struct {
+	where string // `panel "title"`, `variable "name"` or `annotation "name"`
+	sql   string
+}
+
+// dashboardQueries returns every SQL query a dashboard sends: each rawSql at any depth, and the
+// query of each query variable.
+//
+// The dashboard tests used to read only the top-level panels array. Grafana keeps the panels of a
+// collapsed row inside the row, so collapsing a row hid its panels from both tests. A variable's
+// query and an annotation's go through the same data source as a panel's, with the same rights.
+// Walking the whole document finds them all, and finds the next place Grafana puts a query too.
+//
+// A query variable is returned even when its SQL cannot be found, with sql empty, so that a shape
+// this function does not know fails the test instead of passing it.
+func dashboardQueries(doc []byte) ([]dashboardQuery, error) {
+	var root any
+	if err := json.Unmarshal(doc, &root); err != nil {
+		return nil, err
+	}
+	var out []dashboardQuery
+	var walk func(v any, kind, where string)
+	walk = func(v any, kind, where string) {
+		switch v := v.(type) {
+		case []any:
+			for _, e := range v {
+				walk(e, kind, where)
+			}
+		case map[string]any:
+			for _, key := range []string{"title", "name"} {
+				if s, ok := v[key].(string); ok && s != "" {
+					where = fmt.Sprintf("%s %q", kind, s)
+					break
+				}
+			}
+			if kind == "variable" && v["type"] == "query" {
+				out = append(out, dashboardQuery{where, variableSQL(v)})
+				return
+			}
+			if sql, ok := v["rawSql"].(string); ok && strings.TrimSpace(sql) != "" {
+				out = append(out, dashboardQuery{where, sql})
+			}
+			for _, key := range slices.Sorted(maps.Keys(v)) {
+				next := kind
+				switch key {
+				case "panels":
+					next = "panel"
+				case "templating":
+					next = "variable"
+				case "annotations":
+					next = "annotation"
+				}
+				walk(v[key], next, where)
+			}
+		}
+	}
+	walk(root, "dashboard", "")
+	return out, nil
+}
+
+// variableSQL is a query variable's SQL. The ClickHouse plugin has stored it as a string and as an
+// object carrying rawSql; definition is the text the variable editor shows.
+func variableSQL(v map[string]any) string {
+	switch q := v["query"].(type) {
+	case string:
+		if strings.TrimSpace(q) != "" {
+			return q
+		}
+	case map[string]any:
+		if s, ok := q["rawSql"].(string); ok && strings.TrimSpace(s) != "" {
+			return s
+		}
+	}
+	s, _ := v["definition"].(string)
+	return s
 }
 
 // ADR-0008 makes the volume denominator a product constraint rather than styling: an acceptance
@@ -170,30 +243,21 @@ func TestADR0008_RatesAreChartedWithTheirDenominator(t *testing.T) {
 	for _, path := range jsonFiles(t, dir) {
 		rel, _ := filepath.Rel(repoRoot(t), path)
 		b, _ := os.ReadFile(path)
-		var dash struct {
-			Panels []struct {
-				Title   string `json:"title"`
-				Targets []struct {
-					RawSQL string `json:"rawSql"`
-				} `json:"targets"`
-			} `json:"panels"`
+		qs, err := dashboardQueries(b)
+		if err != nil {
+			continue // TestINV3_DashboardsReadOnlyCohortViews reports it
 		}
-		if err := json.Unmarshal(b, &dash); err != nil {
-			continue
-		}
-		for _, p := range dash.Panels {
-			for _, tgt := range p.Targets {
-				sql := strings.ToLower(tgt.RawSQL)
-				for _, r := range rateVolumes {
-					if !strings.Contains(sql, r.rate) {
-						continue
-					}
-					checked[r.rate]++
-					if !r.volume.MatchString(sql) {
-						t.Errorf("ADR-0008 violated: %s panel %q charts %s with no volume beside it:\n  %s\n"+
-							"  Select %s too. A rate without the volume it is measured over rewards\n"+
-							"  timidity: proposing nothing is never rejected.", rel, p.Title, r.rate, tgt.RawSQL, r.name)
-					}
+		for _, q := range qs {
+			sql := strings.ToLower(q.sql)
+			for _, r := range rateVolumes {
+				if !strings.Contains(sql, r.rate) {
+					continue
+				}
+				checked[r.rate]++
+				if !r.volume.MatchString(sql) {
+					t.Errorf("ADR-0008 violated: %s %s charts %s with no volume beside it:\n  %s\n"+
+						"  Select %s too. A rate without the volume it is measured over rewards\n"+
+						"  timidity: proposing nothing is never rejected.", rel, q.where, r.rate, q.sql, r.name)
 				}
 			}
 		}
@@ -204,6 +268,47 @@ func TestADR0008_RatesAreChartedWithTheirDenominator(t *testing.T) {
 		if checked[rate] == 0 {
 			t.Errorf("no panel charting %s was found to check; this test would pass vacuously", rate)
 		}
+	}
+}
+
+// The two dashboard tests above are only as good as dashboardQueries. This pins the places it must
+// reach: a panel inside a collapsed row, both shapes of a query variable, and an annotation. A
+// custom variable's query is a list of values, not SQL, and must not be read as SQL.
+func TestDashboardQueriesReachEveryQuery(t *testing.T) {
+	doc := []byte(`{
+	  "title": "fixture",
+	  "panels": [
+	    {"type": "timeseries", "title": "top", "targets": [{"refId": "A", "rawSql": "SELECT 1 FROM gold_a"}]},
+	    {"type": "row", "title": "collapsed", "collapsed": true, "panels": [
+	      {"type": "table", "title": "nested", "targets": [{"refId": "A", "rawSql": "SELECT pseudonym FROM silver_b"}]}
+	    ]}
+	  ],
+	  "templating": {"list": [
+	    {"type": "query", "name": "as_string", "query": "SELECT DISTINCT x FROM bronze_c"},
+	    {"type": "query", "name": "as_object", "query": {"rawSql": "SELECT DISTINCT x FROM silver_d"}},
+	    {"type": "query", "name": "unreadable", "query": {}},
+	    {"type": "custom", "name": "values", "query": "a,b,c"}
+	  ]},
+	  "annotations": {"list": [{"name": "marks", "target": {"rawSql": "SELECT t FROM silver_e"}}]}
+	}`)
+	qs, err := dashboardQueries(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, q := range qs {
+		got[q.where] = q.sql
+	}
+	want := map[string]string{
+		`panel "top"`:           "SELECT 1 FROM gold_a",
+		`panel "nested"`:        "SELECT pseudonym FROM silver_b",
+		`variable "as_string"`:  "SELECT DISTINCT x FROM bronze_c",
+		`variable "as_object"`:  "SELECT DISTINCT x FROM silver_d",
+		`variable "unreadable"`: "",
+		`annotation "marks"`:    "SELECT t FROM silver_e",
+	}
+	if len(qs) != len(want) || !maps.Equal(got, want) {
+		t.Errorf("dashboardQueries found:\n  %v\nwant:\n  %v", got, want)
 	}
 }
 
