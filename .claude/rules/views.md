@@ -44,7 +44,8 @@ The views read the organization's artifact pattern and the minimum group size fr
   was 3.2 times the next request's entire `cost_usd`. The next main-thread `api_request` is the cost,
   except after a switch made before the session's first one (`context_tokens` 0): that request is
   the session starting, and `silver_context_event` still reports it as the switch's cost.
-- Matching a model switch's `to_model` to OTel's `hook_execution_start` as written. `to_model` may be
-  dated while the OTel `hook_name` uses the canonical model name, so match the two with the date and
-  `[1m]` removed. `PostModelSwitch` also fires on fallback (`auto`) and resume, which the views
-  leave out.
+- Matching a model switch's `to_model` to OTel's `hook_execution_start`, or to the next
+  `api_request`'s `model`, as written. `to_model` may be dated while the OTel `hook_name` uses the
+  canonical model name, so match them with the date and `[1m]` removed. `008` did that for the time
+  and not for the cost, and a switch to a dated model showed no cost until `009`.
+  `PostModelSwitch` also fires on fallback (`auto`) and resume, which the views leave out.
