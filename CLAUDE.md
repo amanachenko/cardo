@@ -106,12 +106,20 @@ Template and full rules: [docs/adr/0000-adr-process.md](docs/adr/0000-adr-proces
 - **Teams are compared on reach, never ranked** ([ADR-0030](docs/adr/0030-stakeholders-and-questions.md)).
   Adoption and version reach by team, against the fleet; efficiency by approach, rule or tool, never
   by team. No league table, no "PRs per engineer", nothing divided by headcount, no "hours saved".
+- **Spread is a vote only for what teams chose**
+  ([ADR-0040](docs/adr/0040-spread-is-a-vote-only-for-what-teams-chose.md)). For an artifact the
+  organization rolled out, spread is reach, and whether it helps is the efficiency family's
+  question. An artifact view ends in the adoption owner's decision, never a computed verdict.
 - **A per-person page is seen only by that person, through a shared link**
   ([ADR-0032](docs/adr/0032-engineer-coach-by-shared-link.md)) from a Grafana only the operator logs
   in to, with the pseudonym fixed inside every query. It is a coach: no score, no percentile, only
   their own past. "It only shows a pseudonym" is no reason to let others open it: its daily cost
   lines up with the console's, by name. The one per-person view others may see is cost over a
   published budget, not built ([ADR-0033](docs/adr/0033-per-person-cost-for-budget-owners.md)).
+- **The coach suggests only what the fleet has shown**
+  ([ADR-0041](docs/adr/0041-the-coach-suggests-what-the-fleet-has-shown.md)): an artifact peers
+  adopted or the organization made official, prompted by a pattern tier 1 can see. No catalog of
+  patterns and tools.
 - **Service runs are not people** ([ADR-0036](docs/adr/0036-service-runs-are-not-people.md)).
 
 ## Testing
@@ -141,6 +149,8 @@ Area-specific ones are in `.claude/rules/`.
   bronze or silver (risks.md #15).
 - Measuring friction as permission waits and edit rejections in an auto-mode fleet. In auto mode
   neither happens much, and the chart reports success that did not occur (ADR-0031).
+- Finding unused MCP servers in the security tier's inventory. It carries tier-0 data across the
+  tier wall; the operator's rollout list is the inventory (ADR-0040).
 - Joining delivery outcomes per person, or by commit SHA. No surface carries a commit id, and per
   person it is a performance review. Join by repository and week (ADR-0031).
 
