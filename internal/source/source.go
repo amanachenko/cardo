@@ -49,6 +49,11 @@ type Record struct {
 	// knowing any source's payload shape. For example: ["actor", "email_address"].
 	ActorPath []string
 
+	// OtherIdentity lists the paths in Raw of other fields that identify the same actor, such as
+	// an API key name beside the email address. The scrubber deletes them and does not hash them:
+	// the actor already has a pseudonym, and a second one would only link the two.
+	OtherIdentity [][]string
+
 	// OrgID, CustomerType and TerminalType are non-identifying dimensions.
 	OrgID        string
 	CustomerType string

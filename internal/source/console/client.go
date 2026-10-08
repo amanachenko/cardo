@@ -201,7 +201,7 @@ func (c *Client) decodeRecords(p *page, body []byte, day time.Time) ([]source.Re
 
 	out := make([]source.Record, 0, len(p.Data))
 	for i, rec := range p.Data {
-		id, path := rec.Actor.identifier()
+		id, path, other := rec.Actor.identifier()
 		if id == "" {
 			return nil, fmt.Errorf("record %d for %s has actor type %q with no identifier; "+
 				"refusing to store a row whose identity field is unknown (INV-2)",
@@ -217,16 +217,17 @@ func (c *Client) decodeRecords(p *page, body []byte, day time.Time) ([]source.Re
 		}
 
 		out = append(out, source.Record{
-			Source:       source.Console,
-			Day:          day.UTC().Truncate(24 * time.Hour),
-			ActorType:    rec.Actor.Type,
-			ActorID:      id,
-			ActorPath:    path,
-			OrgID:        rec.OrgID,
-			CustomerType: rec.CustomerType,
-			TerminalType: rec.TerminalType,
-			Raw:          envelope.Data[i],
-			Unknown:      unknown,
+			Source:        source.Console,
+			Day:           day.UTC().Truncate(24 * time.Hour),
+			ActorType:     rec.Actor.Type,
+			ActorID:       id,
+			ActorPath:     path,
+			OtherIdentity: other,
+			OrgID:         rec.OrgID,
+			CustomerType:  rec.CustomerType,
+			TerminalType:  rec.TerminalType,
+			Raw:           envelope.Data[i],
+			Unknown:       unknown,
 		})
 	}
 	return out, nil

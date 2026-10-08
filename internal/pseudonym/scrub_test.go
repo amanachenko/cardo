@@ -144,6 +144,52 @@ func TestScrubHandlesAPIKeyActor(t *testing.T) {
 	}
 }
 
+// An actor carrying both an email address and an API key name is one person named twice. The
+// email becomes the pseudonym; the key name, which the console shows beside the person's usage,
+// would name them again, so it goes too.
+func TestScrubRemovesEveryActorIdentifier(t *testing.T) {
+	h, _ := New(testSalt, "v1")
+	rec := testRecord(`{"actor":{"type":"user_actor","email_address":"Developer@Example.com","api_key_name":"developer-laptop"},` +
+		`"core_metrics":{"num_sessions":5}}`)
+	rec.OtherIdentity = [][]string{{"actor", "api_key_name"}}
+
+	got, err := h.Scrub(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := string(got.Raw())
+	for _, id := range []string{"developer@example.com", "email_address", "developer-laptop", "api_key_name"} {
+		if strings.Contains(strings.ToLower(raw), id) {
+			t.Errorf("scrubbed payload still carries %q: %s", id, raw)
+		}
+	}
+	if !strings.Contains(raw, `"type":"user_actor"`) || !strings.Contains(raw, `"num_sessions":5`) {
+		t.Errorf("scrubbing removed more than the identifiers: %s", raw)
+	}
+}
+
+// Bronze is the source's payload as sent, except for who sent it (ADR-0010). Decoding numbers as
+// float64 rounds an integer past 2^53, and the default encoder rewrites <, > and & as \u escapes.
+func TestScrubKeepsNumbersAndTextAsSent(t *testing.T) {
+	h, _ := New(testSalt, "v1")
+	rec := testRecord(`{"actor":{"type":"user_actor","email_address":"Developer@Example.com"},` +
+		`"big":9007199254740993,"ratio":0.1,"exp":1e3,"note":"a<b & c>d"}`)
+
+	got, err := h.Scrub(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := string(got.Raw())
+	for _, want := range []string{`"big":9007199254740993`, `"ratio":0.1`, `"exp":1e3`, `"note":"a<b & c>d"`} {
+		if !strings.Contains(raw, want) {
+			t.Errorf("scrubbed payload lost %s: %s", want, raw)
+		}
+	}
+	if strings.HasSuffix(raw, "\n") {
+		t.Errorf("scrubbed payload ends in a newline: %q", raw)
+	}
+}
+
 // An adapter that does not declare where identity lives must not be able to store anything.
 func TestScrubRefusesUnknownActorPath(t *testing.T) {
 	h, _ := New(testSalt, "v1")

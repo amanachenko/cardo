@@ -39,15 +39,18 @@ type actor struct {
 }
 
 // identifier returns the raw actor identity and the JSON path it was found at, so the scrubber can
-// remove exactly that field without knowing this payload's shape.
-func (a actor) identifier() (id string, path []string) {
+// remove exactly that field without knowing this payload's shape. An actor carrying both fields
+// is identified by the email, and the key name is returned in other, for the scrubber to delete.
+func (a actor) identifier() (id string, path []string, other [][]string) {
 	switch {
+	case a.EmailAddress != "" && a.APIKeyName != "":
+		return a.EmailAddress, []string{"actor", "email_address"}, [][]string{{"actor", "api_key_name"}}
 	case a.EmailAddress != "":
-		return a.EmailAddress, []string{"actor", "email_address"}
+		return a.EmailAddress, []string{"actor", "email_address"}, nil
 	case a.APIKeyName != "":
-		return a.APIKeyName, []string{"actor", "api_key_name"}
+		return a.APIKeyName, []string{"actor", "api_key_name"}, nil
 	default:
-		return "", nil
+		return "", nil, nil
 	}
 }
 
