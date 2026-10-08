@@ -180,8 +180,8 @@ which `cardo migrate` writes from `CARDO_ORG_ARTIFACTS` and `CARDO_MIN_GROUP_SIZ
 
 Hook payloads carry no identity. A hook row is tied to a person only through `session_id`, which
 matches the `session.id` on that session's OTel records, and those carry the pseudonym. Every
-processor fails closed (`error_mode: propagate`). A missing or short salt refuses OTel batches with
-a log line saying why, rather than storing reversible pseudonyms.
+processor fails closed (`error_mode: propagate`). A missing, short or non-hex salt refuses OTel
+batches with a log line saying why, rather than storing reversible pseudonyms.
 
 **Repositories ([ADR-0035](../adr/0035-repository-identity-classified.md)).** The bundle asks
 Claude Code for the repository a session works in, and the collector reduces the URL before
@@ -381,10 +381,10 @@ view, which the old pattern had never read.
 - **No custom code on the hook ingest path** while OTTL holds
   ([ADR-0012](../adr/0012-ingest-implementation.md)).
 - **No unsalted mode and no default salt.** `cardo poll` refuses to start without `CARDO_SALT`, and
-  rejects one shorter than 32 characters. Email addresses are low-entropy and guessable, so a weak
-  salt yields pseudonyms that are trivially reversible by anyone holding them — a store that looks
-  pseudonymous and is not is worse than one that does not run
-  ([ADR-0006](../adr/0006-pseudonymization.md)).
+  rejects one shorter than 32 characters or not hex, as the collector does. Email addresses are
+  low-entropy and guessable, so a weak salt yields pseudonyms that are trivially reversible by
+  anyone holding them — a store that looks pseudonymous and is not is worse than one that does not
+  run ([ADR-0006](../adr/0006-pseudonymization.md)).
 - **No `-base-url` flag.** The endpoint is fixed at `api.anthropic.com`, so the binary cannot be
   pointed at an arbitrary collector (INV-7). Tests override it through an unexported option.
 - **No materialized gold marts, and therefore no trends older than 90 days.** ADR-0016 retains

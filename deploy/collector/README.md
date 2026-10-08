@@ -48,8 +48,8 @@ pastes the pattern into its configuration inside a quoted string, where a backsl
 escape and the collector does not start. A double quote breaks it the same way.
 
 **Without a usable salt the collector does not stop.** It refuses every OTel batch with HTTP 503,
-and logs a line starting `REFUSED - CARDO_SALT is unset or shorter than 32 characters`. Hook events
-carry no identity, so they keep flowing.
+and logs a line starting `REFUSED - CARDO_SALT is unset, shorter than 32 characters or not hex`.
+Hook events carry no identity, so they keep flowing.
 
 ## Before the first start
 

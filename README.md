@@ -193,10 +193,10 @@ current limit: the gold marts are views, so trends older than 90 days go with th
 
 ---
 
-`cardo` refuses to start without a salt of at least 32 characters. There is no unsalted mode and no
-default salt: over an address space as guessable as corporate email, a weak salt produces pseudonyms
-that are trivially reversible, and a store that looks pseudonymous but is not is worse than one that
-does not run.
+`cardo` refuses to start without a salt of at least 32 hex characters, and the collector refuses to
+store OTel data without one. There is no unsalted mode and no default salt: over an address space
+as guessable as corporate email, a weak salt produces pseudonyms that are trivially reversible, and
+a store that looks pseudonymous but is not is worse than one that does not run.
 
 ## Scope and requirements
 

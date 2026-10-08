@@ -14,6 +14,8 @@ func TestNewRejectsWeakSalt(t *testing.T) {
 	}{
 		{"empty", "", "v1", ErrSaltTooShort},
 		{"one short", strings.Repeat("a", MinSaltLen-1), "v1", ErrSaltTooShort},
+		{"not hex", strings.Repeat("z", MinSaltLen), "v1", ErrSaltNotHex},
+		{"a passphrase", "correct horse battery staple, twice over", "v1", ErrSaltNotHex},
 		{"no version", testSalt, "", ErrNoVersion},
 		{"blank version", testSalt, "   ", ErrNoVersion},
 	} {
@@ -91,7 +93,7 @@ func TestHashSeparatesDifferentIdentifiers(t *testing.T) {
 // organizations could compare hashes to identify shared staff.
 func TestHashDependsOnSalt(t *testing.T) {
 	h1, _ := New(testSalt, "v1")
-	h2, _ := New(strings.Repeat("z", 40), "v1")
+	h2, _ := New(strings.Repeat("f", 40), "v1")
 	a, _ := h1.Hash("developer@example.com")
 	b, _ := h2.Hash("developer@example.com")
 	if a == b {

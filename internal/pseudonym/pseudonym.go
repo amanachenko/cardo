@@ -18,10 +18,17 @@ import (
 // A short salt is worse than useless here: the identifier space is organizational email addresses,
 // which are low-entropy and guessable, so a weak salt makes the pseudonyms trivially reversible by
 // anyone holding the hashes. Refusing to start is the correct behaviour — see ADR-0006.
+//
+// The salt must also be hex. Thirty-two characters of hex carry 128 bits; thirty-two characters
+// of a passphrase may carry a fraction of that, and the length check cannot tell them apart. The
+// collector applies the same rule, and the two must agree, or one salt would pseudonymize one
+// path and be refused on the other. The salt is hashed as written, never decoded, so a hex salt
+// already in use keeps every pseudonym it made.
 const MinSaltLen = 32
 
 var (
 	ErrSaltTooShort = fmt.Errorf("salt must be at least %d characters", MinSaltLen)
+	ErrSaltNotHex   = errors.New("salt must be hex, as `openssl rand -hex 32` prints it; the collector refuses any other")
 	ErrNoVersion    = errors.New("salt version is required; it is stored beside every pseudonym so rotation stays possible")
 	ErrEmptyActor   = errors.New("actor identifier is empty")
 )
@@ -39,6 +46,10 @@ type Hasher struct {
 func New(salt, version string) (*Hasher, error) {
 	if len(salt) < MinSaltLen {
 		return nil, ErrSaltTooShort
+	}
+	// Whatever is left once hex digits are trimmed from both ends is a character that is not one.
+	if strings.Trim(salt, "0123456789abcdefABCDEF") != "" {
+		return nil, ErrSaltNotHex
 	}
 	if strings.TrimSpace(version) == "" {
 		return nil, ErrNoVersion
