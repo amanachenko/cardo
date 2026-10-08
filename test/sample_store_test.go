@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -105,6 +106,21 @@ func TestGenerateSampleStore(t *testing.T) {
 				accepted, rejected, 2+i, 3+i, i,
 				10000*(i+1), 3000*(i+1), 113+i*40,
 				5000*(i+1), 1200*(i+1), 22+i*7)
+
+			// One actor-day without two of the tools and one token count, as a source that leaves
+			// out a zero would send it. test/duckdb_checks.sql requires each to read as 0, not NULL.
+			if d == 2 && i == 1 {
+				for _, field := range []string{
+					`"multi_edit_tool": {"accepted": 3, "rejected": 0},`,
+					",\n    \"notebook_edit_tool\": {\"accepted\": 0, \"rejected\": 0}",
+					`, "cache_creation": 500`,
+				} {
+					if !strings.Contains(raw, field) {
+						t.Fatalf("the sample template changed, and %q is no longer there to leave out", field)
+					}
+					raw = strings.Replace(raw, field, "", 1)
+				}
+			}
 
 			rec := source.Record{
 				Source: source.Console, Day: day,
