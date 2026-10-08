@@ -11,6 +11,7 @@ package test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -137,6 +138,51 @@ func TestINV2_NoEmailReachesDisk(t *testing.T) {
 	scanned := scanOutput(t, dir, email)
 	if scanned == 0 {
 		t.Fatal("nothing was written, so this test proved nothing")
+	}
+}
+
+// INV-2, the poller's tripwire. An email address in a field the adapter does not model, someone
+// other than the actor, stops the poll before that day is stored. The collector's tripwire stops
+// on the same pattern.
+func TestINV2_PollerStopsOnAnEmailItDidNotModel(t *testing.T) {
+	const actor, other = "veryspecific.person@example-corp.com", "a.reviewer@example-corp.com"
+
+	dir := t.TempDir()
+	st, err := jsonl.New(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Migrate(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	h, err := pseudonym.New(testSalt, "v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	day, _ := time.Parse("2006-01-02", "2026-09-08")
+	raw, _ := json.Marshal(map[string]any{
+		"actor":        map[string]any{"type": "user_actor", "email_address": actor},
+		"core_metrics": map[string]any{"num_sessions": 4},
+		"review":       map[string]any{"reviewer": other},
+	})
+	runner := &poll.Runner{
+		Adapter: staticAdapter{records: []source.Record{{
+			Source: source.Console, Day: day,
+			ActorType: "user_actor", ActorID: actor,
+			ActorPath: []string{"actor", "email_address"},
+			OrgID:     "org-1", Raw: raw,
+		}}},
+		Hasher: h, Store: st,
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+	_, err = runner.Run(context.Background(), source.Window{From: day, To: day})
+	scanOutput(t, dir, other)
+	scanOutput(t, dir, actor)
+	var leak pseudonym.ErrIdentityLeak
+	if !errors.As(err, &leak) {
+		t.Fatalf("Run() error = %v, want ErrIdentityLeak.\n"+
+			"  INV-2 violated: the poll went on past an email address the adapter does not model.", err)
 	}
 }
 

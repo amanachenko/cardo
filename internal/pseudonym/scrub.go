@@ -3,6 +3,7 @@ package pseudonym
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -39,10 +40,11 @@ func (s Scrubbed) TerminalType() string { return s.terminalType }
 func (s Scrubbed) Raw() json.RawMessage { return s.raw }
 func (s Scrubbed) Unknown() []string    { return s.unknown }
 
-// ErrIdentityLeak is returned when the raw payload still contains the actor identifier after
-// scrubbing. It means a source carries identity somewhere this code does not know about, and it is
-// deliberately fatal: a partial scrub is the exact failure INV-2 exists to prevent, and continuing
-// would write a real email address into bronze.
+// ErrIdentityLeak is returned when the raw payload still contains the actor identifier, or any
+// email address, after scrubbing. It means a source carries identity somewhere this code does not
+// know about, and it is deliberately fatal: a partial scrub is the exact failure INV-2 exists to
+// prevent, and continuing would write a real email address into bronze. It does not say which
+// address it found, because an error ends up in a log.
 type ErrIdentityLeak struct {
 	Source source.Name
 	Day    time.Time
@@ -50,10 +52,14 @@ type ErrIdentityLeak struct {
 
 func (e ErrIdentityLeak) Error() string {
 	return fmt.Sprintf(
-		"identity leak: %s payload for %s still contains the actor identifier after scrubbing; "+
-			"the source carries identity in a field this adapter does not model (INV-2)",
+		"identity leak: %s payload for %s still contains the actor identifier or an email address "+
+			"after scrubbing; the source carries identity in a field this adapter does not model (INV-2)",
 		e.Source, e.Day.Format("2006-01-02"))
 }
+
+// emailShape is the pattern the collector's INV-2 tripwire stops on (deploy/collector/config.yaml),
+// so that both paths stop on the same thing.
+var emailShape = regexp.MustCompile(`[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}`)
 
 // Scrub hashes the actor identifier and removes it from the raw payload.
 //
@@ -73,9 +79,11 @@ func (h *Hasher) Scrub(r source.Record) (Scrubbed, error) {
 
 	// Safety net. rewriteActor removes the one field the adapter declared; this catches identity
 	// appearing anywhere else in the payload, which is how an upstream schema change would first
-	// show up. Compared case-insensitively because email casing is not stable.
-	if norm := strings.ToLower(strings.TrimSpace(r.ActorID)); norm != "" &&
-		strings.Contains(strings.ToLower(string(raw)), norm) {
+	// show up. The actor's own identifier is compared case-insensitively because email casing is
+	// not stable, and any other email address stops the run too: someone else's address in an
+	// unmodelled field is as much a leak, and an API key actor's identifier is not an address.
+	norm := strings.ToLower(strings.TrimSpace(r.ActorID))
+	if (norm != "" && strings.Contains(strings.ToLower(string(raw)), norm)) || emailShape.Match(raw) {
 		return Scrubbed{}, ErrIdentityLeak{Source: r.Source, Day: r.Day}
 	}
 
