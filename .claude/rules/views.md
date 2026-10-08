@@ -27,6 +27,10 @@ The views read the organization's artifact pattern and the minimum group size fr
 - Adding up `people` or `active_people` across weeks or days. They are distinct counts; the same
   engineer on five days is one person, not five. A panel over a range shows the busiest week or
   day. Sessions, uses and prompts add up.
+- Reading a dashboard's queries from its top-level `panels`. A collapsed row keeps its panels
+  inside it, and query variables and annotations send SQL through the same data source. The
+  dashboard tests read every query through `dashboardQueries` in `test/deploy_test.go`, and a new
+  test reads them the same way.
 - Checking that a panel charts a rate's volume by looking for the volume's name in the SQL. Each
   rate is computed from its volume, so the name is always there. The test requires the volume as
   an output column.
