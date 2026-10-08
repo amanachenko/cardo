@@ -82,7 +82,7 @@ one ([risks.md](../../risks.md) #15).
   |           v                                    |
   |  pseudonymizer      internal/pseudonym/        |
   |    - salted SHA256, salt_version recorded      |
-  |    - actor field deleted from the payload      |
+  |    - actor fields deleted from the payload     |
   |    - identity-leak tripwire (fails the run)    |
   |           |                                    |
   |           v   [ only pseudonym.Scrubbed        |

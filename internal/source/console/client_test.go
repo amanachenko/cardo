@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/amanachenko/cardo/internal/pseudonym"
 )
 
 func fixture(t *testing.T, name string) []byte {
@@ -182,6 +184,41 @@ func TestFetchHandlesAPIKeyActor(t *testing.T) {
 	}
 	if strings.Join(recs[0].ActorPath, ".") != "actor.api_key_name" {
 		t.Errorf("ActorPath = %v", recs[0].ActorPath)
+	}
+}
+
+// An actor may carry both an email address and an API key name. The email is the identity and is
+// hashed. The key name names the same person on the console's own pages, so the adapter declares
+// it as other identity and the scrubber removes it too.
+func TestFetchRemovesBothActorIdentifiers(t *testing.T) {
+	body := strings.Replace(string(fixture(t, "single-page.json")),
+		`"email_address": "Developer@Example.com"`,
+		`"email_address": "Developer@Example.com", "api_key_name": "developer-laptop"`, 1)
+	if !strings.Contains(body, "developer-laptop") {
+		t.Fatal("single-page.json no longer has the actor this test adds a key name to")
+	}
+	c, _ := serve(t, []byte(body))
+
+	recs, err := c.Fetch(context.Background(), day())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if recs[0].ActorID != "Developer@Example.com" || strings.Join(recs[0].ActorPath, ".") != "actor.email_address" {
+		t.Errorf("ActorID, ActorPath = %q, %v; want the email address", recs[0].ActorID, recs[0].ActorPath)
+	}
+
+	h, err := pseudonym.New("0123456789abcdef0123456789abcdef", "v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := h.Scrub(recs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"developer@example.com", "developer-laptop"} {
+		if strings.Contains(strings.ToLower(string(s.Raw())), id) {
+			t.Errorf("the scrubbed payload still carries %q: %s", id, s.Raw())
+		}
 	}
 }
 
