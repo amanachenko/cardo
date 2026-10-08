@@ -100,7 +100,7 @@ func runPoll(args []string) error {
 		srcName   = fs.String("source", "console", "analytics source: console")
 		storeKind = fs.String("store", "file", "storage target: file | clickhouse")
 		out       = fs.String("out", "./data", "directory for the local store (-store file)")
-		days      = fs.Int("days", 30, "number of days to poll, ending yesterday")
+		days      = fs.Int("days", 30, "number of days to poll, ending at -to")
 		from      = fs.String("from", "", "first day to poll, YYYY-MM-DD (overrides -days)")
 		to        = fs.String("to", "", "last day to poll, YYYY-MM-DD (defaults to yesterday)")
 		verbose   = fs.Bool("v", false, "verbose logging")
@@ -125,7 +125,7 @@ func runPoll(args []string) error {
 		return err
 	}
 
-	window, err := resolveWindow(*from, *to, *days)
+	window, err := resolveWindow(time.Now(), *from, *to, *days)
 	if err != nil {
 		return err
 	}
@@ -295,11 +295,10 @@ func newAdapter(name string, log *slog.Logger) (source.Adapter, error) {
 	}
 }
 
-// resolveWindow turns flags into a day range, ending yesterday by default.
-func resolveWindow(from, to string, days int) (source.Window, error) {
-	now := time.Now().UTC()
-
-	end := now.AddDate(0, 0, -1).Truncate(24 * time.Hour)
+// resolveWindow turns flags into a day range, ending yesterday by default. Without -from it is
+// the -days days ending at -to, or at yesterday when -to is not given.
+func resolveWindow(now time.Time, from, to string, days int) (source.Window, error) {
+	end := poll.DefaultWindow(now, 1).To
 	if to != "" {
 		t, err := time.Parse("2006-01-02", to)
 		if err != nil {
@@ -323,9 +322,7 @@ func resolveWindow(from, to string, days int) (source.Window, error) {
 	if days < 1 {
 		return source.Window{}, fmt.Errorf("-days must be at least 1, got %d", days)
 	}
-	w := poll.DefaultWindow(now, days)
-	w.To = end
-	return w, nil
+	return source.Window{From: end.AddDate(0, 0, -(days - 1)), To: end}, nil
 }
 
 var (

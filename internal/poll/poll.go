@@ -47,7 +47,15 @@ func (r *Runner) Run(ctx context.Context, w source.Window) (*Result, error) {
 		Unknown: map[string]int{},
 	}
 
-	for _, day := range w.Days() {
+	// A window ending before it starts holds no days. Polling it would report an ordinary
+	// "poll complete" for a run that fetched nothing.
+	days := w.Days()
+	if len(days) == 0 {
+		return res, fmt.Errorf("the window %s to %s ends before it starts, so there is nothing to poll",
+			w.From.Format("2006-01-02"), w.To.Format("2006-01-02"))
+	}
+
+	for _, day := range days {
 		if err := ctx.Err(); err != nil {
 			return res, err
 		}

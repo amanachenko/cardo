@@ -129,6 +129,21 @@ func TestEmptyWindowIsDiagnosedLoudly(t *testing.T) {
 	}
 }
 
+// A window whose first day is after its last holds no days. Run used to poll nothing and report
+// "poll complete", which reads as a quiet organization when it was a wrong pair of flags.
+func TestRunRefusesAWindowWithNoDays(t *testing.T) {
+	a := &fakeAdapter{byDay: map[string][]source.Record{}}
+	r, _ := newRunner(t, a)
+
+	_, err := r.Run(context.Background(), window("2026-09-05", "2026-09-01"))
+	if err == nil {
+		t.Fatal("Run() over a window ending before it starts returned no error")
+	}
+	if len(a.calls) != 0 {
+		t.Errorf("Run() fetched %v from a window with no days", a.calls)
+	}
+}
+
 func TestNonEmptyWindowIsReportedQuietly(t *testing.T) {
 	a := &fakeAdapter{byDay: map[string][]source.Record{
 		"2026-09-01": {recordFor("2026-09-01", "alice@example.com")},
