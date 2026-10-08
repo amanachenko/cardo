@@ -51,6 +51,13 @@ escape and the collector does not start. A double quote breaks it the same way.
 and logs a line starting `REFUSED - CARDO_SALT is unset, shorter than 32 characters or not hex`.
 Hook events carry no identity, so they keep flowing.
 
+**An email address left on a record after the transforms refuses the whole request.** The INV-2
+tripwire, last on every pipeline, answers an OTLP request with 503, which senders retry, and a hook
+with 500. It logs a line starting `REFUSED - INV-2 tripwire`, which names neither the address nor
+the attribute, and stores nothing from that request, its clean records included. It should never
+fire. When it does, a transform misses a field, and every request carrying that field is refused
+until the transform is fixed.
+
 ## Before the first start
 
 The exporter only ever sends INSERT (`create_schema: false`), so its tables must exist first:

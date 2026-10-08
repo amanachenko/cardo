@@ -308,8 +308,8 @@ func TestCollectorPipelinesOrderTheirSafeguards(t *testing.T) {
 			continue
 		}
 		procs := p["processors"]
-		if len(procs) == 0 || procs[len(procs)-1] != "filter/inv2_tripwire" {
-			t.Errorf("pipeline %s does not end with filter/inv2_tripwire: %v", name, procs)
+		if len(procs) == 0 || procs[len(procs)-1] != "transform/inv2_tripwire" {
+			t.Errorf("pipeline %s does not end with transform/inv2_tripwire: %v", name, procs)
 		}
 		if name == "logs/hooks" {
 			if len(procs) == 0 || procs[0] != "transform/hooks" {
@@ -1025,42 +1025,82 @@ func TestCollector_RepositoriesAreClassified(t *testing.T) {
 	}
 }
 
-// INV-2 defence in depth: an email in an attribute the transforms have never heard of is caught
-// by the tripwire and the record dropped, while its clean neighbour is stored.
-func TestINV2_CollectorTripwireDropsWhatTheTransformsMissed(t *testing.T) {
+// INV-2 defence in depth: an email in an attribute the transforms have never heard of is caught by
+// the tripwire, and the request carrying it is refused, its clean records with it. The tripwire
+// firing means a transform above it is wrong. Refusing tells the sender, which retries, and the
+// collector logs why, where dropping the record lost it without a word.
+func TestINV2_CollectorTripwireRefusesWhatTheTransformsMissed(t *testing.T) {
 	s := liveCollector(t)
 	run := fmt.Sprintf("cardo-test-trip-%d", time.Now().UnixNano())
 	now := fmt.Sprint(time.Now().UnixNano())
-	rec := func(sid string, extra ...string) map[string]any {
-		return map[string]any{"timeUnixNano": now,
-			"attributes": otlpAttrs(append([]string{"event.name", "tool_result", "session.id", sid}, extra...)...)}
+	const leak = "marker.person@example-corp.com"
+	logs := func(sids ...[]string) []byte {
+		var recs []any
+		for _, attrs := range sids {
+			recs = append(recs, map[string]any{"timeUnixNano": now,
+				"attributes": otlpAttrs(append([]string{"event.name", "tool_result"}, attrs...)...)})
+		}
+		b, _ := json.Marshal(map[string]any{"resourceLogs": []any{map[string]any{
+			"resource":  map[string]any{"attributes": otlpAttrs("service.name", "claude-code")},
+			"scopeLogs": []any{map[string]any{"scope": map[string]any{"name": "t"}, "logRecords": recs}}}}})
+		return b
 	}
-	logs := map[string]any{"resourceLogs": []any{map[string]any{
-		"resource": map[string]any{"attributes": otlpAttrs("service.name", "claude-code")},
-		"scopeLogs": []any{map[string]any{"scope": map[string]any{"name": "t"}, "logRecords": []any{
-			rec(run + ".clean"),
-			rec(run+".leak", "some.future.owner", "marker.person@example-corp.com"),
-		}}}}}}
-	b, _ := json.Marshal(logs)
+	metric := func(attrs ...string) []byte {
+		b, _ := json.Marshal(map[string]any{"resourceMetrics": []any{map[string]any{
+			"resource": map[string]any{"attributes": otlpAttrs("service.name", "claude-code")},
+			"scopeMetrics": []any{map[string]any{"scope": map[string]any{"name": "t"},
+				"metrics": []any{map[string]any{"name": "claude_code.cost.usage", "unit": "USD",
+					"sum": map[string]any{"aggregationTemporality": 1, "isMonotonic": true,
+						"dataPoints": []any{map[string]any{
+							"asDouble": 0.25, "startTimeUnixNano": now, "timeUnixNano": now,
+							"attributes": otlpAttrs(attrs...)}}}}}}}}}})
+		return b
+	}
 	t.Cleanup(func() {
 		s.ch.Exec(context.Background(), fmt.Sprintf(
-			"DELETE FROM cardo.bronze_otel_logs WHERE LogAttributes['session.id'] = '%s.leak'", run))
+			"DELETE FROM cardo.bronze_otel_logs WHERE startsWith(LogAttributes['session.id'], '%s.')", run))
+		s.ch.Exec(context.Background(), fmt.Sprintf(
+			"DELETE FROM cardo.bronze_otel_metrics_sum WHERE startsWith(Attributes['session.id'], '%s.')", run))
 	})
-	if code := s.post(t, s.otlpURL+"/v1/logs", b); code != http.StatusOK {
-		t.Fatalf("collector answered %d", code)
+
+	for _, r := range []struct {
+		path, what string
+		body       []byte
+	}{
+		{"/v1/logs", "a log request", logs(
+			[]string{"session.id", run + ".clean"},
+			[]string{"session.id", run + ".leak", "some.future.owner", leak})},
+		{"/v1/metrics", "a metric request", metric("session.id", run+".leak", "some.future.owner", leak)},
+	} {
+		if code := s.post(t, s.otlpURL+r.path, r.body); code == http.StatusOK {
+			t.Errorf("INV-2: the collector accepted %s carrying an email in an unknown attribute.\n"+
+				"  transform/inv2_tripwire must refuse anything the transforms did not scrub.", r.what)
+		}
+	}
+	for path, body := range map[string][]byte{
+		"/v1/logs":    logs([]string{"session.id", run + ".after"}),
+		"/v1/metrics": metric("session.id", run+".after"),
+	} {
+		if code := s.post(t, s.otlpURL+path, body); code != http.StatusOK {
+			t.Fatalf("POST %s answered %d to a clean request sent after the refused ones", path, code)
+		}
 	}
 
-	// Both records travel in one request and one batch, so once the clean one has landed the
-	// leaky one has had every chance to.
-	s.rows(t, "bronze_otel_logs", "LogAttributes", fmt.Sprintf("LogAttributes['session.id'] = '%s.clean'", run), 1)
-	out, err := s.ch.Query(context.Background(), fmt.Sprintf(
-		"SELECT count() FROM cardo.bronze_otel_logs WHERE LogAttributes['session.id'] = '%s.leak'", run))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if n := strings.TrimSpace(string(out)); n != "0" {
-		t.Errorf("INV-2: a record carrying an email in an unknown attribute was stored (%s rows).\n"+
-			"  filter/inv2_tripwire must drop anything the transforms did not scrub.", n)
+	// A request is refused before it is queued for export, so once the clean requests sent after
+	// the others have landed, anything accepted from those has had every chance to.
+	s.rows(t, "bronze_otel_logs", "LogAttributes", fmt.Sprintf("LogAttributes['session.id'] = '%s.after'", run), 1)
+	s.rows(t, "bronze_otel_metrics_sum", "Attributes", fmt.Sprintf("Attributes['session.id'] = '%s.after'", run), 1)
+	for table, col := range map[string]string{"bronze_otel_logs": "LogAttributes", "bronze_otel_metrics_sum": "Attributes"} {
+		out, err := s.ch.Query(context.Background(), fmt.Sprintf(
+			"SELECT count() FROM cardo.%s WHERE startsWith(%s['session.id'], '%s.') AND %s['session.id'] != '%s.after'",
+			table, col, run, col, run))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n := strings.TrimSpace(string(out)); n != "0" {
+			t.Errorf("INV-2: %s rows from a request carrying an email reached cardo.%s.\n"+
+				"  The tripwire refuses the whole request, its clean records too.", n, table)
+		}
 	}
 }
 
