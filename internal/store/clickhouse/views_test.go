@@ -196,14 +196,16 @@ func seedFleet(t *testing.T, st *Store, weeksBack int) *seed {
 
 	// The same from PostModelSwitch, which the bundle hooks since ADR-0039, as Claude Code 2.1.289
 	// sends it: no prompt id on either side, and a dated to_model where the hook's name has the
-	// canonical one. Kept out of the big cohort, whose gold row counts switches, and out of person
-	// 6's session, which must send no hook_execution_start.
+	// canonical one. The next request names the model without the date too: which spelling a real
+	// api_request uses beside a dated to_model has not been observed, so both are normalized. Kept
+	// out of the big cohort, whose gold row counts switches, and out of person 6's session, which
+	// must send no hook_execution_start.
 	t4 := s.at(60 * time.Minute)
 	s.hook(7, t4.Add(-2*time.Second), "PostModelSwitch", "", "from_model", "m1", "to_model", "m3-20251001",
 		"model_switch_source", "picker", "context_tokens", "2000", "estimated_cache_write_usd", "0.7")
 	s.otel(7, t4, "hook_execution_start", "", "hook_event", "PostModelSwitch",
 		"hook_name", "PostModelSwitch:m3", "num_hooks", "1")
-	s.request(7, t4.Add(20*time.Second), s.prompt(7, "2"), "m3-20251001", 10, 0, 1900, "0.30")
+	s.request(7, t4.Add(20*time.Second), s.prompt(7, "2"), "m3", 10, 0, 1900, "0.30")
 	// A resumed session restoring its model is not a switch anyone asked for.
 	s.hook(6, s.at(61*time.Minute), "PostModelSwitch", "", "from_model", "m1", "to_model", "m3-20251001",
 		"model_switch_source", "resume")
