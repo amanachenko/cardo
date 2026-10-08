@@ -162,7 +162,9 @@ approaches that work from ones that don't is something the pilots exist to find 
 
 - **From variety to standards.** The question moves from "what's spreading" to "is everyone on the
   standard, and what does the standard cost". Cardo keeps showing new approaches as they appear,
-  so that standardizing doesn't freeze each team on whatever won first.
+  so that standardizing doesn't freeze each team on whatever won first. A rolled-out standard
+  spreads whether it helps or not, so its spread is shown as the rollout's reach, and whether it
+  helps is measured in the same people before and after it arrived *(planned)*.
 - **Agents without a person at the keyboard.** Runs in CI and in the background are labelled by
   workflow, and their cost belongs to a workflow and a repository, not to anyone. The privacy
   tension largely disappears there, and measuring approaches rather than people fits it naturally.

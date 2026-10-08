@@ -510,3 +510,34 @@ off-network lookup fails in about 0.2 s. **Would settle it:** the one-laptop che
 time over the VPN, and whether engineers in the dogfood report the notices. If healthy hooks come
 near a second, the timeout is revisited with that measurement; if the notices annoy people, the
 answer is a reachable collector, not a longer timeout.
+
+### 21. Cost is an estimate, and on seat-based plans it is not spend
+
+**Threatens:** [ADR-0030](docs/adr/0030-stakeholders-and-questions.md) decision 6, the board report.
+
+Every cost figure Cardo holds is an estimate: the Admin API's `estimated_cost`, and Claude Code's
+own `cost_usd` on each request. Neither is an invoice. On a usage-based plan the estimate should
+track the bill. On a seat-based plan, usage within the seats' allowance is paid for by the seats,
+and the estimate is a list-price value of the usage, not money spent. A board report that adds the
+estimates up and calls the total spend is the indefensible number ADR-0030 warns about.
+
+**Mitigation:** every cost figure is labelled an estimate in the views and the report, with the
+plan type beside it where the source gives one (`customer_type`). Cardo does not price tokens
+itself: the multipliers for cache reads and writes differ by model and by cache duration, and
+change with releases. **Would settle it:** the adoption pilot, comparing a month's estimate with
+the organization's invoice before the report shows cost.
+
+### 22. Smaller teams fold into `other`
+
+**Threatens:** [ADR-0030](docs/adr/0030-stakeholders-and-questions.md) decision 4, each team's
+reach against the fleet, under [ADR-0029](docs/adr/0029-minimum-group-size.md).
+
+Engineering organizations are reorganizing into smaller teams. A cohort of fewer than five people
+is shown as `other`, so a fleet of three-person teams has team views with nothing in them, and the
+rollout question, "which teams has it not reached?", goes unanswered.
+
+**Mitigation:** a cohort is what the directory file maps a person to
+([ADR-0034](docs/adr/0034-identity-in-pilots.md)), not necessarily their own team. Map people to
+the smallest group with five or more in it, such as a group of teams. The threshold is never
+lowered to make a small team visible. **Would show the mitigation failing:** an adoption owner
+asking for reach by team that the cohorts cannot give.

@@ -88,7 +88,9 @@ start. The views are built then, on data from more than one person.
   dogfood's first week.
 - **The coach dashboard, shared links and `cardo pseudonym`**
   ([ADR-0032](adr/0032-engineer-coach-by-shared-link.md)). While only the operator has a Grafana
-  login, the single Grafana is enough. Comes in the dogfood's first week.
+  login, the single Grafana is enough. Comes in the dogfood's first week, showing figures only;
+  suggestions start in the second, drawn from the artifact views
+  ([ADR-0041](adr/0041-the-coach-suggests-what-the-fleet-has-shown.md)).
 
 ### Before the adoption pilot
 
@@ -104,6 +106,13 @@ start. The views are built then, on data from more than one person.
   - the within-person efficiency comparison.
 
   ([ADR-0030](adr/0030-stakeholders-and-questions.md), [ADR-0031](adr/0031-what-works-means.md))
+- **How each artifact arrived** ([ADR-0040](adr/0040-spread-is-a-vote-only-for-what-teams-chose.md)):
+  - the operator's rollout list, which is also the inventory for finding what nobody uses;
+  - artifact views that label a rolled-out artifact's spread as reach, with the before-and-after
+    comparison around its date;
+  - substitution in the efficiency views;
+  - the efficiency claims the pilot will test, written down with what would refute each, before
+    its data is read.
 - **Instructions presence per organization repository,** and the optional names setting
   ([ADR-0035](adr/0035-repository-identity-classified.md)).
 - **The engineer notice for that organization:**
