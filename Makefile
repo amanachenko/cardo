@@ -46,12 +46,14 @@ invariants:
 sql:
 	CARDO_SAMPLE_DIR=$(SAMPLE_DIR) go test ./test/ -run TestGenerateSampleStore
 	printf '%s\n' \
+	  ".bail on" \
 	  "SET VARIABLE cardo_root = '$(SAMPLE_DIR)';" \
 	  ".read sql/duckdb/010_bronze.sql" \
 	  ".read sql/duckdb/020_silver.sql" \
 	  ".read sql/duckdb/030_gold.sql" \
 	  "SELECT * FROM gold_fleet_adoption ORDER BY day;" \
 	  "SELECT * FROM gold_schema_drift;" \
+	  ".read test/duckdb_checks.sql" \
 	| $(DUCKDB) -init /dev/null
 
 .PHONY: clean

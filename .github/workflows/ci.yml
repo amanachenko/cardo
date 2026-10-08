@@ -48,7 +48,9 @@ jobs:
           curl -sSL -o duckdb.zip https://github.com/duckdb/duckdb/releases/latest/download/duckdb_cli-linux-amd64.zip
           unzip -q duckdb.zip
           CARDO_SAMPLE_DIR="$PWD/.sample" go test ./test/ -run TestGenerateSampleStore
+          # .bail on: without it the CLI reports an error and carries on, and the step stays green.
           ./duckdb -init /dev/null <<'SQL'
+          .bail on
           SET VARIABLE cardo_root = '.sample';
           .read sql/duckdb/010_bronze.sql
           .read sql/duckdb/020_silver.sql
@@ -56,6 +58,7 @@ jobs:
           SELECT 'bronze', count(*) FROM bronze_actor_day;
           SELECT 'silver', count(*) FROM silver_actor_day;
           SELECT 'gold',   count(*) FROM gold_fleet_adoption;
+          .read test/duckdb_checks.sql
           SQL
 
   clickhouse:
