@@ -58,7 +58,11 @@ services:
     ulimits:
       nofile: { soft: 262144, hard: 262144 }
     healthcheck:
-      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      # By the service name, not localhost. On a fresh volume the image's entrypoint first runs a
+      # temporary server on 127.0.0.1 to create the user and database, then restarts. A probe on
+      # localhost passes against that one, and migrate, which starts on "healthy", is refused. The
+      # service name goes through the network address, where only the real server listens.
+      test: ["CMD", "clickhouse-client", "--host", "clickhouse", "--query", "SELECT 1"]
       # Probe fast while starting, then back off for the rest of the container's life. A 5s
       # healthcheck forks a process inside the container every 5 seconds, forever, which is a
       # meaningful share of the idle cost this stack is trying not to have.

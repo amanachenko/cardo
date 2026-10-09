@@ -29,5 +29,9 @@ After touching the store, run `make stack-up && make clickhouse-test` (live serv
 - Tuning ClickHouse from a list of plausible settings. The timer and pool defaults all *looked* like
   the idle-CPU culprit and together changed it by nothing; one stack trace found the real cause in a
   minute. `system.stack_trace` with `allow_introspection_functions=1`, then read the frames.
+- A healthcheck on localhost. On a fresh volume the image's entrypoint runs a temporary server on
+  127.0.0.1, then restarts into the real one; the probe passes against the first, and migrate is
+  refused. The compose healthcheck connects by the service name.
+  `TestDeployClickHouseHealthyMeansReachable` holds it there.
 - A `--` inside an XML comment. The spec forbids it, ClickHouse crash-loops, and the only symptom is
   a restarting container. `TestDeployXMLIsWellFormed` catches it.

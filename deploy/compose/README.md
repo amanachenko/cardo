@@ -71,7 +71,7 @@ its rows:
 
 ```bash
 bash scripts/preview.sh up            # build this checkout, start the preview, copy the rows
-bash scripts/preview.sh compare       # rows, migrations and views: live against preview
+bash scripts/preview.sh compare       # rows, migrations, views, and the dashboards' views by day
 bash scripts/preview.sh verify-live   # every query sent to the live stack was a read-only SELECT
 bash scripts/preview.sh down          # remove it, with its copy
 ```
@@ -82,6 +82,11 @@ Run it from the repository root, in bash (Git Bash on Windows). The preview's Gr
 setting, through `docker exec`, and the two stacks share no network
 ([`docker-compose.preview.yml`](docker-compose.preview.yml)). In Claude Code, the `/preview`
 skill walks through a branch or pull request this way, one claim at a time.
+
+The copy stops five minutes before it was made, so the two Grafanas agree only on earlier days,
+and not on all of those. The views report a session's events on the day it started, so a session
+still running at the copy keeps adding to that day on the live stack. `compare` checks every
+dashboard view day by day, and names each day that differs for that reason.
 
 ## Serving a team over the network
 
