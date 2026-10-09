@@ -54,8 +54,9 @@ document worded for any organization. The overview becomes `docs/overview.md`.
   across the group, never one person's (INV-3).
 - **The ADRs and research notes were edited once, before publication,** so that they use the same
   terms as the rest of the repository. Their decisions, reasons and findings are unchanged. From
-  publication on, ADR-0000 applies, with one exception: this ADR was edited again on 2026-10-09,
-  because parts of it described plans rather than the decision.
+  publication on, ADR-0000 applies, with one exception. On 2026-10-09 this ADR, and the sentences
+  in others that described plans rather than decisions, were edited in place to word them for any
+  organization. Each says so under its date.
 - **Publication cannot be undone.** Forks, clones and Go's module mirror keep copies. The tree was
   checked on 2026-09-30:
   - no secret or key, only `deploy/compose/.env.example` and a password used by CI's throwaway

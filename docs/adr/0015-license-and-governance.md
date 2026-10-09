@@ -2,6 +2,7 @@
 
 **Status:** Superseded by [ADR-0038](0038-public-under-a-collective-copyright.md)
 **Date:** 2026-09-22
+**Edited:** 2026-10-09, in place, to word it for any organization. The decision is unchanged.
 **Evidence:** Judgment, no evidence.
 
 ## Context
@@ -28,7 +29,7 @@ distribution would reimplement the ideas, not fork the repo, and no license prev
 
 - **Apache-2.0** in `LICENSE` from the first commit.
 - **No CLA.**
-- **Repo private initially**, with read access granted to the pilot organization's engineers.
+- **Repo private initially**, with read access granted to an organization's engineers.
   Publish publicly once an organization is actually running it.
 - Personal GitHub account for now; move to a neutral org only if a community forms.
 

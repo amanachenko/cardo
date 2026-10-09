@@ -1,6 +1,7 @@
 # Stakeholder field notes — snapshot 2026-09-25
 
-Dated snapshot. **Never edit** — write a new dated note if this goes stale.
+Dated snapshot. **Never edit** — write a new dated note if this goes stale. *(One phrase in the
+last section was edited on 2026-10-09 to word it for any organization.)*
 
 **Source.** Sections 1 to 5 are field observations from engineering organizations adopting Claude
 Code, recorded during the design review of 2026-09-25. They are **a small sample, not a survey**:
@@ -110,4 +111,5 @@ towards zero in an auto-mode fleet. Only compaction is left.
 ## What was decided from this
 
 [ADR-0030](../adr/0030-stakeholders-and-questions.md) to
-[ADR-0037](../adr/0037-policy-evidence.md), and the pilot plan in [`docs/roadmap.md`](../roadmap.md).
+[ADR-0037](../adr/0037-policy-evidence.md), and the order of work in
+[`docs/roadmap.md`](../roadmap.md).

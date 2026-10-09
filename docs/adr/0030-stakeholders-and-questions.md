@@ -2,6 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-09-25
+**Edited:** 2026-10-09, in place, to word it for any organization. The decision is unchanged.
 **Evidence:** `2026-09-25-stakeholder-field-notes.md` (field observations, a small sample);
 `2026-09-23-admin-analytics-apis.md` (what Anthropic already shows);
 `2026-09-21-prior-art-survey.md` (who sells what). The choices are judgment.
@@ -95,8 +96,8 @@ needs a measure none of them supplies, and the git host provides it
   On generic return-on-investment Cardo is weaker: one tool, and no git or issue-tracker data yet.
 - Decisions 6 and 7 are promises to engineers as much as product choices. They go into
   `docs/design/privacy.md` and the overview.
-- Whether leadership decides anything with Cardo is unvalidated. The adoption pilot's success
-  criteria test it ([`docs/roadmap.md`](../roadmap.md)).
+- Whether leadership decides anything with Cardo is unvalidated. A pilot's success criteria
+  test it ([`docs/roadmap.md`](../roadmap.md#how-a-pilot-judges-cardo)).
 
 ## Rejected alternatives and why
 
@@ -107,7 +108,7 @@ needs a measure none of them supplies, and the git host provides it
   weaker in it: one tool, no delivery data.
 - **Security on equal footing now.** Its evidence needs a working product for the other users
   first, and the organizations that ban adoption have nothing to measure until a pilot is allowed.
-  It comes third in the pilots, not last in priority.
+  It comes later in order, not last in priority.
 - **Engineers first.** Nobody buys it.
 - **Uniform practice**, such as a plan-mode rate or a "uses the approved workflow" score per person.
   It is gameable and it is surveillance, ADR-0001's failure modes exactly.
