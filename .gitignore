@@ -46,3 +46,6 @@ Thumbs.db
 
 # Claude Code local state
 .claude/settings.local.json
+
+# scripts/preview.sh: which copy the preview holds
+.preview-state

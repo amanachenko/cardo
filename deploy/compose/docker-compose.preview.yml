@@ -1,0 +1,36 @@
+# The preview stack: a second Cardo beside the one that collects, built from this checkout and
+# holding a copy of that stack's stored rows. It is how a change to the views, the dashboards or a
+# command is seen on real data before it merges, without its migrations ever reaching the stack
+# that collects.
+#
+# Run it through scripts/preview.sh, which also does the copy. By hand it would be:
+#
+#   docker compose -p cardo-preview --env-file .env.preview \
+#     -f docker-compose.yml -f docker-compose.preview.yml up -d clickhouse grafana
+#
+# What differs from docker-compose.yml:
+#
+#   - Its own project name, so its own containers, network and volumes.
+#   - Its own ports: Grafana on 3002, ClickHouse's HTTP interface on 8125, both on loopback. No
+#     native port: the copy goes through `docker exec`.
+#   - Its own image tag for `cardo`, so building it never replaces the one the live stack runs.
+#   - No collector. Nothing sends to the preview, so it needs no salt; it changes only when the
+#     copy is refreshed.
+
+name: cardo-preview
+
+services:
+  clickhouse:
+    ports: !override
+      - "127.0.0.1:8125:8123"
+
+  migrate:
+    image: cardo-preview:dev
+
+  collector:
+    # Never started: a profile nobody activates.
+    profiles: ["not-in-preview"]
+
+  grafana:
+    ports: !override
+      - "127.0.0.1:3002:3000"

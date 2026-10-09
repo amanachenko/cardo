@@ -69,6 +69,11 @@ it do not: who is trying it, when, or how it is going.
   not know the server changed.
 - `go.mod`'s require block stays empty ([ADR-0022](docs/adr/0022-clickhouse-access.md)).
 
+A pull request says how to see what it does, in a **How to see it** section: the steps that show
+each thing it claims. When that is a view, a dashboard or a command, show it on your own sessions
+with the [preview stack](deploy/compose/README.md#seeing-a-change-on-your-own-data-before-it-merges),
+or the `/preview` skill in Claude Code, before asking for a review.
+
 ## Documents
 
 - ADRs are immutable. Supersede one with a new ADR; only the old one's status line changes.
