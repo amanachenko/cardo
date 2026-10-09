@@ -81,7 +81,7 @@ Run it from the repository root, in bash (Git Bash on Windows). The preview's Gr
 `refresh` copies the rows again. The copy reads the live stack with ClickHouse's `readonly`
 setting, through `docker exec`, and the two stacks share no network
 ([`docker-compose.preview.yml`](docker-compose.preview.yml)). In Claude Code, the `/preview`
-skill walks through a branch or pull request this way, one claim at a time.
+skill sums up a branch or pull request in plain words, and runs this demo if you ask for it.
 
 The copy stops five minutes before it was made, so the two Grafanas agree only on earlier days,
 and not on all of those. The views report a session's events on the day it started, so a session

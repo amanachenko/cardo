@@ -1,146 +1,93 @@
 ---
 name: preview
-description: Walk someone through what a Cardo branch or pull request changes, on their own data, before it merges. Brings up the preview stack (a second Cardo built from the branch, over a read-only copy of the live stack's rows), checks the copy, then goes through each claim the change makes one step at a time, and proves the live stack was only read. Use when asked to preview, validate, demo or "show me" a branch or PR, or after building a work item and before opening its pull request.
+description: Orient someone on a Cardo branch or pull request in plain words - where it sits in the roadmap, what changes, what to look at, what was checked, what needs them - and offer a guided demo on their own data with the preview stack, run only if they ask. Use when asked to preview, explain, demo or "show me" a branch or PR, or after building a work item.
 argument-hint: "[pull request number or branch; default: this checkout]"
 ---
 
-# Preview a change on real data
+# Orient someone on a change
 
-The goal is that the person sees the change work, on their own sessions, and understands what it
-does and why, before anyone merges it. A green CI run is not that. You are a guide: one step at a
-time, plain words, and stop for them after each step.
+The person wants to know where things stand and what this change does, often while several other
+sessions compete for their attention. Your job is to lower that load, not add to it. The summary
+is the default. A demo on their own data is an offer, run only when they want more than the
+summary.
 
-`scripts/preview.sh` does the mechanical work, and this walkthrough uses it. It runs in bash (Git
-Bash on Windows). The live stack is the compose project that collects (`cardo` unless
-`CARDO_LIVE_PROJECT` says otherwise).
+## Rules
 
-## Rules for the whole walk
+- **Plain words.** Say what a thing does ("the check that no dashboard shows one person's data"),
+  not its code name. A test name, an ID, SQL or command output appears only if they ask for it.
+- **Verification is yours.** Check the change before you summarize it, put the details in the pull
+  request, and report the result in a line. Do not walk them through the checking.
+- **Say a problem first,** in a sentence: something that does not do what it claims, or a mistake
+  in the pull request. The change is not ready until it is fixed or they decide otherwise.
+- **The live stack is only read,** and their data stays on their machine: never print a pseudonym,
+  an email address, a salt or a password, and never put their rows in a pull request, an issue or
+  a commit.
 
-- **The live stack is only read.** Never run a write, a migration or `docker compose` against it.
-  Everything goes through `scripts/preview.sh`, which reads it with `readonly=1`, and step 6
-  proves that from the live server's own query log.
-- **Their data stays on their machine.** Show counts, Claude Code's own names and the shape of a
-  result. Never print a pseudonym, an email address, a salt or a password, and never put their rows
-  into a pull request, an issue or a commit. Grafana shows pseudonyms; that is fine on their screen
-  and nowhere else.
-- **One step, then stop.** Say what you ran, what it showed, and what it means, in a few lines.
-  Ask them to look where it applies, and wait for them before the next step.
-- **You cannot see Grafana.** Name the dashboard and panel, give both URLs, and state the numbers
-  you expect, read from the preview yourself (a query to its ClickHouse, or `/api/ds/query`
-  through its Grafana). Let them say whether the screen agrees.
-- **A mismatch stops the walk.** If something does not do what the change claims, say so plainly
-  and do not explain it away. It goes in the summary as found, and the change is not ready.
+## 1. Read the change, yourself
 
-## 1. Orient
+- A pull request: `gh pr view <n> --json title,headRefName,body,files`. A branch, or nothing:
+  `git log --oneline origin/main..HEAD` and `git diff --stat origin/main...HEAD`.
+- Its item in [`docs/roadmap.md`](../../../docs/roadmap.md#work-items).
+- If its claims have not been checked, check them now: the tests, a guard broken on purpose and put
+  back, or the preview stack below. The summary reports what you found.
 
-Find what is being previewed:
+## 2. The summary
 
-- **A pull request number:** `gh pr view <n> --json title,headRefName,body,files`.
-- **A branch, or nothing:** this checkout, `git log --oneline origin/main..HEAD` and
-  `git diff --stat origin/main...HEAD`.
+Five short parts, a few lines in all:
 
-The preview builds the checkout that runs it, so the branch must be checked out. If this checkout
-is not on it and is not clean, use a separate worktree rather than touching their work:
-`git fetch origin <branch>` and `git worktree add --detach <dir> FETCH_HEAD`, then run everything
-from `<dir>`.
+1. **Where it sits:** work item N, and what it unblocks.
+2. **Before and after,** in plain words.
+3. **One thing to look at** on their own data: the dashboard and panel, or the command, and what
+   they should see. If there is nothing to see, say so and why ("it changes only tests").
+4. **What was checked,** in a line or two.
+5. **What needs them:** a decision, the merge, or nothing.
 
-Then tell them, in four or five lines:
+Then one line offering the demo: what it would show and roughly how long it takes. Stop.
 
-- what the change claims to do, in their terms rather than the diff's;
-- which item in [`docs/roadmap.md`](../../../docs/roadmap.md#work-items) it serves, and what
-  question of the design it answers;
-- what you will show them, and roughly how long it takes.
+For example:
 
-Stop. Go on when they say so.
+> **Work item 1.** CI checks that no dashboard shows one person's data, but it looked only at a
+> dashboard's top layer: a collapsed row or a dropdown could hide a per-person panel. Now it looks
+> everywhere. **Nothing to see on your data:** it changes only tests. **Checked:** it catches a
+> hidden panel, a dropdown and an annotation, and raises no false alarm. **Needs you:** the merge.
+> I can show it catching a hidden panel, in about two minutes, if you want.
 
-## 2. Choose what to show
+## 3. The demo, only if they ask
 
-By what the change touches:
+Guide them through it one step at a time, in plain words, and wait after each step.
 
-| It changes | Show it with |
+**Choose by what the change touches:**
+
+| It changes | The demo |
 |---|---|
-| `sql/clickhouse/`, `dashboards/`, `deploy/compose/grafana/` | the preview stack: the views and panels, live against preview |
-| a `cardo` command that reads ClickHouse | the command run against the preview (step 5) |
-| `deploy/collector/`, `deploy/managed-settings/` | the collector contract tests (`make collector-test`, or CI's collector job). The preview has no collector |
-| tests or docs only | the tests, and the guard broken on purpose: make the change it forbids, show it failing, put it back, show it passing. No stack |
+| views or dashboards (`sql/clickhouse/`, `dashboards/`, `deploy/compose/grafana/`) | the preview stack: the panels it changes, on their data |
+| a `cardo` command that reads ClickHouse | the command, run against the preview |
+| the collector or the settings bundle | the collector contract tests: the preview has no collector |
+| tests or docs only | no stack: break the guard once, show the one-line failure, put it back |
 
-Say which applies and why. A change can be in more than one row. If none needs the stack, skip to
-step 5.
+**The preview stack** is a second Cardo built from the branch, over a read-only copy of their
+rows. Run everything in bash (Git Bash on Windows) from the repository root, on the branch: if
+this checkout is elsewhere and not clean, export the branch to a plain directory
+(`git archive <ref> | tar -x -C <dir>`) rather than touching their work.
 
-## 3. Bring it up
-
-```bash
-bash scripts/preview.sh up        # or refresh, if a preview from this checkout is running
-```
-
-The first run builds `cardo` and starts the preview, in a few minutes. It prints the rows it
-copied from each table, up to a cutoff five minutes before now, and the view settings it took from
-the live stack. Report those lines, and both Grafana URLs: the preview on 3002, the live one on
-3001. The preview's password is `GRAFANA_PASSWORD` in `deploy/compose/.env.preview`. Tell them
-where it is, and do not print it.
-
-## 4. Check the copy
-
-```bash
-bash scripts/preview.sh compare
-```
-
-- **Rows:** every table `same`. A difference means rows arrived late or the copy is wrong: run
-  `refresh` and compare again before going on.
-- **Migrations, preview only:** what this change adds to the schema, and any migration already on
-  main that the live stack has not applied yet. Check `git log origin/main -- sql/` before
-  putting one down to the change.
-- **Views added or removed:** the same.
-- **Dashboard views,** each gold view day by day before the cutoff's day:
-  - `same`: the preview is faithful on those days.
-  - `differs on day …: a session that started then was still open`: expected. The views report a
-    session's events on the day it started, so live keeps adding to that day while the session
-    runs, and the preview stands still. The Claude Code session running this walk is usually one.
-    Leave that day out of any comparison, or `refresh` once the session has ended.
-  - `columns differ`: the change reshapes that view.
-  - `DIFFERENT`: unexplained. From main, or a change with no SQL, the copy is wrong: stop. From a
-    change to the views, it should be exactly the views the change touches, and any other is a
-    finding.
-
-Then ask them to open one panel in each Grafana, over days `compare` shows as the same, and say
-the figures they should both show. If a day is named as open, say which, and that live will be
-higher there.
-
-## 5. Walk each claim
-
-Take the claims from the pull request's **How to see it** section, or from the work item's brief
-if there is no pull request yet. For each claim, one at a time:
-
-1. Say what it claims, in one sentence.
-2. Show it:
-   - **a panel:** the dashboard and panel name on 3002, the figure to expect, and the same panel
-     on 3001 to compare;
-   - **a view:** query it in the preview, with a count or a few rows of shape, no pseudonyms:
-     `docker exec cardo-preview-clickhouse-1 sh -c 'clickhouse-client --user "$CLICKHOUSE_USER" --password "$CLICKHOUSE_PASSWORD" --query "..."'`;
-   - **a command:** run the preview's build of it against the preview, from `deploy/compose`:
-     `docker compose -p cardo-preview --env-file .env.preview -f docker-compose.yml -f docker-compose.preview.yml run --rm -T migrate <command>`;
-   - **a guard:** break it as in step 2, and show the failure message.
-3. Explain what they are looking at, and how it follows from the design: the ADR or invariant it
-   rests on.
-4. Ask whether it matches what they see, and whether it is what they expected. Wait.
-
-## 6. Prove the live stack was only read
-
-```bash
-bash scripts/preview.sh verify-live
-```
-
-It waits for the live server's query log, which is written once a minute, then lists every query
-the preview has sent it in the last three days. It must say PASS: all SELECT, all `readonly=1`. A
-FAIL ends the walk, whatever else passed.
-
-## 7. Close
-
-- **A short table:** each claim, what was shown, and whether it held.
-- **Anything found:** a mismatch, a surprise, a question they raised. Say what you would do about
-  it, and do not do it yet.
-- **Next:** if there is no pull request yet, offer to open one, with a **How to see it** section
-  listing the steps you just ran, so the next person can repeat them. If there is one, it is theirs
-  to merge.
-- **The preview:** ask whether to keep it for a second look or remove it with
-  `bash scripts/preview.sh down`. Removing a worktree made in step 1 is `git worktree remove <dir>`.
+1. `bash scripts/preview.sh up` builds and starts it, in a few minutes. Tell them: the preview's
+   Grafana is <http://127.0.0.1:3002>, signed in as `admin` with `GRAFANA_PASSWORD` from
+   `deploy/compose/.env.preview` (say where it is, never print it); theirs stays on 3001, and both
+   can be open at once.
+2. `bash scripts/preview.sh compare`, then give them its conclusion in a sentence, not its table:
+   - every table and dashboard view `same`: the copy is faithful;
+   - a day named as "still open": a session that started then was still running at the copy, so
+     their live stack keeps adding to that day. Leave it out of any comparison. The session
+     running this demo is usually one;
+   - a migration only the preview has: the change's own, or one on main their stack has not
+     applied yet. Check `git log origin/main -- sql/` before putting it down to the change;
+   - `DIFFERENT`, unexplained: from main or a change with no SQL, the copy is wrong; stop. From a
+     change to the views, it should be only the views the change touches.
+3. Show the one or two things the change is about: the panel on 3002 beside the same one on 3001,
+   or the command's output, with the figure they should see. You cannot see Grafana: read the
+   figure from the preview yourself first. A command runs from `deploy/compose` as
+   `docker compose -p cardo-preview --env-file .env.preview -f docker-compose.yml -f docker-compose.preview.yml run --rm -T migrate <command>`.
+4. `bash scripts/preview.sh verify-live` must say PASS. Report it in a line: their live stack was
+   only read. A FAIL ends the demo, whatever else passed.
+5. Ask whether to keep the preview for another look, or remove it with
+   `bash scripts/preview.sh down`.
