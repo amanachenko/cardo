@@ -87,12 +87,24 @@ bash scripts/preview.sh compare
 
 - **Rows:** every table `same`. A difference means rows arrived late or the copy is wrong: run
   `refresh` and compare again before going on.
-- **Migrations, preview only:** what this change adds to the schema. It should match the diff.
+- **Migrations, preview only:** what this change adds to the schema, and any migration already on
+  main that the live stack has not applied yet. Check `git log origin/main -- sql/` before
+  putting one down to the change.
 - **Views added or removed:** the same.
+- **Dashboard views,** each gold view day by day before the cutoff's day:
+  - `same`: the preview is faithful on those days.
+  - `differs on day …: a session that started then was still open`: expected. The views report a
+    session's events on the day it started, so live keeps adding to that day while the session
+    runs, and the preview stands still. The Claude Code session running this walk is usually one.
+    Leave that day out of any comparison, or `refresh` once the session has ended.
+  - `columns differ`: the change reshapes that view.
+  - `DIFFERENT`: unexplained. From main, or a change with no SQL, the copy is wrong: stop. From a
+    change to the views, it should be exactly the views the change touches, and any other is a
+    finding.
 
-From main, or a change with no SQL and no dashboard, the two Grafanas must show the same figures
-over a time range that ends before the cutoff. That is the check that the preview is faithful.
-Ask them to open one panel in each and compare.
+Then ask them to open one panel in each Grafana, over days `compare` shows as the same, and say
+the figures they should both show. If a day is named as open, say which, and that live will be
+higher there.
 
 ## 5. Walk each claim
 

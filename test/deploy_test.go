@@ -350,6 +350,34 @@ func TestINV7_EdgeProxyMakesNoOutboundCalls(t *testing.T) {
 	}
 }
 
+// ClickHouse is healthy only when other containers can reach it.
+//
+// Another real failure: on a fresh volume the image's entrypoint runs a temporary server bound to
+// 127.0.0.1 to create the user and database, then stops it and starts the real one, a few seconds
+// later. A healthcheck on localhost passed against the temporary server, compose reported
+// "healthy", and migrate, which waits for exactly that, was refused at clickhouse:8123. Migrate
+// does not restart, and the collector waits for migrate, so a first `docker compose up -d` could
+// end with no collector. Probing by the service name goes through the network address, where the
+// temporary server does not listen.
+func TestDeployClickHouseHealthyMeansReachable(t *testing.T) {
+	root := repoRoot(t)
+	raw, err := os.ReadFile(filepath.Join(root, "deploy", "compose", "docker-compose.yml"))
+	if err != nil {
+		t.Skip("no compose stack yet:", err)
+	}
+	m := regexp.MustCompile(`(?m)^  clickhouse:\n(?:    .*\n|\s*\n)*?    healthcheck:\n(?:      #.*\n)*      test:(.*)`).
+		FindStringSubmatch(strings.ReplaceAll(string(raw), "\r\n", "\n"))
+	if m == nil {
+		t.Fatal("found no healthcheck test on the clickhouse service in docker-compose.yml. " +
+			"The parser is wrong or the file is.")
+	}
+	if !strings.Contains(m[1], `"--host", "clickhouse"`) {
+		t.Errorf("the clickhouse healthcheck is %s. It must connect by the service name "+
+			`("--host", "clickhouse"): on localhost it passes against the entrypoint's temporary `+
+			"server, and migrate is refused.", strings.TrimSpace(m[1]))
+	}
+}
+
 // The preview stack (scripts/preview.sh) holds a copy of a live stack's rows, so it is held to the
 // reference stack's rules, and kept apart from the stack it copies:
 //
@@ -358,6 +386,7 @@ func TestINV7_EdgeProxyMakesNoOutboundCalls(t *testing.T) {
 //     3001 and 8124, which the live stack holds;
 //   - it builds cardo under its own tag, so a preview never replaces the image the live stack runs;
 //   - it never starts a collector, so nothing can send to it by mistake;
+//   - its Grafana has its own session cookie, so it does not sign you out of the live one;
 //   - the script sends the live stack nothing but read-only queries.
 func TestPreviewStackStaysLocalAndApart(t *testing.T) {
 	root := repoRoot(t)
@@ -391,6 +420,11 @@ func TestPreviewStackStaysLocalAndApart(t *testing.T) {
 	}
 	if !regexp.MustCompile(`(?m)^  collector:\n(\s+#.*\n)*\s+profiles:`).MatchString(compose) {
 		t.Error("the preview must never start a collector: give it a profile nobody activates.")
+	}
+	if m := regexp.MustCompile(`(?m)^\s*GF_AUTH_LOGIN_COOKIE_NAME:\s*(\S+)\s*$`).FindStringSubmatch(compose); m == nil || m[1] == "grafana_session" {
+		t.Error("the preview's Grafana needs its own GF_AUTH_LOGIN_COOKIE_NAME. Browsers keep " +
+			"cookies by host, not port, so with the default, signing in to it signs you out of the " +
+			"live Grafana on the same 127.0.0.1, within seconds.")
 	}
 
 	script, err := os.ReadFile(filepath.Join(root, "scripts", "preview.sh"))

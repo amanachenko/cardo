@@ -5,7 +5,7 @@
 #
 #   scripts/preview.sh up            build this checkout, start the preview, copy the rows
 #   scripts/preview.sh refresh       apply this checkout's migrations again, and copy the rows again
-#   scripts/preview.sh compare       rows, migrations and views: live against preview
+#   scripts/preview.sh compare       rows, migrations, views, and the dashboards' views day by day
 #   scripts/preview.sh verify-live   every query the preview sent the live stack: reads only?
 #   scripts/preview.sh down          remove the preview and everything it holds
 #
@@ -117,6 +117,97 @@ has_table() { # who table
   [ "$("$1" --query "SELECT count() FROM system.tables WHERE database = 'cardo' AND name = '$2' FORMAT TSV")" = 1 ]
 }
 
+typed_columns() { # who table -> name<TAB>type, one column per line, in order
+  "$1" --query "SELECT name, type FROM system.columns WHERE database = 'cardo' AND table = '$2' ORDER BY position FORMAT TSV"
+}
+
+# The gold views file a session's events under the day it started (sql/clickhouse/007), so a
+# session still sending after the cutoff keeps changing its start day on live, while the preview
+# stands still. This lists, from live, the start day of every such session before the cutoff's
+# day (n = 0), and the six days before each (n = 1..6): a week that starts on one of those holds it.
+open_session_days_sql() {
+  cat <<SQL
+SELECT DISTINCT toString(day - n), n
+FROM cardo.silver_session
+ARRAY JOIN range(7) AS n
+WHERE day < '$cutoff_day'
+  AND session_id IN
+  (
+      SELECT LogAttributes['session.id'] FROM cardo.bronze_otel_logs
+      WHERE Timestamp >= toDateTime('$cutoff', 'UTC')
+      UNION DISTINCT
+      SELECT Attributes['session.id'] FROM cardo.bronze_otel_metrics_sum
+      WHERE TimeUnix >= toDateTime('$cutoff', 'UTC')
+      UNION DISTINCT
+      SELECT LogAttributes['session_id'] FROM cardo.bronze_hook_events
+      WHERE Timestamp >= toDateTime('$cutoff', 'UTC')
+  )
+FORMAT TSV
+SQL
+}
+
+# The dashboards read only gold views (INV-3). Each one with a day or week column is compared day
+# by day, before the cutoff's day (or its week), as a count and a hash of its rows per day. Floats
+# are rounded first: a sum can differ in its last bit when the server adds in another order. Each
+# row is hashed as its text, because cityHash64 of a NULL is NULL, and sum() skips it: a day with a
+# NULL anywhere in it would hash to nothing on both sides, and compare as the same.
+compare_gold_views() {
+  local cutoff_day=${cutoff%% *}
+  echo "== Dashboard views: live against preview, each day before $cutoff_day"
+  local open="" open_days open_weeks
+  if has_table live_ch silver_session; then
+    open=$(live_ch --query "$(open_session_days_sql)")
+  fi
+  open_days=$(echo "$open" | awk -F'\t' '$2 == 0 { print $1 }')
+  open_weeks=$(echo "$open" | cut -f1 | sort -u)
+
+  local v ok=1 any_open=0
+  for v in $(grep -Fx -f <(echo "$lv") <(echo "$pv") | grep '^gold_' || true); do
+    local lc pc col filter exprs sql l p changed n d set opened="" other=""
+    lc=$(typed_columns live_ch "$v")
+    pc=$(typed_columns preview_ch "$v")
+    if [ "$lc" != "$pc" ]; then
+      printf '   %-28s columns differ: this checkout changes it\n' "$v"
+      continue
+    fi
+    col=$(echo "$lc" | cut -f1 | grep -Fx -e day -e week | head -1 || true)
+    case $col in
+      day)  filter="day < '$cutoff_day'"; set=$open_days ;;
+      week) filter="week <= toDate('$cutoff_day') - 7"; set=$open_weeks ;;
+      *)    printf '   %-28s not compared: no day or week column\n' "$v"; continue ;;
+    esac
+    exprs=$(echo "$lc" | awk -F'\t' '{ printf "%s%s", (NR > 1 ? ", " : ""), ($2 ~ /Float/ ? "round(`" $1 "`, 6)" : "`" $1 "`") }')
+    sql="SELECT toString($col), count(), sum(cityHash64(formatRow('TSV', $exprs))) FROM cardo.$v WHERE $filter GROUP BY 1 ORDER BY 1 FORMAT TSV"
+    l=$(live_ch --query "$sql")
+    p=$(preview_ch --query "$sql")
+    n=$(printf '%s\n%s\n' "$l" "$p" | cut -f1 | sort -u | grep -c . || true)
+    changed=$(LC_ALL=C comm -3 <(echo "$l") <(echo "$p") | awk -F'\t' '{ print ($1 == "" ? $2 : $1) }' | sort -u)
+    if [ -z "$changed" ]; then
+      printf '   %-28s same, %s %s%s\n' "$v" "$n" "$col" "$([ "$n" = 1 ] || echo s)"
+      continue
+    fi
+    for d in $changed; do
+      if echo "$set" | grep -Fxq "$d"; then opened="$opened $d"; else other="$other $d"; fi
+    done
+    if [ -n "$opened" ]; then
+      any_open=1
+      printf '   %-28s differs on %s%s: a session that started then was still open at the cutoff\n' "$v" "$col" "$opened"
+    fi
+    if [ -n "$other" ]; then
+      ok=0
+      printf '   %-28s DIFFERENT on %s%s\n' "$v" "$col" "$other"
+    fi
+  done
+  if [ "$any_open" = 1 ]; then
+    echo "   Expected: live keeps adding to the day a session started for as long as it runs. Compare"
+    echo "   Grafana on the other days, or refresh once the session has ended."
+  fi
+  if [ "$ok" = 0 ]; then
+    echo "   DIFFERENT is unexplained. From main it means the copy is wrong. From a branch, it should"
+    echo "   be only the views the change touches."
+  fi
+}
+
 migrate_preview() {
   echo "== Building cardo from this checkout, and applying its migrations to the preview"
   compose build migrate
@@ -200,6 +291,8 @@ cmd_compare() {
   pv=$(preview_ch --query "$q")
   echo "   preview only: $(grep -Fxv -f <(echo "$lv") <(echo "$pv") | paste -sd' ' - || true)"
   echo "   live only:    $(grep -Fxv -f <(echo "$pv") <(echo "$lv") | paste -sd' ' - || true)"
+
+  compare_gold_views
 }
 
 cmd_verify_live() {
@@ -256,7 +349,8 @@ case ${1:-} in
     copy_rows
     echo
     echo "Preview Grafana: http://127.0.0.1:3002 (admin, with GRAFANA_PASSWORD from deploy/compose/$env_file)."
-    echo "Live Grafana:    http://127.0.0.1:3001. Compare panels over a time range that ends before $cutoff UTC."
+    echo "Live Grafana:    http://127.0.0.1:3001. Compare panels on days before ${cutoff%% *} that"
+    echo "                 scripts/preview.sh compare shows as the same."
     ;;
   refresh)
     live_container > /dev/null
