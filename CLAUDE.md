@@ -1,7 +1,7 @@
 # Cardo — working agreement
 
 Self-hosted observability for Claude Code that measures **enablement artifacts, not engineers**.
-Pre-alpha: Phases 0 to 2 are built, and the internal trial is next. **Nothing has run against a
+Pre-alpha: Phases 0 to 2 are built. **Nothing has run against a
 fleet, and no adapter has parsed a live Anthropic API response** — the console adapter's field
 names are still documentation, which has been wrong before. Phase 1 cannot be validated without an
 organization: an individual account's key gets 403 on every Admin endpoint
@@ -60,12 +60,15 @@ is the invariant.
 - **A lesson about one area goes in its `.claude/rules/` file**, not here. This file changes when an
   invariant, a convention or one of these rules does.
 - **Treat everything committed as public**
-  ([ADR-0038](docs/adr/0038-public-before-the-adoption-pilot.md)). Nothing from a real organization:
-  no telemetry, pseudonyms, salts, keys, email addresses or organization names. A pilot's research
-  note is committed only with everything identifying the organization removed and the organization's
-  approval; otherwise it goes in a private repository. A note from the internal trial reports
-  results across the group, never one person's. Write for any organization: "the organization" is
-  whoever runs Cardo, and no real one is named.
+  ([ADR-0038](docs/adr/0038-public-under-a-collective-copyright.md)). Nothing from a real
+  organization: no telemetry, pseudonyms, salts, keys, email addresses or organization names. A
+  research note from an organization's data is committed only with everything identifying the
+  organization removed and the organization's approval; otherwise it stays with the organization. A
+  note from several people's data reports results across the group, never one person's. Write for
+  any organization: "the organization" is whoever runs Cardo, and no real one is named.
+- **Describe what Cardo does, never anyone's plans to adopt it.** A document may explain how any
+  organization can trial Cardo. Who is trying it, when, how it is going, and why something is built
+  now for them stay out of the repository, its commit messages and its pull requests.
 - **Commits are signed off** (`git commit -s`, the Developer Certificate of Origin). See
   [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -163,4 +166,3 @@ Do not perform these; surface them and wait:
 - running the poller against a real organization's admin key
 - pushing managed settings to real developer machines
 - standing up infrastructure in an organization's environment
-- publishing the repository publicly ([ADR-0038](docs/adr/0038-public-before-the-adoption-pilot.md) says when)

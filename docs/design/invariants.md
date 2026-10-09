@@ -24,7 +24,7 @@ must never reach a table, a log file, a metric label or an export.
 
 *Why:* Claude Code emits `user.email` unconditionally and it cannot be suppressed at source, so the only
 place the promise can be kept is in transit.
-*Source:* [ADR-0006](../adr/0006-pseudonymization.md); upheld for the pilots by
+*Source:* [ADR-0006](../adr/0006-pseudonymization.md); upheld for pilots by
 [ADR-0034](../adr/0034-identity-in-pilots.md), which considered storing emails "just for the pilot"
 and refused. *Tested by:* CI schema sweep for any column named or containing `email`.
 

@@ -1,6 +1,6 @@
 # ADR-0015 — Apache-2.0, no CLA, private until an organization runs it
 
-**Status:** Superseded by [ADR-0038](0038-public-before-the-adoption-pilot.md)
+**Status:** Superseded by [ADR-0038](0038-public-under-a-collective-copyright.md)
 **Date:** 2026-09-22
 **Evidence:** Judgment, no evidence.
 
