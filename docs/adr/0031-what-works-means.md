@@ -2,6 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-09-25
+**Edited:** 2026-10-09, in place, to word it for any organization. The decision is unchanged.
 **Evidence:** `2026-09-25-stakeholder-field-notes.md` (auto mode; no commit identifier on any
 surface); `2026-09-24-first-real-hook-payloads.md` and `2026-09-24-second-real-session.md` (what
 auto mode sends). **The efficiency signals are judgment and explicitly unvalidated** — see
@@ -61,12 +62,12 @@ check that enforces it stays.
   merge and revert rate move for Claude-assisted PRs compared with the rest?
 - **Source:** GitHub first. Importing from a delivery tool the organization already runs is the
   alternative.
-- **Not before the adoption pilot.** A credential that reads repositories meets real resistance.
-  Comparing tools raises its priority, because the git host measures every tool the same way. Where
-  it lands is in [`docs/roadmap.md`](../roadmap.md).
+- **Not before a pilot at an organization.** A credential that reads repositories meets real
+  resistance. Comparing tools raises its priority, because the git host measures every tool the
+  same way. Where it lands is in [`docs/roadmap.md`](../roadmap.md).
 
-**The efficiency family is a hypothesis.** The dogfood and the adoption pilot exist partly to test
-it, and churn is the least certain signal: a refactor also removes lines.
+**The efficiency family is a hypothesis.** Pilots exist partly to test it, and churn is the least
+certain signal: a refactor also removes lines.
 
 ## Consequences
 
@@ -77,7 +78,7 @@ it, and churn is the least certain signal: a refactor also removes lines.
   still applies to it.
 - **Some signals need fields that are unobserved or undocumented**: retry loops need the order of
   `tool_result` events within a prompt, and churn needs `lines_of_code.count` by type within a
-  session. The dogfood checks both before any view depends on them.
+  session. Both are checked on real sessions before any view depends on them.
 - Delivery outcomes add a second external credential beside the admin key, and a second poller.
 - "Friction" survives as a word for one part of the family, not as the headline number.
 

@@ -2,6 +2,7 @@
 
 **Status:** Accepted — **not built**
 **Date:** 2026-10-08
+**Edited:** 2026-10-09, in place, to word it for any organization. The decision is unchanged.
 **Evidence:** Judgment, no evidence. A contributor's proposal of 2026-10-07 described a coach that
 maps patterns in a person's sessions to tools.
 
@@ -56,10 +57,10 @@ pilot's "acted on a suggestion" is read.
   an engineer to try it. Nothing about one engineer reaches anyone else (INV-3); what reaches the
   engineer is drawn from the fleet.
 - The coach is built after the artifact views and from them: a suggestion needs the spread and
-  efficiency figures of what it names. Early in the dogfood, before anything home-grown has spread
+  efficiency figures of what it names. Early in a deployment, before anything home-grown has spread
   past five people, the coach can suggest only the organization's own artifacts.
-- Tier-1 suggestions are coarse. That is the price of not collecting content, and the adoption
-  pilot's "acted on a suggestion" criterion measures whether coarse is enough.
+- Tier-1 suggestions are coarse. That is the price of not collecting content, and a pilot's
+  "acted on a suggestion" criterion measures whether coarse is enough.
 - "Which artifacts they have not tried" stays the most personal thing on the page, and
   [risks.md](../../risks.md) #17 applies unchanged.
 

@@ -1,7 +1,8 @@
 # ADR-0033 — A budget owner may see cost per person, and nothing more
 
-**Status:** Accepted — **not built**, and not part of the pilots
+**Status:** Accepted — **not built**, and offered only when an organization asks
 **Date:** 2026-09-25
+**Edited:** 2026-10-09, in place, to word it for any organization. The decision is unchanged.
 **Evidence:** `2026-09-25-stakeholder-field-notes.md` section 3 (leadership already watches cost per
 person); `2026-09-23-admin-analytics-apis.md` (the fields Anthropic shows per person). The shape is
 judgment.
@@ -43,8 +44,8 @@ Anthropic's console doesn't already, and shows it to you first.**
 
 - `docs/design/invariants.md` states the exception under INV-3, and says it is not built.
 - **The view needs names.** Names exist only when Cardo delivers something
-  ([ADR-0034](0034-identity-in-pilots.md)), so this view needs a delivery path that the pilots do
-  not build. It is not part of any pilot. During the pilots leadership keeps using the console for
+  ([ADR-0034](0034-identity-in-pilots.md)), so this view needs a delivery path that a pilot does
+  not need. It is not part of any pilot. During a pilot leadership keeps using the console for
   names, which is exactly what this view would show them.
 - When it is built, a test pins its field list, as the collector's allowlist is pinned.
 - The budget has to be published to engineers before the view runs. Otherwise "a list of exceptions

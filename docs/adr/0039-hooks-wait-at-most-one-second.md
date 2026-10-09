@@ -2,6 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-10-06
+**Edited:** 2026-10-09, in place, to word it for any organization. The decision is unchanged.
 **Evidence:** `2026-10-06-http-hooks-wait.md`, measured on Claude Code 2.1.289, with the hooks
 documentation it quotes.
 **Supersedes:** [ADR-0024](0024-bundle-configures-telemetry-only.md),
@@ -34,8 +35,8 @@ The default timeout is 600 s on most other events. Two more facts came with the 
 - **Claude Code does not run HTTP hooks on `SessionStart`.** Since 2.1.281 the hook has been
   registered and never run.
 
-The team setup chosen for the dogfood, a public DNS record pointing at a private address, produces
-the dropped-packet case on every laptop off the VPN.
+A team setup with a public DNS record pointing at a private address produces the dropped-packet
+case on every laptop off the VPN.
 
 ## Decision
 

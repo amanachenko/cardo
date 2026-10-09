@@ -3,6 +3,7 @@
 **Status:** Accepted — **partly built**: collection and classification (decisions 1 and 2). No view
 reads them yet, and decisions 3 and 4 are not built.
 **Date:** 2026-09-25
+**Edited:** 2026-10-09, in place, to word it for any organization. The decision is unchanged.
 **Evidence:** `2026-09-20-claude-code-telemetry-surfaces.md` (the `vcs.*` attributes and their flag,
 **documented, not observed**); `2026-09-24-first-real-hook-payloads.md` (what `InstructionsLoaded`
 sends). The classification is judgment.
@@ -68,7 +69,7 @@ decision for security exceptions ([ADR-0037](0037-policy-evidence.md)).
 
 ## Consequences
 
-- **The attribute has not been observed.** The dogfood has to confirm three things before any view
+- **The attribute has not been observed.** Real sessions have to confirm three things before any view
   depends on it:
   - that it arrives at all;
   - on which records (metrics only, or logs too);

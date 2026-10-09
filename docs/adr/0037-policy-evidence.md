@@ -2,6 +2,7 @@
 
 **Status:** Accepted — **not built**
 **Date:** 2026-09-25
+**Edited:** 2026-10-09, in place, to word it for any organization. The decision is unchanged.
 **Evidence:** `2026-09-25-stakeholder-field-notes.md` (organizations that ban adoption;
 `organization.id`); `2026-09-23-admin-analytics-apis.md` (per-person activity from Anthropic).
 Otherwise judgment.
@@ -64,8 +65,8 @@ it needs either content, which INV-5 forbids, or a baseline of normal that does 
 
 ## Consequences
 
-- The report is the deliverable of the third pilot, at an organization that currently bans Claude
-  Code ([`docs/roadmap.md`](../roadmap.md)).
+- The report is what lets an organization that does not allow Claude Code yet allow a controlled
+  group ([`docs/roadmap.md`](../roadmap.md)).
 - **The organization supplies two things:** its approved MCP list and its minimum version. Both
   are configuration, not something Cardo infers.
 - **What the evidence cannot see, stated in every report:**

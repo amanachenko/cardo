@@ -2,6 +2,7 @@
 
 **Status:** Accepted — **not built**
 **Date:** 2026-10-08
+**Edited:** 2026-10-09, in place, to word it for any organization. The decision is unchanged.
 **Evidence:** Judgment, no evidence. `2026-09-25-stakeholder-field-notes.md` records adoption
 turning top-down; a contributor's proposal of 2026-10-07 argued that usage is not value.
 
@@ -25,12 +26,12 @@ A contributor's proposal put it as "usage is not value": a skill can be invoked 
 and make each of those sessions worse. Cardo would show the forty.
 
 The same proposal had every artifact view end in a verdict computed by a gate: keep, change or
-kill. The decision it points at is the right one. The adoption pilot succeeds when the adoption
-owner decides something, such as making an artifact official or retiring one
-([roadmap](../roadmap.md)). A computed verdict is a different thing. The efficiency family is a
-hypothesis (ADR-0031, [risks.md](../../risks.md) #1), and a "kill" stamped on a champion's skill
-from unvalidated signals would cost Cardo the people adoption runs on: seeing their work spread is
-their reward (ADR-0030).
+kill. The decision it points at is the right one. A pilot succeeds when the adoption owner
+decides something, such as making an artifact official or retiring one
+([roadmap](../roadmap.md#how-a-pilot-judges-cardo)). A computed verdict is a different thing. The
+efficiency family is a hypothesis (ADR-0031, [risks.md](../../risks.md) #1), and a "kill" stamped
+on a champion's skill from unvalidated signals would cost Cardo the people adoption runs on: seeing
+their work spread is their reward (ADR-0030).
 
 ## Decision
 
@@ -72,8 +73,8 @@ to test next, not as a finding. The record goes with the pilot's notes, under
 
 ## Consequences
 
-- Before the adoption pilot, the operator's configuration gains a rollout list and the artifact
-  views gain a column saying how each artifact arrived. The mechanism is not decided.
+- Before a pilot at an organization, the operator's configuration gains a rollout list and the
+  artifact views gain a column saying how each artifact arrived. The mechanism is not decided.
 - A rolled-out artifact can show near-total reach and no measured effect. That is a finding, and
   the view has to make it as easy to read as a success.
 - A before-and-after comparison needs the "before" still in retention. With tier 1 kept for 90
