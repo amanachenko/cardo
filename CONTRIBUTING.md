@@ -4,6 +4,12 @@ Cardo is pre-alpha, and contributions are welcome. Start with the design record:
 look like obvious improvements have already been considered, and the reason they were refused is
 written down.
 
+## Where to help
+
+The order of work is the [work items](docs/roadmap.md#work-items) at the end of the roadmap. Each
+says whether it is taken, open, waiting for something, or needs a decision first. Before starting
+an open one, say so in an issue or a draft pull request.
+
 ## Before changing anything
 
 Read, in this order:
@@ -45,9 +51,13 @@ Treat everything committed here as public. Never commit:
 - the name of an organization that runs Cardo, or anything that identifies one;
 - transcripts, prompts or code from anyone's sessions.
 
-Test fixtures use invented values. A pilot's findings become a dated research note only with
-everything that identifies the organization removed, and with its approval. Otherwise they stay in
-a private repository ([ADR-0038](docs/adr/0038-public-before-the-adoption-pilot.md)).
+Test fixtures use invented values. Findings from an organization's data become a dated research
+note only with everything that identifies the organization removed, and with its approval.
+Otherwise they stay with the organization
+([ADR-0038](docs/adr/0038-public-under-a-collective-copyright.md)).
+
+Describe what Cardo does. How any organization can trial it belongs here; anyone's plans to adopt
+it do not: who is trying it, when, or how it is going.
 
 ## Checks
 

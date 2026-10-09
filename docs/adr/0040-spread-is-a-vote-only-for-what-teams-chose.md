@@ -68,7 +68,7 @@ computes no keep, change or kill, and no composite score for an artifact.
 to say one approach is more efficient than another, the claim is recorded with its comparison, its
 signal and the result that would refute it. A difference found by looking is reported as something
 to test next, not as a finding. The record goes with the pilot's notes, under
-[ADR-0038](0038-public-before-the-adoption-pilot.md)'s rules for what may be committed.
+[ADR-0038](0038-public-under-a-collective-copyright.md)'s rules for what may be committed.
 
 ## Consequences
 

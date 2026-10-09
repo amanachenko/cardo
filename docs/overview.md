@@ -66,7 +66,7 @@ what the console shows, and each engineer sees their own position first.
 
 ### Engineers
 
-- **A private coach page** *(planned for the pilots)*. It makes specific suggestions you can act on,
+- **A private coach page** *(planned)*. It makes specific suggestions you can act on,
   for example:
   - "you waited 14 minutes this week on permission prompts for `npm test`, and here is the rule
     that stops it";
@@ -130,19 +130,19 @@ what the console shows, and each engineer sees their own position first.
 | Collection: the settings file, hooks, and a collector that hashes identity and drops content | **Built**, and checked against real Claude Code sessions |
 | Artifact usage, instructions versions, context and model-switch cost, and a dashboard | **Built**, and checked against those sessions |
 | Reading Anthropic's usage data | **Built**; not yet run against a live organization |
-| Coach pages, efficiency comparisons, repository classification, teams from your directory, the board report | **Planned for the pilots** |
-| Evidence report, coverage, SIEM events | **Planned** for the security pilot |
+| Coach pages, efficiency comparisons, repository classification, teams from your directory, the board report | **Planned** |
+| Evidence report, coverage, SIEM events | **Planned** |
 | Named cost view, pull-request outcomes, other AI tools | **When an organization asks** |
 
 Cardo is pre-alpha. It has not yet run with a team. Whether its efficiency signals really separate
-approaches that work from ones that don't is something the pilots exist to find out.
+approaches that work from ones that don't is something a pilot has to find out.
 
 ---
 
-## How the pilots run
+## Trying it in your organization
 
-1. **Internal trial:** a small team, for two to three weeks.
-2. **Adoption pilot:** 15 to 30 of your engineers in three or more teams, for four to six weeks. It
+1. **A small team first,** for two to three weeks.
+2. **A pilot:** 15 to 30 of your engineers in three or more teams, for four to six weeks. It
    needs, from your side:
    - a small machine in your network;
    - a champion;
@@ -153,8 +153,8 @@ approaches that work from ones that don't is something the pilots exist to find 
    Success means leadership made at least one decision from it, at least half the volunteers acted
    on a suggestion, and nobody feels more watched than before. People are interviewed at the end.
    If nobody acted on anything, the pilot's findings say so.
-3. **Security pilot:** for an organization that currently doesn't allow Claude Code. A controlled
-   group is allowed, on condition of the evidence report.
+3. **If your organization doesn't allow Claude Code yet:** a controlled group is allowed, on
+   condition of the evidence report.
 
 ---
 

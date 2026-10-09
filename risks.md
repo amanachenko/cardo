@@ -18,7 +18,7 @@ is held for review, so two of the index's three components fall towards zero.
 - churn;
 - turns and cost per accepted change.
 
-Every part of that family is a hypothesis the dogfood and the adoption pilot test, and churn is the
+Every part of that family is a hypothesis that only data from teams can test, and churn is the
 least certain. The volume rule below carries over unchanged. **Would falsify the family:** approaches
 the adopting organizations know to be better showing no difference in it, compared within the same
 people.
@@ -444,7 +444,7 @@ data source's user is refused a bronze or silver read.
 - **Other-organization sessions are visible only when managed settings are pushed as a file.**
   Settings delivered by Anthropic's server apply only after signing in to the organization.
 
-**Would settle it:** the dogfood, for the first. The first point is a fact about Claude Code, so the
+**Would settle it:** a team's sessions, for the first. The first point is a fact about Claude Code, so the
 answer goes in a dated research note.
 
 **Status 2026-10-06: the first is settled on one machine**
@@ -490,10 +490,10 @@ back, so nothing can be read through it. But anyone on the network can post inve
 a home-grown artifact past five people, or add sessions that never happened.
 
 **Mitigation:** the network overlay's runbook opens the two ports to the office and VPN ranges
-only, and the dogfood is one team. **Would close it:** a decision before the adoption pilot,
-between per-machine client certificates pushed by MDM (Claude Code supports
-`CLAUDE_CODE_CLIENT_CERT` for its exporter), an address allowlist at the proxy, and accepting the
-risk in writing.
+only, and a first deployment serves one team. **Would close it:** a decision, before a deployment
+serves more than one team, between per-machine client certificates pushed by MDM (Claude Code
+supports `CLAUDE_CODE_CLIENT_CERT` for its exporter), an address allowlist at the proxy, and
+accepting the risk in writing.
 
 ### 20. A hook waits for the collector, up to a second
 
@@ -507,9 +507,9 @@ prompt. A hook that times out also loses its event, so a slow network costs data
 
 **Mitigation:** the collector's name resolves only inside the network where it can, so an
 off-network lookup fails in about 0.2 s. **Would settle it:** the one-laptop check's round-trip
-time over the VPN, and whether engineers in the dogfood report the notices. If healthy hooks come
-near a second, the timeout is revisited with that measurement; if the notices annoy people, the
-answer is a reachable collector, not a longer timeout.
+time over the VPN, and whether engineers in a team deployment report the notices. If healthy hooks
+come near a second, the timeout is revisited with that measurement; if the notices annoy people,
+the answer is a reachable collector, not a longer timeout.
 
 ### 21. Cost is an estimate, and on seat-based plans it is not spend
 
@@ -524,7 +524,7 @@ estimates up and calls the total spend is the indefensible number ADR-0030 warns
 **Mitigation:** every cost figure is labelled an estimate in the views and the report, with the
 plan type beside it where the source gives one (`customer_type`). Cardo does not price tokens
 itself: the multipliers for cache reads and writes differ by model and by cache duration, and
-change with releases. **Would settle it:** the adoption pilot, comparing a month's estimate with
+change with releases. **Would settle it:** an organization's pilot, comparing a month's estimate with
 the organization's invoice before the report shows cost.
 
 ### 22. Smaller teams fold into `other`

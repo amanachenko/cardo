@@ -47,7 +47,7 @@ The hard rules that these decisions produce live in
 | [0035](0035-repository-identity-classified.md) | Repository identity is collected, classified at the collector | Accepted, collection built | 2026-09-25 |
 | [0036](0036-service-runs-are-not-people.md) | Service runs are labelled, and are never counted as people | Accepted, not built | 2026-09-25 |
 | [0037](0037-policy-evidence.md) | Policy evidence: conformance, coverage and other organizations | Accepted, not built | 2026-09-25 |
-| [0038](0038-public-before-the-adoption-pilot.md) | Publish before the adoption pilot, under a collective copyright | Accepted | 2026-09-30 |
+| [0038](0038-public-under-a-collective-copyright.md) | Public, Apache-2.0, under a collective copyright | Accepted | 2026-09-30 |
 | [0039](0039-hooks-wait-at-most-one-second.md) | Every hook waits at most one second, and a model switch is read after it happens | Accepted | 2026-10-06 |
 | [0040](0040-spread-is-a-vote-only-for-what-teams-chose.md) | Spread is a vote only for what teams chose | Accepted, not built | 2026-10-08 |
 | [0041](0041-the-coach-suggests-what-the-fleet-has-shown.md) | The coach suggests only what the fleet has shown | Accepted, not built | 2026-10-08 |
@@ -61,17 +61,16 @@ the order they are built in is [`docs/roadmap.md`](../roadmap.md).
 
 Recorded here so a future session knows these were considered and postponed, not overlooked:
 
-- **An authenticated self-view, or coach delivery by message** — only if pilot volunteers act on
-  the coach's suggestions. In the pilots, each volunteer's page is a shared link (ADR-0032).
-- **The named cost view for budget owners** — decided, offered to an organization that asks, not
-  part of any pilot (ADR-0033).
+- **An authenticated self-view, or coach delivery by message** — only if people act on the
+  coach's suggestions. Until then, each volunteer's page is a shared link (ADR-0032).
+- **The named cost view for budget owners** — decided, offered to an organization that asks (ADR-0033).
 - **Handing the salt to the organization's security team** — the operator holds it during pilots;
   custody is offered afterwards (ADR-0034).
 - **Named security exceptions, and the SIEM feed** — after the evidence report (ADR-0037).
 - **Behavioural security detection** — needs content or a baseline (ADR-0003, ADR-0037).
 - **Delivery outcomes from the git host** — joined by repository and week; no surface carries a
   commit id, so the commit-SHA join ADR-0008 planned cannot be built (ADR-0031).
-- **Views for autonomous agent runs** — the label comes first; views when a pilot runs agents
+- **Views for autonomous agent runs** — the label comes first; views when an organization runs agents
   (ADR-0036).
 - **Full adapters for other agents** — as organizations need them, for comparing tools against each
   other (ADR-0004, ADR-0030).
@@ -82,7 +81,7 @@ Recorded here so a future session knows these were considered and postponed, not
 - **Cross-org benchmark feed** — only ever as a separate opt-in product with its own consent story
   (ADR-0013).
 - **Bedrock / Vertex / Foundry support** — out of scope for v1 (ADR-0018, upheld by ADR-0021).
-- **A file-store mode for the collector path** — until a pilot team can run a collector but not
+- **A file-store mode for the collector path** — until a team can run a collector but not
   ClickHouse (ADR-0028).
 - **Materialized collector-path views and rollups** — the views are plain views over 90-day bronze
   (risks.md #10 and #14).

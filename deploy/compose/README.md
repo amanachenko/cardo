@@ -64,11 +64,10 @@ something to draw. `make sample-drop` removes it.
 
 ## Serving a team over the network
 
-The stack above serves one machine. For a group of engineers, such as the dogfood in
-[`docs/roadmap.md`](../../docs/roadmap.md), an overlay adds a Caddy proxy
-(`docker-compose.network.yml`, `edge/Caddyfile`). It publishes the collector's two ports on every
-interface, with TLS in front of them. ClickHouse and Grafana stay on loopback; reach Grafana over
-SSH (`ssh -L 3001:127.0.0.1:3001 <host>`).
+The stack above serves one machine. For a group of engineers, such as a small team trying Cardo
+for a few weeks, an overlay adds a Caddy proxy (`docker-compose.network.yml`, `edge/Caddyfile`).
+It publishes the collector's two ports on every interface, with TLS in front of them. ClickHouse
+and Grafana stay on loopback; reach Grafana over SSH (`ssh -L 3001:127.0.0.1:3001 <host>`).
 
 Run it on an always-on machine inside the organization's network. Every step is the operator's:
 
@@ -104,7 +103,7 @@ Run it on an always-on machine inside the organization's network. Every step is 
    [`managed-settings.json`](../managed-settings/managed-settings.json), replace every occurrence
    of `cardo-collector.internal.example` with your name, and set `cardo.cohort`. Keep the copy
    outside the repository, because its hostname is the organization's
-   ([ADR-0038](../../docs/adr/0038-public-before-the-adoption-pilot.md)). Engineers run
+   ([ADR-0038](../../docs/adr/0038-public-under-a-collective-copyright.md)). Engineers run
    `claude --settings <that file>` and install nothing.
 8. **Check one laptop before anyone else joins.** From a laptop on the VPN, start Claude Code with
    that file and work for a few minutes. Then, on the machine:
