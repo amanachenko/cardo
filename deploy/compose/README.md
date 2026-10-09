@@ -62,6 +62,27 @@ The schema is applied automatically on every run, from migrations embedded in th
 No key yet? `make sample-seed` writes invented data under `source='sample'` so the dashboards have
 something to draw. `make sample-drop` removes it.
 
+## Seeing a change on your own data before it merges
+
+A change to the views, the dashboards or a command is best judged on real sessions. Applying its
+migrations to the stack that collects would leave them in its ledger, and migrations are never
+undone. The preview stack is a second Cardo beside it, built from your checkout, over a copy of
+its rows:
+
+```bash
+bash scripts/preview.sh up            # build this checkout, start the preview, copy the rows
+bash scripts/preview.sh compare       # rows, migrations and views: live against preview
+bash scripts/preview.sh verify-live   # every query sent to the live stack was a read-only SELECT
+bash scripts/preview.sh down          # remove it, with its copy
+```
+
+Run it from the repository root, in bash (Git Bash on Windows). The preview's Grafana is on
+<http://127.0.0.1:3002>, beside the live one on 3001. It has no collector, so it changes only when
+`refresh` copies the rows again. The copy reads the live stack with ClickHouse's `readonly`
+setting, through `docker exec`, and the two stacks share no network
+([`docker-compose.preview.yml`](docker-compose.preview.yml)). In Claude Code, the `/preview`
+skill walks through a branch or pull request this way, one claim at a time.
+
 ## Serving a team over the network
 
 The stack above serves one machine. For a group of engineers, such as a small team trying Cardo

@@ -349,3 +349,65 @@ func TestINV7_EdgeProxyMakesNoOutboundCalls(t *testing.T) {
 			"collector's is. A floating tag changes the proxy under a running deployment.")
 	}
 }
+
+// The preview stack (scripts/preview.sh) holds a copy of a live stack's rows, so it is held to the
+// reference stack's rules, and kept apart from the stack it copies:
+//
+//   - every port it publishes is on loopback, as docker-compose.yml's are (INV-7);
+//   - its ports replace the reference stack's with !override. Merged instead, it would also claim
+//     3001 and 8124, which the live stack holds;
+//   - it builds cardo under its own tag, so a preview never replaces the image the live stack runs;
+//   - it never starts a collector, so nothing can send to it by mistake;
+//   - the script sends the live stack nothing but read-only queries.
+func TestPreviewStackStaysLocalAndApart(t *testing.T) {
+	root := repoRoot(t)
+	raw, err := os.ReadFile(filepath.Join(root, "deploy", "compose", "docker-compose.preview.yml"))
+	if err != nil {
+		t.Skip("no preview stack yet:", err)
+	}
+	compose := strings.ReplaceAll(string(raw), "\r\n", "\n")
+
+	mappings := regexp.MustCompile(`(?m)^\s*-\s*"([^"]*:\d+)"\s*$`).FindAllStringSubmatch(compose, -1)
+	if len(mappings) < 2 {
+		t.Fatalf("found %d port mappings in docker-compose.preview.yml; expected Grafana's and "+
+			"ClickHouse's. The parser is wrong or the file is.", len(mappings))
+	}
+	for _, m := range mappings {
+		if !strings.HasPrefix(m[1], "127.0.0.1:") {
+			t.Errorf("INV-7: the preview publishes %q. It holds a copy of real rows; bind it to "+
+				"127.0.0.1 as docker-compose.yml does.", m[1])
+		}
+	}
+	all := regexp.MustCompile(`(?m)^\s*ports:`).FindAllString(compose, -1)
+	overridden := regexp.MustCompile(`(?m)^\s*ports:\s*!override\s*$`).FindAllString(compose, -1)
+	if len(all) != len(overridden) {
+		t.Errorf("%d of the preview's %d ports: keys lack !override. Without it compose merges "+
+			"the reference stack's ports in, and the preview claims the live stack's.",
+			len(all)-len(overridden), len(all))
+	}
+	if !regexp.MustCompile(`(?m)^\s*image:\s*cardo-preview:dev\s*$`).MatchString(compose) {
+		t.Error("the preview's migrate service must build cardo as cardo-preview:dev. With the " +
+			"reference stack's tag, building a branch replaces the image the live stack runs.")
+	}
+	if !regexp.MustCompile(`(?m)^  collector:\n(\s+#.*\n)*\s+profiles:`).MatchString(compose) {
+		t.Error("the preview must never start a collector: give it a profile nobody activates.")
+	}
+
+	script, err := os.ReadFile(filepath.Join(root, "scripts", "preview.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var uses int
+	for _, l := range strings.Split(string(script), "\n") {
+		if strings.Contains(l, `"$LIVE"`) {
+			uses++
+			if !strings.Contains(l, "--readonly 1") || strings.Contains(l, "exec -i") {
+				t.Errorf("scripts/preview.sh reaches the live stack without --readonly 1, or with "+
+					"stdin: %q. Every query to it goes through live_ch.", strings.TrimSpace(l))
+			}
+		}
+	}
+	if uses != 1 {
+		t.Errorf("scripts/preview.sh uses the live container on %d lines; only live_ch should, once", uses)
+	}
+}
