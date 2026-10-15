@@ -7,7 +7,8 @@ names are still documentation, which has been wrong before. Phase 1 cannot be va
 organization: an individual account's key gets 403 on every Admin endpoint
 ([note](docs/research/2026-09-23-admin-api-individual-account.md)).
 
-What exists: [architecture.md](docs/design/architecture.md). Order of work:
+What exists: [architecture.md](docs/design/architecture.md). What it is for, what it will never
+do, and the rule that orders the work: [vision.md](docs/vision.md). Order of work:
 [roadmap.md](docs/roadmap.md). Who Cardo serves: [ADR-0030](docs/adr/0030-stakeholders-and-questions.md)
 to [ADR-0037](docs/adr/0037-policy-evidence.md). For the organizations that run it:
 [overview.md](docs/overview.md).
@@ -19,7 +20,9 @@ to [ADR-0037](docs/adr/0037-policy-evidence.md). For the organizations that run 
    alternatives.
 3. **[docs/design/architecture.md](docs/design/architecture.md)** — current reality. Trust it over any
    plan document.
-4. **The matching file in `.claude/rules/`** before changing the collector (`collector.md`), the
+4. **[docs/vision.md](docs/vision.md)** — the North Star, what Cardo will never do, and the rule that
+   orders the work. A feature on its "Never" list needs a superseding ADR, not a workaround.
+5. **The matching file in `.claude/rules/`** before changing the collector (`collector.md`), the
    managed-settings bundle (`managed-settings.md`), the ClickHouse store or reference stack
    (`clickhouse.md`), or SQL views and dashboards (`views.md`). Claude Code loads one when a
    matching file is opened with Read, Write or Edit; reached any other way, read it yourself.
@@ -47,6 +50,10 @@ is the invariant.
 
 ## Documentation rules
 
+- **Plain words, and an example for each claim**, in every document people read, every commit
+  message and every pull request. Name a decision, rule or work item rather than giving only its
+  number: "the five-person minimum ([ADR-0029](docs/adr/0029-minimum-group-size.md))", not
+  "ADR-0029"; "the private page", not "item 4". [docs/vision.md](docs/vision.md) shows the style.
 - **ADRs are immutable.** Supersede, never edit. Status: `Proposed` | `Accepted` |
   `Superseded by ADR-NNNN` | `Rejected`.
 - **"Rejected alternatives and why" is mandatory** in every ADR. It is the part future readers need
@@ -157,7 +164,7 @@ Area-specific ones are in `.claude/rules/`.
 - Joining delivery outcomes per person, or by commit SHA. No surface carries a commit id, and per
   person it is a performance review. Join by repository and week (ADR-0031).
 
-## Operator-gated actions — stop and hand back
+## Owner-gated actions — stop and hand back
 
 Do not perform these; surface them and wait:
 

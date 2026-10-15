@@ -52,13 +52,14 @@ Items marked *(planned)* are designed but not yet built. See [What exists today]
 | Do Claude-assisted changes land well? | For your repositories: time to merge and revert rate, Claude-assisted compared with the rest *(on request; needs read access to your git host)* |
 
 **What Cardo deliberately does not give you:**
-- rankings of teams or people;
-- an "hours saved" estimate;
-- productivity per head;
-- any view of how an individual works.
+- rankings of teams or people, or a league table of any kind;
+- an "hours saved" estimate, or a return on investment;
+- anything divided by headcount, such as pull requests per engineer;
+- a view of how one person works, for anyone but that person.
 
 Rankings and scores get gamed, and they turn engineers against the tool. A single number nobody can
-defend discredits every number beside it.
+defend discredits every number beside it. The full list of what Cardo will never do, including a
+hosted version, is in [where Cardo is going](vision.md#never).
 
 **About cost per person.** Anthropic's console already shows it. If you want it in Cardo too, Cardo
 can list the people over a budget you have published *(planned, on request)*. The list carries only
@@ -66,11 +67,10 @@ what the console shows, and each engineer sees their own position first.
 
 ### Engineers
 
-- **A private coach page** *(planned)*. It makes specific suggestions you can act on,
-  for example:
-  - "you waited 14 minutes this week on permission prompts for `npm test`, and here is the rule
-    that stops it";
-  - "six colleagues use `/review` and you haven't tried it".
+- **A private coach page** *(planned)*. It shows your own figures, and suggestions drawn from
+  what people around you have adopted. For example:
+  - "your conversations were squeezed for length twice as often this month as last month";
+  - "11 people here use `/review`, and you haven't tried it yet".
 
   You are compared only with your own past. There is no score and no ranking.
 - **Nobody else sees your page.** During a pilot, the person running the pilot can open it;
@@ -131,8 +131,8 @@ what the console shows, and each engineer sees their own position first.
 | Artifact usage, instructions versions, context and model-switch cost, and a dashboard | **Built**, and checked against those sessions |
 | Reading Anthropic's usage data | **Built**; not yet run against a live organization |
 | Coach pages, efficiency comparisons, repository classification, teams from your directory, the board report | **Planned** |
-| Evidence report, coverage, SIEM events | **Planned** |
-| Named cost view, pull-request outcomes, other AI tools | **When an organization asks** |
+| Evidence report, coverage | **Planned** |
+| Named cost view, pull-request outcomes, other AI tools, events sent to your SIEM | **When an organization asks** |
 
 Cardo is pre-alpha. It has not yet run with a team. Whether its efficiency signals really separate
 approaches that work from ones that don't is something a pilot has to find out.
@@ -145,14 +145,17 @@ approaches that work from ones that don't is something a pilot has to find out.
 2. **A pilot:** 15 to 30 of your engineers in three or more teams, for four to six weeks. It
    needs, from your side:
    - a small machine in your network;
-   - a champion;
+   - someone to run it;
    - the settings file pushed to the volunteers' machines;
    - an export of who is in which team;
    - a read-only Anthropic analytics key.
 
-   Success means leadership made at least one decision from it, at least half the volunteers acted
-   on a suggestion, and nobody feels more watched than before. People are interviewed at the end.
-   If nobody acted on anything, the pilot's findings say so.
+   Success is judged by checks agreed before it starts. The person who answers for adoption made at
+   least one decision from it. At least half the volunteers acted on a suggestion. Engineers feel no
+   more watched at the end than at the start. At least one tool a team built is seen spreading past
+   five people. People are interviewed at the end. If nobody decided or acted on anything, that is
+   the finding, and more is not built until the reason is known. The full list is in the roadmap,
+   under [how a pilot judges Cardo](roadmap.md#how-a-pilot-judges-cardo).
 3. **If your organization doesn't allow Claude Code yet:** a controlled group is allowed, on
    condition of the evidence report.
 
@@ -160,20 +163,15 @@ approaches that work from ones that don't is something a pilot has to find out.
 
 ## Where this is heading
 
-- **From variety to standards.** The question moves from "what's spreading" to "is everyone on the
-  standard, and what does the standard cost". Cardo keeps showing new approaches as they appear,
-  so that standardizing doesn't freeze each team on whatever won first. A rolled-out standard
-  spreads whether it helps or not, so its spread is shown as the rollout's reach, and whether it
-  helps is measured in the same people before and after it arrived *(planned)*.
-- **Agents without a person at the keyboard.** Runs in CI and in the background are labelled by
-  workflow, and their cost belongs to a workflow and a repository, not to anyone. The privacy
-  tension largely disappears there, and measuring approaches rather than people fits it naturally.
-- **Several tools side by side.** Comparing Claude Code with other agents fairly needs a measure
-  none of the vendors supplies. Your git host measures every tool the same way.
-- **Outcomes, per repository.** Pull-request merge time and reverts, Claude-assisted or not, per
-  repository and never per person.
-- **What stays constant:** it runs in your network, the privacy boundary holds, and there are no
-  rankings.
+The question moves from "what's spreading" to "is everyone on the standard, and does the standard
+help". Cardo keeps showing new approaches as they appear, so that standardizing doesn't freeze each
+team on whatever won first. Later, when an organization asks: agents that run with nobody at the
+keyboard, several AI tools side by side, and pull-request outcomes per repository, never per
+person. What stays constant: it runs in your network, the privacy boundary holds, and there are no
+rankings.
+
+The aim, the directions, and how the order of work is chosen are in
+[where Cardo is going](vision.md).
 
 ---
 

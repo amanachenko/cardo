@@ -1,8 +1,11 @@
 # Roadmap — what gets built next
 
 > **A plan, edited in place.** [`docs/design/architecture.md`](design/architecture.md) describes what
-> exists, and the ADRs record decisions. This file is the order of work. **Status 2026-10-09:**
-> Phases 0 to 2 are built. What comes next is the [work items](#work-items) below, in order.
+> exists, and the ADRs record decisions. This file is the order of work. **Status 2026-10-15:**
+> Phases 0 to 2 are built, and nothing is in progress. What comes next is the
+> [work items](#work-items) below, in three steps. The rule that sets the order, build what gets an
+> organization to its first real decision soonest, is explained with an example in
+> [where Cardo is going](vision.md#how-we-choose-what-to-build-next).
 
 ## Where things stand
 
@@ -12,7 +15,9 @@ run with a team, and the poller has never parsed a live Anthropic response
 ([risks.md](../risks.md) #12).
 
 [ADR-0030](adr/0030-stakeholders-and-questions.md) to [ADR-0037](adr/0037-policy-evidence.md)
-decided who Cardo is for and what each of them needs. This file turns that into work.
+decided who Cardo is for and what each of them needs, and
+[the North Star decision (ADR-0042)](adr/0042-the-north-star.md) says what all of it is for. This
+file turns that into work.
 
 ## What Claude Code's telemetry has still to show
 
@@ -51,7 +56,8 @@ run one.
 
 ## Work items
 
-The order of work, one pull request each. Each item says whether you can pick it up:
+The order of work, one pull request each, in three steps. Each item says whether you can pick it
+up:
 
 - **Taken:** someone is building it. Ask in its pull request before starting on it.
 - **Open:** ready to pick up. Say so in an issue or a draft pull request first, so that two people
@@ -59,89 +65,141 @@ The order of work, one pull request each. Each item says whether you can pick it
 - **Needs a decision:** a short design discussion comes first, in an issue. It may end in an ADR.
 - **Waits for:** another item, or data from more than one person.
 
-1. **The dashboard guards check every panel.** The INV-3 and volume tests read only top-level
-   panels. A panel inside a row, or a template variable's query, is not checked. *Taken.*
-2. **A quickstart for one machine, and `cardo check`:** run the stack, send your own sessions to
-   it, and check in one command that what the views rely on has arrived. *Taken.*
-3. **`cardo pseudonym <email>`** ([ADR-0032](adr/0032-engineer-coach-by-shared-link.md),
-   [ADR-0034](adr/0034-identity-in-pilots.md)). *Taken.*
-4. **The coach, figures only, and `cardo coach`**
-   ([ADR-0032](adr/0032-engineer-coach-by-shared-link.md),
-   [ADR-0041](adr/0041-the-coach-suggests-what-the-fleet-has-shown.md)).
-   - **What it shows:** permission waits, compactions, retry loops and context size, each against
-     the person's own past.
-   - **A CI rule:** every query is fixed to one pseudonym, or reads gold only.
+Nothing is taken today.
 
-   *Taken; waits for 3.*
-5. **Several machines' data in one store: export, import and removal, with their ADR.** The export
-   is a file its owner can read before sending, with no repository names and no organization id.
-   The import replaces by session, because the bronze tables have no key, and a second import would
-   double every count. *Taken.*
-6. **The efficiency family, first version** ([ADR-0031](adr/0031-what-works-means.md)). It replaces
-   the friction panels and drops the team breakdown from friction:
-   - failures, split into shell and other tools;
-   - retry loops;
-   - auto-mode denials;
-   - compactions;
-   - turns and cost per accepted edit;
-   - permission waits for people in default mode;
-   - the fleet's efficiency by context size.
+### Step 1: run it safely
 
-   *Taken.*
-7. **A gold-only ClickHouse user** for the leadership Grafana, with a live test that it is refused
-   bronze and silver ([risks.md](../risks.md) #15). This must be done before anyone except the
-   operator gets a Grafana login. *Open.*
-8. **A second Grafana for personal pages**
-   ([ADR-0032](adr/0032-engineer-coach-by-shared-link.md)). *Open; waits for 7.*
-9. **Teams from a directory file** ([ADR-0034](adr/0034-identity-in-pilots.md)). *Needs a
-   decision:* the file's format, and how it is loaded.
-10. **The service-run label and the CI settings block**
-    ([ADR-0036](adr/0036-service-runs-are-not-people.md)). *Open.*
-11. **How each artifact arrived** ([ADR-0040](adr/0040-spread-is-a-vote-only-for-what-teams-chose.md)):
-    - the operator's rollout list, which is also the inventory for finding what nobody uses;
-    - artifact views that label a rolled-out artifact's spread as reach, with the before-and-after
-      comparison around its date;
-    - substitution in the efficiency views;
-    - the efficiency claims to test, written down with what would refute each, before the data is
-      read.
+Two decisions are already possible with what is built: chasing the machines still on an old version
+of the organization's instructions, and spotting a command a team built that is spreading. What is
+missing is an organization running Cardo safely, so this comes first.
 
-    *Needs a decision:* the mechanism.
-12. **Coach suggestions drawn from the artifact views**
-    ([ADR-0041](adr/0041-the-coach-suggests-what-the-fleet-has-shown.md)). *Waits for 6 and 11.*
-13. **The board report's views** ([ADR-0030](adr/0030-stakeholders-and-questions.md),
-    [ADR-0031](adr/0031-what-works-means.md)):
-    - unit cost, rework and cost per approach;
-    - each team's reach against the fleet;
-    - the within-person efficiency comparison.
+- **A quickstart for one machine, and `cardo check`.** Run the stack, send your own sessions to it,
+  and check in one command that everything the views rely on has arrived. *Open.*
+- **Dashboard logins that cannot read anyone's personal rows.** The leaders' Grafana gets its own
+  database user, which can read only the grouped views, with a live test that it is refused the
+  raw and per-person tables ([risks.md](../risks.md) #15). This must be done before anyone except
+  the operator gets a Grafana login. *Open.*
+- **A notice an organization can hand to its engineers.** It says:
+  - who holds the salt, the key that could reveal who is behind a code name;
+  - which settings are on;
+  - that Cardo's data is not for individual performance decisions.
 
-    *Waits for 6, and for data from more than one team.*
-14. **Instructions presence per organization repository,** and the optional names setting
-    ([ADR-0035](adr/0035-repository-identity-classified.md)). *Open.*
-15. **An engineer notice an organization can hand out:**
-    - who holds the salt;
-    - which settings are on;
-    - that Cardo's data is not for individual performance decisions.
+  *Open.*
 
-    *Open.*
-16. **Collector authentication** ([risks.md](../risks.md) #19). *Needs a decision,* recorded in an
-    ADR.
-17. **Policy evidence:** conformance, coverage, other-organization sessions, and the evidence report
-    ([ADR-0037](adr/0037-policy-evidence.md)). The organization's approved MCP list and minimum
-    version are configuration. *Open.*
+### Step 2: two tracks, side by side
+
+#### The leaders' side: what should become standard?
+
+*Lead, proposed and settled in review:* the project's owner.
+
+- **How each artifact arrived: rolled out to everyone, or picked up by choice**
+  ([spread is a vote only for what teams chose](adr/0040-spread-is-a-vote-only-for-what-teams-chose.md)).
+  Example: "the review skill pushed to everyone on 3 November reaches 80% of people, but sessions
+  that use it look no different from before". It needs:
+  - the operator's rollout list, which is also the inventory for finding what nobody uses;
+  - artifact views that show a rolled-out artifact's spread as reach, with a before-and-after
+    comparison around the day it arrived;
+  - the efficiency views noticing when one tool replaces another.
+
+  *Needs a decision:* how the rollout list is kept and loaded.
+- **Teams from a directory file** ([identity in pilots](adr/0034-identity-in-pilots.md)). Who is
+  in which team, from an export the organization already has, so that a rollout that missed two
+  teams shows up. *Needs a decision:* the file's format, and how it is loaded.
+
+#### The engineer's side: what does struggle look like, and how does a person find out?
+
+*Lead, proposed and settled in review:* a contributor who knows from experience what an agent
+getting stuck looks like.
+
+- **The signs of struggle, first version** ([what "works" means](adr/0031-what-works-means.md)).
+  Older documents call this the efficiency family. It replaces the friction panels, and drops the
+  team breakdown from friction:
+  - failed tool calls, split into shell commands and other tools;
+  - retry loops: the same tool failing again and again within one prompt;
+  - denials in auto mode;
+  - conversations squeezed because they got too long (compactions);
+  - turns and cost per accepted edit;
+  - permission waits, for people in default mode;
+  - how sessions across the organization go as the conversation grows.
+
+  Before an organization's data is read, each claim to test is written down with the result that
+  would prove it wrong
+  ([spread is a vote only for what teams chose](adr/0040-spread-is-a-vote-only-for-what-teams-chose.md),
+  sixth point). *Open.*
+- **The code-name command, `cardo pseudonym <email>`**
+  ([the coach by shared link](adr/0032-engineer-coach-by-shared-link.md),
+  [identity in pilots](adr/0034-identity-in-pilots.md)). It prints one engineer's code name, so
+  that the operator can make that engineer's private page. *Open.*
+- **The private page, figures only, and `cardo coach`**
+  ([the coach by shared link](adr/0032-engineer-coach-by-shared-link.md)). It shows a person their
+  own permission waits, compactions, retry loops and context size, each against their own past.
+  A CI rule checks that every query is fixed to one code name, or reads only the grouped views.
+  *Waits for* the code-name command.
+- **Its own dashboard server** ([the coach by shared link](adr/0032-engineer-coach-by-shared-link.md)).
+  A second Grafana for the private pages, apart from the leaders' one. *Waits for* dashboard logins
+  that cannot read anyone's personal rows.
+- **Suggestions on the private page**
+  ([the coach suggests what the fleet has shown](adr/0041-the-coach-suggests-what-the-fleet-has-shown.md)).
+  Example: "11 people here use `/review`, and you haven't tried it yet". *Waits for* the signs of
+  struggle, and how each artifact arrived.
+
+The signs of struggle feed both tracks: leaders compare tools with them, and each engineer sees
+their own.
+
+### Step 3: later
+
+- **The board report** ([who Cardo serves](adr/0030-stakeholders-and-questions.md),
+  [what "works" means](adr/0031-what-works-means.md)):
+  - cost per accepted change, money spent redoing work, and cost per approach;
+  - each team's reach against the whole organization;
+  - the same people's efficiency before and after they took up an approach.
+
+  *Waits for* the signs of struggle, and for data from more than one team.
+- **Proof that policy holds** ([policy evidence](adr/0037-policy-evidence.md)): whether machines
+  conform, whether everyone using Claude Code is reporting, sessions signed in to other
+  organizations, and the evidence report. The organization's approved connector list and minimum
+  version are configuration. *Open.* For an organization that hasn't allowed Claude Code yet, this
+  comes first ([the exception](vision.md#next)).
+- **Protecting the collector from made-up data** ([risks.md](../risks.md) #19). Today anyone who
+  can reach the collector can write to it. Done before Cardo serves a second team. *Needs a
+  decision,* recorded in an ADR.
+- **The automated-run label, and the CI settings block**
+  ([service runs are not people](adr/0036-service-runs-are-not-people.md)). Runs in CI or in the
+  background are labelled as a service, and never counted as a person. *Open.*
+- **Which of the organization's repositories have instructions files,** and the optional setting
+  that records their names ([repository identity](adr/0035-repository-identity-classified.md)).
+  *Open.*
+- **Several laptops' data in one store: export, import and removal, with their ADR.** Only if an
+  organization runs Cardo on laptops rather than on one shared server. The export is a file its
+  owner can read before sending, with no repository names and no organization id. The import
+  replaces by session, because the raw tables have no key, and a second import would double every
+  count. *Waits for* an organization that runs it that way.
 
 ## Later, when an organization asks
 
-- the git-host poller ([ADR-0031](adr/0031-what-works-means.md)), which needs read access to the
-  organization's repositories. Its priority rises with the first organization that wants to
-  compare tools;
-- the Enterprise Analytics adapter, for an organization on Enterprise seats: coverage depends on
-  Anthropic's per-person data ([ADR-0021](adr/0021-analytics-source-scope.md));
-- the named cost view for budget owners ([ADR-0033](adr/0033-per-person-cost-for-budget-owners.md));
-- handing the salt to the organization's security team ([ADR-0034](adr/0034-identity-in-pilots.md));
-- named security exceptions, and the SIEM feed ([ADR-0037](adr/0037-policy-evidence.md));
-- coach delivery by message, or an authenticated app, if people act on its suggestions
-  ([ADR-0032](adr/0032-engineer-coach-by-shared-link.md));
-- views for autonomous agent runs ([ADR-0036](adr/0036-service-runs-are-not-people.md));
-- adapters for other tools ([ADR-0030](adr/0030-stakeholders-and-questions.md));
-- rollups that outlive the 90-day retention, and materialized views for a large fleet
-  ([risks.md](../risks.md) #10, #14).
+The directions [where Cardo is going](vision.md#later-when-an-organization-asks) puts under
+"later" come first, then smaller pieces. Each links the decision behind it:
+
+- **Pull-request outcomes from the git host,** such as time to merge and reverts, per repository
+  and never per person ([what "works" means](adr/0031-what-works-means.md)). It needs read access
+  to the organization's repositories, and its priority rises with the first organization that
+  wants to compare tools.
+- **Other AI coding tools side by side** ([who Cardo serves](adr/0030-stakeholders-and-questions.md)).
+- **Views for agents that run with nobody at the keyboard,** in CI or in the background
+  ([service runs are not people](adr/0036-service-runs-are-not-people.md)).
+- **The private, opt-in personal layer:** richer detail about what an engineer was working on,
+  seen only by them ([thin mandatory core plus opt-in depth](adr/0007-enrollment-posture.md)). Not
+  built, and nothing of that kind is collected today.
+- **The adapter for organizations on Claude Enterprise seats,** whose usage data comes from a
+  different Anthropic API. How much it covers depends on Anthropic's per-person data
+  ([both analytics sources](adr/0021-analytics-source-scope.md)).
+- **Sending security events to the organization's SIEM,** and naming security exceptions, once the
+  policy report exists ([policy evidence](adr/0037-policy-evidence.md)).
+- **The named cost view for budget owners**
+  ([per-person cost for budget owners](adr/0033-per-person-cost-for-budget-owners.md)).
+- **Handing the salt to the organization's security team**
+  ([identity in pilots](adr/0034-identity-in-pilots.md)).
+- **Delivering the private page by message, or through an app engineers sign in to,** if people
+  act on its suggestions ([the coach by shared link](adr/0032-engineer-coach-by-shared-link.md)).
+- **Summaries that outlive the 90-day retention, and faster views for a large organization**
+  ([risks.md](../risks.md) #10 and #14).

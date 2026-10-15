@@ -50,8 +50,8 @@ Short by design, and this list is the boundary — adding to it requires a recor
 **About names.** Cardo records the names of commands, subagents and MCP servers that you defined
 yourself. **That is more than Claude Code's own telemetry sends by default**, and it is deliberate
 ([ADR-0025](../adr/0025-artifact-names-kept-with-guardrails.md)). When several people build the same
-thing for themselves, that is how the platform team learns what it should have shipped. Three rules
-come with it:
+thing for themselves, that is how the organization learns what it should make official for
+everyone. Three rules come with it:
 
 - A name is shown in any view only once at least five people used it in the same week. A command
   that only you use never appears by name; it is counted as "other". Your organization can raise
@@ -120,8 +120,11 @@ Recorded here so you know what is coming before it arrives. Each links to the de
 
 ## What requires you to opt in (tier 2)
 
-Anything touching *what you were working on*. Opting in gets you your own dashboard, visible only to
-you.
+**Not built, and nothing of this kind is collected today.** It would cover anything touching *what
+you were working on*, and opting in would get you a dashboard of your own, visible only to you. It
+is built only when an organization asks for it
+([where Cardo is going](../vision.md#later-when-an-organization-asks)), and this document will
+describe it before anything is collected.
 
 ## What the security tier collects (tier 0)
 

@@ -51,11 +51,16 @@ The hard rules that these decisions produce live in
 | [0039](0039-hooks-wait-at-most-one-second.md) | Every hook waits at most one second, and a model switch is read after it happens | Accepted | 2026-10-06 |
 | [0040](0040-spread-is-a-vote-only-for-what-teams-chose.md) | Spread is a vote only for what teams chose | Accepted, not built | 2026-10-08 |
 | [0041](0041-the-coach-suggests-what-the-fleet-has-shown.md) | The coach suggests only what the fleet has shown | Accepted, not built | 2026-10-08 |
+| [0042](0042-the-north-star.md) | Organizations decide what becomes standard, without watching anyone | Proposed | 2026-10-14 |
 
 ADR-0030 to ADR-0037 came out of one design review on 2026-09-25, which asked who Cardo is for and
 what each of them needs. Its evidence is
 [`2026-09-25-stakeholder-field-notes.md`](../research/2026-09-25-stakeholder-field-notes.md), and
 the order they are built in is [`docs/roadmap.md`](../roadmap.md).
+
+ADR-0042 states what all of these are for, the rule that orders the work, and how anyone can
+challenge the direction. The readable version, with the current directions and examples, is
+[`docs/vision.md`](../vision.md).
 
 ## Deliberately deferred
 
@@ -67,7 +72,11 @@ Recorded here so a future session knows these were considered and postponed, not
 - **Handing the salt to the organization's security team** — the operator holds it during pilots;
   custody is offered afterwards (ADR-0034).
 - **Named security exceptions, and the SIEM feed** — after the evidence report (ADR-0037).
-- **Behavioural security detection** — needs content or a baseline (ADR-0003, ADR-0037).
+- **Behavioural security detection** — not planned: it needs content Cardo does not collect, or a
+  baseline (ADR-0003, ADR-0037).
+- **The private, opt-in personal layer (tier 2)** — richer detail about what an engineer was
+  working on, seen only by them; when an organization asks. Not built, and nothing of that kind is
+  collected (ADR-0007).
 - **Delivery outcomes from the git host** — joined by repository and week; no surface carries a
   commit id, so the commit-SHA join ADR-0008 planned cannot be built (ADR-0031).
 - **Views for autonomous agent runs** — the label comes first; views when an organization runs agents
@@ -78,12 +87,13 @@ Recorded here so a future session knows these were considered and postponed, not
 - **Local-spool hook fallback** — build when an organization asks (ADR-0011, upheld by ADR-0024 and ADR-0039).
 - **Content hashes of instructions files** — Claude Code 2.1.281 sends none. The field stays on the
   allowlist, so the hash-based design returns without a decision if it appears (ADR-0026).
-- **Cross-org benchmark feed** — only ever as a separate opt-in product with its own consent story
-  (ADR-0013).
+- **Cross-org benchmark feed** — never inside Cardo. If one ever exists, it is a separate opt-in
+  product with its own consent story (ADR-0013).
 - **Bedrock / Vertex / Foundry support** — out of scope for v1 (ADR-0018, upheld by ADR-0021).
 - **A file-store mode for the collector path** — until a team can run a collector but not
   ClickHouse (ADR-0028).
 - **Materialized collector-path views and rollups** — the views are plain views over 90-day bronze
   (risks.md #10 and #14).
-- **The Claude Enterprise Analytics adapter** — in scope for v1, built second; the Console adapter
-  goes first purely because it is testable without an adopting organization (ADR-0021).
+- **The Claude Enterprise Analytics adapter** — built when an organization on Enterprise seats asks
+  for it. The Console adapter went first because it could be tested without an organization
+  (ADR-0021, ordered by ADR-0042).

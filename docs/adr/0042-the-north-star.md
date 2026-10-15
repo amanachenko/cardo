@@ -79,7 +79,8 @@ Anything about a real organization (who is trying Cardo, when, and why that chan
 discussed outside the repository, as [ADR-0038](0038-public-under-a-collective-copyright.md)
 requires.
 
-This is the light version of the proposal stage ADR-0000 deferred. It adds no new document type,
+This is the light version of the proposal stage that
+[how we record decisions](0000-adr-process.md) deferred. It adds no new document type,
 only a use for the status that already exists.
 
 ## Consequences
