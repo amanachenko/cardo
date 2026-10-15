@@ -233,7 +233,7 @@ developer machine                     organization's infrastructure
 | `cardo poll` CLI | `cmd/cardo/` | **built** | [0017](../adr/0017-v01-scope.md) |
 | `cardo migrate` CLI | `cmd/cardo/` | **built** — the schema, and the two view settings; the collector path needs it because the exporter never creates tables | [0019](../adr/0019-sql-tooling.md), [0029](../adr/0029-minimum-group-size.md) |
 | Console adapter (Claude Code Analytics API) | `internal/source/console/` | **built**, unverified against live API | [0017](../adr/0017-v01-scope.md), [0021](../adr/0021-analytics-source-scope.md) |
-| Enterprise adapter (Claude Enterprise Analytics API) | — | not built; in scope for v1 | [0021](../adr/0021-analytics-source-scope.md), risks #8 |
+| Enterprise adapter (Claude Enterprise Analytics API) | — | not built; [built when an organization on Enterprise seats asks](../vision.md#later-when-an-organization-asks) | [0021](../adr/0021-analytics-source-scope.md), risks #8 |
 | Pseudonymizer | `internal/pseudonym/` | **built** | [0006](../adr/0006-pseudonymization.md) |
 | File store (no-infrastructure mode) | `internal/store/jsonl/` | **built** | [0009](../adr/0009-storage-agnostic-clickhouse-reference.md) |
 | ClickHouse store + migration runner | `internal/store/clickhouse/` | **built**, verified against ClickHouse 26.6 | [0009](../adr/0009-storage-agnostic-clickhouse-reference.md), [0019](../adr/0019-sql-tooling.md), [0022](../adr/0022-clickhouse-access.md) |

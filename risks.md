@@ -57,13 +57,15 @@ none free.
 - **Anthropic's own analytics overlap more than assumed.** They report usage and cost per person by
   email, and the Enterprise Analytics API documents skill and connector usage.
 
-The ground Cardo holds is narrower and specific:
+The ground Cardo holds is narrower. **Update 2026-10-15:**
+[where Cardo is going](docs/vision.md#what-cardo-is-next-to-what-you-already-have) states it as
+three things:
 
-- which team-grown approach wins, and at what cost;
-- anything by team;
-- instructions versions;
-- policy evidence with coverage;
-- self-hosting.
+- **which approach wins, down to the single command or skill,** and at what cost. Around it: each
+  team's uptake against the whole organization, whether what was rolled out reached everyone, and
+  which machines still load an old version of the organization's instructions;
+- **nothing leaves the organization's network;**
+- **proof that the organization's rules hold,** with coverage.
 
 If Anthropic ships artifact-level analytics of its own, the first of those shrinks.
 

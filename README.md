@@ -3,8 +3,8 @@
 **Does your AI coding enablement actually work?**
 
 > *cardo* (Latin) — the *cardo maximus* was the main axis a Roman town was surveyed and laid out from;
-> everything else was positioned relative to it. The platform team lays down the axis. Cardo measures
-> whether the town actually got built along it.
+> everything else was positioned relative to it. An organization lays down the axis: the ways of
+> working it wants everyone on. Cardo shows whether the town actually got built along it.
 
 Cardo is a self-hosted observability layer for Claude Code that measures **your enablement artifacts**,
 not your engineers.
@@ -24,17 +24,18 @@ Do you know whether any of it is being found, loaded, or used?
 
 Cardo answers questions of that shape:
 
-- Is the `deploy` skill being invoked, in which repos, and do sessions that invoke it look different?
-- Is our managed `CLAUDE.md` actually loading, and which version is each machine on? Who is stale?
-- What have engineers built for themselves that several of them now use, and that we should ship?
-- Which permission rules generate the most prompt-wall friction?
-- Which MCP servers are configured but never called?
+- We rolled the `deploy` skill out to everyone. Has it reached every team, and do sessions look
+  different since it arrived?
+- Is our managed `CLAUDE.md` actually loading, and which machines still load an old version?
+- What have engineers built for themselves that several of them now use, and that we should make
+  official?
+- Which connectors (MCP servers) did we roll out to everyone that almost nobody calls?
 
 **What it deliberately does not do** is tell you which engineer isn't entering plan mode. That framing
-produces metrics people game and tooling people disable. Cardo puts the platform team's own work under
-scrutiny instead — see [ADR-0001](docs/adr/0001-unit-of-analysis.md). Nor does it rank teams or
-people, estimate "hours saved", or compute productivity per head
-([ADR-0030](docs/adr/0030-stakeholders-and-questions.md)).
+produces metrics people game and tooling people disable. Cardo puts the organization's own tools
+under scrutiny instead ([why it measures tools, not people](docs/adr/0001-unit-of-analysis.md)).
+Nor does it rank teams or people, estimate "hours saved", or compute productivity per head. The full
+list of what it will never do is in [where Cardo is going](docs/vision.md#never).
 
 ### Who it is for
 
@@ -45,8 +46,9 @@ people, estimate "hours saved", or compute productivity per head
 - **Security and compliance**, through evidence that the policies administrators set actually
   hold, including for organizations that have not yet allowed Claude Code at all.
 
-The overview for leadership, security and engineers: **[docs/overview.md](docs/overview.md)**. The order
-of work: **[docs/roadmap.md](docs/roadmap.md)**.
+The overview for leadership, security and engineers: **[docs/overview.md](docs/overview.md)**. What
+Cardo is for, where it is heading, and how we choose what to build next:
+**[docs/vision.md](docs/vision.md)**. The order of work: **[docs/roadmap.md](docs/roadmap.md)**.
 
 ---
 
@@ -66,8 +68,9 @@ they cost, which kinds of instructions files loaded, and the names of the comman
 MCP servers used, including ones engineers wrote for themselves. A name only one person uses is
 never shown ([ADR-0025](docs/adr/0025-artifact-names-kept-with-guardrails.md)).
 
-**Opt-in:** anything touching what you were working on. Opting in gets you your own dashboard, visible
-only to you.
+**Opt-in, not built yet:** anything touching what you were working on, for a dashboard of your own
+that only you would see. Nothing of that kind is collected today, and it is built only when an
+organization asks for it.
 
 Full detail, written for the engineers being measured rather than the team deploying it:
 **[docs/design/privacy.md](docs/design/privacy.md)**.
@@ -207,8 +210,8 @@ a store that looks pseudonymous but is not is worse than one that does not run.
 - **Two kinds of organization, two adapters.** A Claude *Console* org uses the Claude Code Analytics
   API with an Admin API key — that is the adapter that exists. A Claude *Enterprise* (claude.ai) org
   reports Claude Code activity through the Claude Enterprise Analytics API instead, with a different
-  key type created by the primary owner. That adapter is in scope for v1 and **is not built yet**. If
-  you are on Enterprise seats, the current poller will authenticate and return nothing; it says so
+  key type created by the primary owner. That adapter **is not built yet**, and it will be when an
+  organization on Enterprise seats asks for it. If you are on Enterprise seats, the current poller will authenticate and return nothing; it says so
   loudly rather than reporting an empty success ([ADR-0021](docs/adr/0021-analytics-source-scope.md),
   [risks #8 and #9](risks.md)).
 - **Single-tenant and self-hosted.** There is no hosted option and there will not be one

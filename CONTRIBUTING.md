@@ -6,9 +6,25 @@ written down.
 
 ## Where to help
 
+Start with [where Cardo is going](docs/vision.md): what Cardo is for, what it will never do, and
+the rule that orders the work. The work runs in two tracks:
+
+- **the leaders' side:** what should become standard. For example, telling a tool a team chose
+  from one rolled out to everyone;
+- **the engineer's side:** what struggle looks like, and how a person finds out. For example, the
+  signs that an agent is stuck, and each engineer's private page.
+
 The order of work is the [work items](docs/roadmap.md#work-items) at the end of the roadmap. Each
 says whether it is taken, open, waiting for something, or needs a decision first. Before starting
 an open one, say so in an issue or a draft pull request.
+
+## Disagreeing with the direction
+
+Disagreement is welcome, and so is challenging anything in the vision. Open a GitHub issue that
+says what you would change, why, and gives an example. If it isn't settled quickly, it goes on the
+Open questions list, and then into a decision record with the status Proposed. The whole route is
+in [how to disagree with the direction](docs/vision.md#how-to-disagree-with-the-direction). Word
+it for any organization: no real organization's name, plans or data.
 
 ## Before changing anything
 
@@ -77,6 +93,9 @@ or the `/preview` skill in Claude Code, before asking for a review.
 
 ## Documents
 
+- Plain words, and an example for each claim. Name a decision, rule or work item rather than
+  giving only its number: "the five-person minimum ([ADR-0029](docs/adr/0029-minimum-group-size.md))",
+  not "ADR-0029". [docs/vision.md](docs/vision.md) shows the style.
 - ADRs are immutable. Supersede one with a new ADR; only the old one's status line changes.
 - Research notes in `docs/research/` are dated snapshots and are never updated.
 - `docs/design/` is edited in place and must describe what exists, not what is planned.
