@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="Cardo">
+  <!-- Tiny variant: at favicon sizes the outline is dropped so both states stay legible. -->
+  <rect x="4" y="4" width="11" height="11" fill="#d7a12a"/>
+  <rect x="17" y="17" width="11" height="11" fill="#ece5d3"/>
+</svg>

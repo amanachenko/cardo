@@ -8,14 +8,23 @@ useful. That is exactly why they are written down separately from the ADRs that 
 
 ---
 
-### INV-1 — Session transcripts are never read
+### INV-1 — The collection path never reads session transcripts
 
-No code path may open anything under `~/.claude/projects/` or its platform equivalents. Not for
-debugging, not once, not behind a flag.
+No automatic code path — collector, hooks, poller, views, server, installer — may open anything under
+`~/.claude/projects/` or its platform equivalents. Not for debugging, not once, not behind a flag.
 
-*Why:* it is the cheapest source of rich signal and the only thing that would let a sceptical engineer
-say "it reads my code." Refusing it permanently is what makes the claim real.
-*Source:* [ADR-0005](../adr/0005-collection-mechanism.md). *Tested by:* CI invariant test.
+The one sanctioned reader is the **local import** (`cardo import`, `cardo watch`), which runs only
+when the person invokes it on their own machine and reads metadata only: ids, timestamps, models,
+token counts and prompt lengths, never prompt text
+([ADR-0050](../adr/0050-local-transcript-import.md), proposed). Any other file assembling that path
+fails the invariant test.
+
+*Why:* transcripts are the cheapest source of rich signal and the only thing that would let a sceptical
+engineer say "it reads my code." Keeping the automatic path permanently blind is what makes the claim
+real; the manual path is disclosed, metadata-only, and removable.
+*Source:* [ADR-0005](../adr/0005-collection-mechanism.md), narrowed by
+[ADR-0050](../adr/0050-local-transcript-import.md). *Tested by:* CI invariant test, including the
+assembled-path form.
 
 ### INV-2 — `user.email` is never persisted
 
@@ -78,13 +87,19 @@ Declare a minimum supported version. Never a maximum. Never
 security fixes.
 *Source:* [ADR-0014](../adr/0014-version-drift.md).
 
-### INV-7 — No data leaves the organization's network
+### INV-7 — No data about the organization leaves its network
 
 No phone-home, no usage analytics about Cardo itself, no benchmark upload, no hosted option.
 
+The single exception is named and carries no organization data: one unauthenticated `GET` per day to
+the public OpenRouter price catalogue, because a cost figure for third-party models cannot be derived
+locally ([ADR-0049](../adr/0049-outbound-price-catalogue.md)). It sends no identifier, no transcript,
+no token count and no pseudonym. Any further host needs a superseding ADR, not an allowlist entry.
+
 *Why:* it is an unqualified statement with no asterisk, and it stops being true the moment there is one
-exception.
-*Source:* [ADR-0013](../adr/0013-deployment-topology.md).
+exception — so the exceptions that exist are written down where the test can see them.
+*Source:* [ADR-0013](../adr/0013-deployment-topology.md), narrowed by
+[ADR-0049](../adr/0049-outbound-price-catalogue.md).
 
 ---
 

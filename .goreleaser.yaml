@@ -1,0 +1,49 @@
+# Release configuration for the Cardo launcher. Six targets, no CGO, one checksum file.
+#
+# The installers on the user's machine read `checksums.txt` from the same release and refuse to
+# unpack anything that does not match. Nothing is published from a working tree: a release is a tag.
+version: 2
+
+project_name: cardo
+
+builds:
+  - id: cardo
+    main: ./cmd/cardo
+    binary: cardo
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  - id: cardo
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "cardo_{{ .Os }}_{{ .Arch }}"
+    files:
+      - none*
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot"
+
+changelog:
+  disable: true
+
+release:
+  draft: false
+  prerelease: auto

@@ -1,0 +1,45 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  goreleaser:
+    name: build and publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  install-smoke:
+    # The installers are the product's front door; they are tested against the release they just
+    # produced, on both Unix and macOS, not against a fixture.
+    name: install smoke (${{ matrix.os }})
+    needs: goreleaser
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: install with the published release
+        run: |
+          CARDO_VERSION="${{ github.ref_name }}" CARDO_BIN="$RUNNER_TEMP/cardo-bin" sh ./install.sh
+          "$RUNNER_TEMP/cardo-bin/cardo" version
