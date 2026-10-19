@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cardo — installation</title>
+<link rel="stylesheet" href="/cardo-ui.css?v=2">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-check" viewBox="0 0 16 16"><polyline points="3,8.5 6.5,12 13,4"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 16 16"><line x1="8" y1="2.5" x2="8" y2="9.5"/><rect x="7.2" y="11.6" width="1.6" height="1.6"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8"/><polyline points="10.5,3.5 3.5,3.5 3.5,10.5"/></symbol>
+  <symbol id="i-external" viewBox="0 0 16 16"><polyline points="6.5,4.5 11.5,4.5 11.5,9.5"/><line x1="11.5" y1="4.5" x2="5.5" y2="10.5"/></symbol>
+</svg>
+<div class="shell">
+
+  <header class="gantry">
+    <div class="brand">
+      <svg class="mark" width="17" height="17" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3" y="3" width="9" height="9" fill="currentColor" style="color:var(--amber)"/>
+        <rect x="13.5" y="13.5" width="8" height="8" fill="currentColor"/>
+      </svg>CARDO</div>
+    <div class="where">Installation · local only · 127.0.0.1</div>
+    <div class="spacer"></div>
+    <div class="clock" id="clock">--:--</div>
+  </header>
+
+
+  <nav class="surfaces" id="surfaces" aria-label="Surfaces">
+    <button class="surf" data-surface="overview" aria-current="page">Overview</button>
+    <button class="surf" data-surface="catalog">Catalog</button>
+    <button class="surf" data-surface="teams">Teams</button>
+    <button class="surf" data-surface="coach">Coach</button>
+    <button class="surf" data-surface="settings">Settings</button>
+  </nav>
+
+  <section class="surface" id="surfaceInstall">
+  <section class="screen" id="screenStart">
+    <h1 class="board-title">Install</h1>
+    <p class="board-sub">Cardo measures which ways of working with Claude Code are worth making standard, without watching any individual. This installer runs on one machine, keeps every byte inside the network, and verifies that data arrives.</p>
+
+    <div class="departures" id="paths">
+      <div class="dephead"><span>Scope</span><span>Installation path</span><span>Time</span><span></span></div>
+      <button class="dep" data-path="solo" aria-pressed="true">
+        <span class="plat">1</span>
+        <span class="dest">Single engineer
+          <span class="note">Stack, verification and the Claude Code settings file on this laptop. The complete installation, with no coordination required.</span>
+        </span>
+        <span class="time">~10 MIN</span>
+        <span class="go">Selected</span>
+      </button>
+      <button class="dep" data-path="pilot" aria-pressed="false">
+        <span class="plat">2</span>
+        <span class="dest">Team pilot
+          <span class="note">The same installation, followed by read-only leader logins, the managed settings bundle and the engineer notice.</span>
+        </span>
+        <span class="time">~40 MIN</span>
+        <span class="go">Select</span>
+      </button>
+      <div class="deptail"><span>Outbound traffic: <b>0 bytes</b></span><span>Account required: <b>no</b></span></div>
+    </div>
+
+    <div class="start-project">
+      <label for="projectInput">Project directory <span>the Claude Code settings file is written here; it may be left empty</span></label>
+      <input class="input" id="projectInput" type="text" placeholder="/path/to/project">
+    </div>
+
+    <div class="actions start-actions">
+      <button class="act primary" id="installAll">Install everything</button>
+      <button class="act ghost" id="stepThrough">Step through</button>
+      <span class="hint">Running the installer again repairs it</span>
+    </div>
+
+
+
+    <div class="wiz-section" style="margin-top:20px">
+      <h3>Before starting</h3>
+      <ul class="reqlist">
+        <li><span><b>Docker Desktop 24 or later</b>, running. The installer stops at the first step and reports the Docker error if it is not.</span></li>
+        <li><span><b>Docker Compose v2</b>, included with Docker Desktop. The stack is four containers and one migration.</span></li>
+        <li><span><b>Five free loopback ports:</b> 8124, 9001, 3001, 4319, 8089. A port in use is reported with the command that names the process.</span></li>
+        <li><span><b>2 GB of disk and 2 GB of RAM</b> for the stack. The data volume is kept between runs and between updates.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="screen" id="screenWiz" hidden style="justify-content:flex-start;padding-top:16px">
+    <div class="segbar" id="segbar"></div>
+    <div class="wiz-progress">
+      <span id="pos">Step 1</span>
+      <button class="rail-toggle" id="railToggle" aria-expanded="false">Steps</button>
+      <span id="status" role="status" aria-live="polite">Ready</span>
+      <span id="eta">About 10 minutes</span>
+    </div>
+    <div class="wiz" id="wiz">
+      <aside class="wiz-rail" id="rail">
+        <div class="wiz-rail-head">
+          <span>Steps</span>
+          <b id="railCount">0 / 8</b>
+          <div class="wiz-rail-links">
+            <button class="rail-link" id="changeScope">Scope</button>
+            <button class="rail-link" id="refresh" title="Re-read the state from the installer">Refresh</button>
+          </div>
+        </div>
+        <ol class="wiz-steps" id="stepList"></ol>
+        <div class="wiz-rail-foot" id="railFoot">
+          <button class="act ghost" id="runAll">Install everything</button>
+        </div>
+      </aside>
+      <main class="wiz-pane" id="pane"></main>
+    </div>
+  </section>
+  </section>
+
+  <section class="surface" id="surfaceOverview" hidden>
+    <div class="ov">
+      <h1 class="board-title">Overview</h1>
+      <p class="board-sub">Two ingestion paths, one store. Every number here is read from it.</p>
+      <div class="ov-tools">
+        <span class="hint" id="ovAsOf">reading…</span>
+        <button class="rail-link" id="ovRefresh">Refresh</button>
+      </div>
+      <div class="facts ov-facts" id="ovFacts"></div>
+      <div class="ov-next" id="ovNext"></div>
+      <div class="wiz-section" id="ovWarningsWrap" hidden>
+        <h3>Warnings</h3>
+        <ul class="ov-list" id="ovWarnings"></ul>
+      </div>
+      <div class="wiz-section" id="ovChangesWrap" hidden>
+        <h3>Recent changes</h3>
+        <table class="cat">
+          <colgroup><col style="width:16%"><col style="width:14%"><col style="width:30%"><col></colgroup>
+          <thead><tr><th>When</th><th>Action</th><th>Object</th><th>Note</th></tr></thead>
+          <tbody id="ovChanges"></tbody>
+        </table>
+      </div>
+      <div class="wiz-section" id="ovSessionWrap" hidden>
+        <h3>Your session <span class="later">proof</span></h3>
+        <div class="ov-session" id="ovSession"></div>
+        <p class="hint">The newest session on this stack. On a single-operator host it is yours; no other person is ever named.</p>
+      </div>
+    </div>
+  </section>
+
+
+  <section class="surface" id="surfaceCatalog" hidden>
+    <div class="ov">
+      <h1 class="board-title">Catalog</h1>
+      <p class="board-sub">Typed artifacts, versioned on disk. Only an approved version is what the views call the organization's standard.</p>
+
+      <div class="cat-bar">
+        <input class="input" id="catSearch" placeholder="Search name or owner" aria-label="Search the catalog">
+        <select class="input" id="catKind" aria-label="Filter by kind">
+          <option value="">All kinds</option>
+          <option value="skill">skill</option>
+          <option value="command">command</option>
+          <option value="subagent">subagent</option>
+          <option value="mcp">mcp server</option>
+          <option value="reference">reference</option>
+          <option value="bundle">settings bundle</option>
+          <option value="cohort">pilot cohort</option>
+        </select>
+        <button class="act primary" id="catNew">New artifact</button>
+      </div>
+
+      <div class="cat-split">
+      <div class="cat-list">
+      <table class="cat" id="catTable">
+        <colgroup><col style="width:14%"><col style="width:34%"><col style="width:18%"><col style="width:12%"><col style="width:22%"></colgroup>
+        <thead><tr><th>Kind</th><th>Name</th><th>Status</th><th>Version</th><th>Reach 7d</th></tr></thead>
+        <tbody id="catRows"></tbody>
+      </table>
+      <div class="cat-pager" id="catPager" hidden>
+        <button class="act" id="catPrev">Prev</button>
+        <span class="hint" id="catRange"></span>
+        <button class="act" id="catNext">Next</button>
+      </div>
+      <p class="hint" id="catEmpty" hidden>No artifacts yet. Upload the first one, or let the next poll show what teams already use.</p>
+
+      <form class="cat-upload" id="catUpload" hidden>
+        <h3>New artifact</h3>
+        <div class="cat-grid">
+          <label>Kind <select class="input" name="kind" id="upKind">
+            <option value="skill">skill</option><option value="command">command</option>
+            <option value="subagent">subagent</option><option value="mcp">mcp server</option>
+            <option value="reference">reference</option><option value="bundle">settings bundle</option>
+            <option value="cohort">pilot cohort</option>
+          </select></label>
+          <label>Slug <input class="input" name="slug" id="upSlug" placeholder="review-pr" spellcheck="false"></label>
+          <label>Name <input class="input" name="name" id="upName" placeholder="review-pr"></label>
+          <label>Owner <input class="input" name="owner" id="upOwner" placeholder="platform"></label>
+          <label class="wide">File
+            <span class="filepick">
+              <input type="file" name="file" id="upFile" hidden>
+              <button class="act ghost" type="button" id="upPick">Choose file</button>
+              <span class="file-name" id="upFileName">no file chosen</span>
+            </span>
+          </label>
+          <label class="wide">Note <input class="input" name="note" id="upNote" placeholder="why this version exists"></label>
+        </div>
+        <div class="cat-actions">
+          <button class="act primary" type="submit" id="upSave">Validate and save draft</button>
+          <button class="act ghost" type="button" id="upCancel">Cancel</button>
+          <span class="hint" id="upStatus"></span>
+        </div>
+        <div class="cat-problems" id="upProblems" hidden></div>
+        <div class="cat-diff" id="upDiff" hidden></div>
+      </form>
+
+      </div>
+      <div class="cat-detail" id="catDetail" hidden></div>
+      </div>
+    </div>
+  </section>
+
+
+  <section class="surface" id="surfaceTeams" hidden>
+    <div class="ov">
+      <h1 class="board-title">Teams</h1>
+      <p class="board-sub">The directory is hashed on load. The file stays yours; the database only ever sees team and pseudonym.</p>
+
+      <div class="facts ov-facts" id="teamFacts"></div>
+
+      <div class="wiz-section">
+        <h3>Load a directory</h3>
+        <p class="hint" id="teamHint">Paste <code>email,team</code> rows, one person per line. Loading replaces the current mapping; the previous batch stays for one generation.</p>
+        <div class="filepick">
+          <input type="file" id="teamFile" accept=".csv,text/csv" hidden>
+          <button class="act ghost" type="button" id="teamPick">Choose CSV</button>
+          <span class="file-name" id="teamFileName">no file chosen</span>
+        </div>
+        <textarea class="input team-csv" id="teamCSV" rows="7" spellcheck="false" placeholder="email,team
+anna@example.com,platform
+boris@example.com,payments"></textarea>
+        <div class="cat-actions">
+          <button class="act ghost" id="teamPreview">Preview</button>
+          <button class="act primary" id="teamApply">Load directory</button>
+          <span class="hint" id="teamStatus"></span>
+        </div>
+        <div class="cat-problems" id="teamProblems" hidden></div>
+      </div>
+
+      <div class="wiz-section">
+        <h3>Teams in the current mapping</h3>
+        <table class="cat" id="teamTable">
+          <colgroup><col style="width:40%"><col style="width:20%"><col style="width:40%"></colgroup>
+          <thead><tr><th>Team</th><th>People</th><th>Sessions 7d</th></tr></thead>
+          <tbody id="teamRows"></tbody>
+        </table>
+        <p class="hint" id="teamEmpty">No sessions yet, so there is nothing to attribute. Load a directory and let the collector run.</p>
+      </div>
+    </div>
+  </section>
+
+
+  <section class="surface" id="surfaceCoach" hidden>
+    <div class="ov">
+      <h1 class="board-title">Coach</h1>
+      <p class="board-sub">One person's figures against their own previous window. No rank, no percentile, no other person's rows.</p>
+      <form class="cat-bar" id="coachForm">
+        <input class="input" id="coachEmail" placeholder="engineer@example.com" autocomplete="off" spellcheck="false">
+        <button class="act primary" type="submit">Preview</button>
+      </form>
+      <p class="hint" id="coachHint">The address is hashed on this machine with the stack salt and never stored.</p>
+      <div class="coach-body" id="coachBody" hidden></div>
+    </div>
+  </section>
+  <section class="surface" id="surfaceSettings" hidden>
+    <div class="ov">
+      <h1 class="board-title">Settings</h1>
+      <p class="board-sub">Each field re-runs the step that owns it. Nothing here needs a terminal.</p>
+      <div id="setBody"></div>
+    </div>
+  </section>
+</div>
+<script src="/app.js?v=2"></script>
+</body>
+</html>

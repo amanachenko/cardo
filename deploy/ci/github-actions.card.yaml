@@ -1,0 +1,23 @@
+# Cardo for GitHub Actions — a service run, never a person.
+#
+# Copy this block into a workflow that runs `claude -p` or the Agent SDK. It turns on telemetry and
+# labels the run as a service with a workflow name (ADR-0036). Use an API key from secrets, never a
+# person's login: a service run on someone's login looks like that person working 400 sessions a day.
+#
+# When the run uses an API key there is no email, so there is no pseudonym: the views count the work
+# and its cost but never count it as a person, a team member, or a coach subject.
+
+env:
+  CLAUDE_CODE_ENABLE_TELEMETRY: "1"
+  OTEL_METRICS_EXPORTER: otlp
+  OTEL_LOGS_EXPORTER: otlp
+  OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${{ vars.CARDO_OTLP_ENDPOINT }}   # e.g. http://collector.internal:4319
+  OTEL_RESOURCE_ATTRIBUTES: >-
+    service.name=claude-code,
+    cardo.actor=service,
+    cardo.workflow=${{ github.workflow }},
+    cardo.salt_version=v1
+  OTEL_LOG_USER_PROMPTS: "0"
+  OTEL_LOG_TOOL_DETAILS: "0"
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

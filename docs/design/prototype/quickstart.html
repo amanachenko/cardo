@@ -1,0 +1,672 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cardo — быстрый запуск</title>
+<style>
+  :root{
+    --void:#0b0c0a;
+    --steel:#33352f;
+    --steel-l:#4d4f46;
+    --flap:#141513;
+    --flap-hi:#1c1d1a;
+    --paint:#ece5d3;
+    --paint-dim:#a9a494;
+    --amber:#d7a12a;
+    --red:#a8453c;
+    --green:#5e7d54;
+    --mono:ui-monospace,"SF Mono","Roboto Mono",Menlo,Consolas,monospace;
+    --sans:"Helvetica Neue",Helvetica,Arial,sans-serif;
+    --row-h:46px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;background:var(--void);color:var(--paint);
+    font:15px/1.45 var(--sans);
+    background-image:repeating-linear-gradient(90deg,rgba(255,255,255,.014) 0 1px,transparent 1px 3px);
+    -webkit-font-smoothing:antialiased;
+  }
+  ::selection{background:var(--amber);color:#141513}
+  :focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+  .shell{min-height:100%;display:flex;flex-direction:column;padding:22px clamp(15px,3vw,40px) 26px;max-width:1240px;margin:0 auto}
+
+  /* gantry */
+  .gantry{display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding-bottom:12px;border-bottom:1px solid var(--steel)}
+  .brand{font:600 18px/1 var(--mono);letter-spacing:.28em;color:var(--paint)}
+  .brand i{display:inline-block;width:7px;height:7px;background:var(--amber);margin-right:11px;vertical-align:2px;}
+  .where{font:11px/1.5 var(--mono);color:var(--paint-dim);letter-spacing:.06em;text-transform:uppercase}
+  .gantry .spacer{flex:1}
+  .clock{font:600 15px/1 var(--mono);letter-spacing:.08em;color:var(--paint-dim)}
+  .demo{display:flex;align-items:center;gap:8px;font:10px/1 var(--mono);letter-spacing:.12em;color:var(--paint-dim);text-transform:uppercase}
+  .demo button{border:1px solid var(--steel-l);padding:7px 9px;letter-spacing:.1em}
+  .demo button[aria-pressed="true"]{border-color:var(--red);color:#e2a49e}
+
+  /* departures */
+  .screen{flex:1;display:flex;flex-direction:column;justify-content:center;padding:clamp(20px,6vh,64px) 0}
+  .screen[hidden]{display:none}
+  .board-title{font:600 clamp(20px,3vw,30px)/1.15 var(--mono);letter-spacing:.16em;text-transform:uppercase;margin:0 0 6px}
+  .board-sub{margin:0 0 26px;color:var(--paint-dim);font-size:15px;max-width:62ch}
+  .departures{border:1px solid var(--steel);background:linear-gradient(#17181400,#0f100e)}
+  .dephead,.dep{display:grid;grid-template-columns:64px 1fr auto 132px;align-items:center;gap:18px}
+  .dephead{padding:10px 18px;border-bottom:1px solid var(--steel);font:10px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:#85877a}
+  .dephead span:nth-child(3){text-align:right}
+  .dep{width:100%;padding:26px 18px;text-align:left;border-bottom:1px solid var(--steel)}
+  .dep:last-of-type{border-bottom:0}
+  .deptail{display:flex;justify-content:space-between;gap:15px;padding:11px 18px;border-top:1px solid var(--steel);font:10.5px/1.4 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:#85877a}
+  .deptail b{color:var(--paint-dim);font-weight:400}
+  .dep:hover,.dep:focus-visible{background:var(--flap-hi)}
+  .dep .plat{font:600 26px/1 var(--mono);color:var(--paint-dim);letter-spacing:.04em}
+  .dep .dest{font:600 clamp(17px,2.2vw,22px)/1.15 var(--mono);letter-spacing:.1em;text-transform:uppercase}
+  .dep .note{display:block;font:15px/1.5 var(--sans);letter-spacing:0;text-transform:none;color:var(--paint-dim);margin-top:7px;max-width:52ch}
+  .dep .time{font:600 15px/1 var(--mono);color:var(--amber);letter-spacing:.06em;white-space:nowrap}
+  .dep .go{font:11px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;border:1px solid var(--steel-l);padding:11px 12px;text-align:center}
+  .dep:hover .go{background:var(--paint);color:var(--flap);border-color:var(--paint)}
+  .fineprint{margin-top:18px;font:12px/1.6 var(--mono);color:var(--paint-dim);letter-spacing:.02em}
+
+  /* board */
+  .board{border:1px solid var(--steel);background:var(--flap);flex:1;display:flex;flex-direction:column}
+  .bhead,.row{display:grid;grid-template-columns:56px minmax(0,1fr) minmax(120px,auto) 104px;gap:15px;align-items:center}
+  .bhead{padding:9px 16px;border-bottom:1px solid var(--steel);font:10px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:#85877a;position:sticky;top:0;background:var(--flap);z-index:3}
+  .bhead span:nth-child(3){text-align:right}
+  .bhead span:nth-child(4){text-align:center}
+  .grouphead{display:flex;align-items:center;gap:10px;padding:9px 16px 6px;font:10px/1 var(--mono);letter-spacing:.18em;text-transform:uppercase;color:var(--paint-dim)}
+  .grouphead:after{content:"";flex:1;height:1px;background:var(--steel)}
+
+  .rowwrap{border-bottom:1px solid #212220}
+  .row{width:100%;text-align:left;height:var(--row-h);padding:0 16px;position:relative}
+  .row:hover{background:var(--flap-hi)}
+  .row:before{content:"";position:absolute;left:0;top:6px;bottom:6px;width:2px;background:transparent}
+  .row[data-state="ok"]:before{background:var(--paint)}
+  .row[data-state="run"]:before{background:var(--amber)}
+  .row[data-state="fail"]:before{background:var(--red)}
+  .code{font:12px/1 var(--mono);color:#77796c;letter-spacing:.08em}
+  .name{font:600 15px/1.2 var(--mono);letter-spacing:.1em;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .value{font:12px/1.3 var(--mono);color:var(--paint-dim);text-align:right;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lamp{display:flex;align-items:center;justify-content:center;gap:7px;font:11px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--paint-dim)}
+  .lamp b{width:6px;height:6px;background:currentColor;flex:none}
+  .lamp[data-s="ok"]{color:var(--paint)}
+  .lamp[data-s="run"]{color:var(--amber)}
+  .lamp[data-s="fail"]{color:#cf7770}
+  .lamp[data-s="wait"]{color:#85877a}
+  .flap-in{animation:flapIn 150ms steps(2,end) both}
+  @keyframes flapIn{from{opacity:.3;transform:translateY(-1px)}to{opacity:1;transform:none}}
+  .row[data-state="ok"] .value{color:var(--paint)}
+  .row[data-state="fail"] .value{color:#cf7770}
+  .row[data-state="ok"] .name{color:#fffdf4}
+  .row[aria-expanded="true"]{background:var(--flap-hi)}
+  .row[aria-expanded="true"] .code{color:var(--amber)}
+
+  /* drawer */
+  .drawer{border-top:1px solid #262722;background:#101110;padding:16px 18px 18px;display:none}
+  .rowwrap.open .drawer{display:block}
+  .drawer h3{margin:0 0 8px;font:11px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--paint-dim)}
+  .drawer p{margin:0 0 10px;max-width:74ch;color:#cfc9b8;font-size:15px}
+  .drawer p:last-child{margin-bottom:0}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .cmd{display:flex;align-items:center;gap:10px;border:1px solid var(--steel);background:#0c0d0b;padding:11px 12px;margin:2px 0 10px}
+  .cmd code{font:12px/1.45 var(--mono);color:#e6dfcd;flex:1;overflow-x:auto;white-space:pre}
+  .copy{font:10px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;border:1px solid var(--steel-l);padding:7px 8px;color:var(--paint-dim);white-space:nowrap}
+  .copy:hover{background:var(--paint);color:var(--flap);border-color:var(--paint)}
+  .kv{width:100%;border-collapse:collapse;font:12px/1.5 var(--mono)}
+  .kv td{padding:4px 0;border-bottom:1px solid #1d1e1b;vertical-align:top}
+  .kv td:first-child{color:#8d8f81;padding-right:15px;white-space:nowrap}
+  .kv td:last-child{color:#e2dbc9}
+  .kv .off{color:#8d8f81}
+  .kv .on{color:#dfe6cf}
+  .lamprow{display:flex;gap:18px;flex-wrap:wrap;margin-top:4px}
+  .lamprow span{font:11px/1.4 var(--mono);color:var(--paint-dim);letter-spacing:.04em}
+  .lamprow b{color:var(--paint)}
+  .actions{display:flex;gap:10px;margin-top:15px;flex-wrap:wrap}
+  .act{font:11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;border:1px solid var(--paint);padding:11px 15px;color:var(--paint)}
+  .act:hover{background:var(--paint);color:var(--flap)}
+  .act.ghost{border-color:var(--steel-l);color:var(--paint-dim)}
+  .act.ghost:hover{background:var(--flap-hi);color:var(--paint);border-color:var(--paint-dim)}
+  .act[disabled]{opacity:.45;cursor:default}
+  .act[disabled]:hover{background:none;color:var(--paint)}
+
+  /* arrival log + first row */
+  .log{border:1px solid var(--steel);background:#0b0c0a;padding:10px 12px;font:12px/1.75 var(--mono);color:#a8aa9b;margin:0 0 12px;overflow-x:auto}
+  .log .ok{color:#dfe6cf}
+  .log .t{color:#6d6f63}
+  .arrival{width:100%;border-collapse:collapse;font:12px/1.6 var(--mono);margin:6px 0 10px}
+  .arrival th{text-align:left;font:10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:#85877a;padding:0 0 6px;border-bottom:1px solid var(--steel)}
+  .arrival td{padding:7px 8px 7px 0;border-bottom:1px solid #1d1e1b;color:#e2dbc9}
+  .arrival td:first-child{color:var(--amber)}
+  .tick{display:inline-block;width:5px;height:5px;background:var(--paint);margin-right:6px;vertical-align:1px}
+
+  /* footer bar */
+  .bar{display:flex;align-items:center;gap:15px;flex-wrap:wrap;border:1px solid var(--steel);border-top:0;background:#0f100e;padding:10px 16px;font:11px/1.4 var(--mono);color:var(--paint-dim);letter-spacing:.04em}
+  .bar .keys{display:flex;gap:15px;flex-wrap:wrap}
+  .bar kbd{font:10px/1 var(--mono);border:1px solid var(--steel-l);padding:4px 5px;color:#c9c3b1}
+  .bar .spacer{flex:1}
+  .bar .progress{color:var(--paint)}
+  .bar .progress b{color:var(--amber)}
+
+  .ticker{margin-top:auto;display:flex;align-items:baseline;gap:12px;padding:11px 16px;border-top:1px solid var(--steel);background:#0f100e;font:12px/1.5 var(--mono);color:var(--paint-dim);letter-spacing:.03em}
+  .ticker b{color:var(--amber);font:600 10px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;white-space:nowrap}
+  .ticker em{font-style:normal;color:var(--paint)}
+  .ticker.fail b{color:#cf7770}
+  .ticker.ok b{color:var(--paint)}
+
+
+  @media (max-width:760px){
+    .bhead,.row{grid-template-columns:38px minmax(0,1fr) 86px}
+    .bhead span:nth-child(3){display:none}
+    .value{grid-column:2;grid-row:2;text-align:left;font-size:12px;padding-bottom:7px}
+    .row{height:auto;padding:10px 12px;row-gap:2px}
+    .lamp{grid-column:3;grid-row:1}
+    .name{white-space:normal}
+    .dep{grid-template-columns:44px 1fr;gap:12px}
+    .dephead{grid-template-columns:44px 1fr;gap:12px}
+    .dephead span:nth-child(3){display:none}
+    .deptail{flex-direction:column;gap:4px}
+    .dep .time,.dep .go{grid-column:2}
+    .dep .go{justify-self:start;padding:9px 12px}
+    .cols{grid-template-columns:1fr}
+    .drawer{padding:15px 12px}
+    .lamp span{display:none}
+    .cmd{flex-wrap:wrap}
+    .cmd code{flex:1 0 100%;order:-1}
+    .copy{margin-left:auto}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none!important;transition:none!important}
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <header class="gantry">
+    <div class="brand"><i></i>CARDO</div>
+    <div class="where">Быстрый запуск · всё локально · 127.0.0.1</div>
+    <div class="spacer"></div>
+    <div class="demo">
+      <span>сбой</span>
+      <button id="failToggle" aria-pressed="false" title="Показать состояние ошибки">выкл</button>
+    </div>
+    <div class="clock" id="clock">--:--</div>
+  </header>
+
+  <!-- 1. departures -->
+  <section class="screen" id="screenDepart">
+    <h1 class="board-title">Отправления</h1>
+    <p class="board-sub">Два пути к одному и тому же: данные с вашей машины доезжают до вашего же ClickHouse. Наружу не уходит ничего, аккаунт и хост не нужны.</p>
+    <div class="departures">
+      <div class="dephead"><span>Платформа</span><span>Направление</span><span>Время</span><span></span></div>
+      <button class="dep" data-path="solo">
+        <span class="plat">1</span>
+        <span class="dest">Соло · ноутбук
+          <span class="note">Одна команда, четыре проверки, своя сессия в таблице. Никого не просите и никого не ждёте.</span>
+        </span>
+        <span class="time">~10 МИН</span>
+        <span class="go">Посадка</span>
+      </button>
+      <button class="dep" data-path="pilot">
+        <span class="plat">2</span>
+        <span class="dest">Пилот · команда
+          <span class="note">То же плюс логины без доступа к сырым строкам, один файл настроек на машины и текст для инженеров.</span>
+        </span>
+        <span class="time">~40 МИН</span>
+        <span class="go">Посадка</span>
+      </button>
+      <div class="deptail"><span>Оба пути: <b>локально</b> · <b>без аккаунта</b></span><span>Наружу: <b>0 байт</b></span></div>
+    </div>
+    <p class="fineprint">Повторный запуск ничего не ломает: это починка, а не переустановка. Обновление — та же команда.</p>
+  </section>
+
+  <!-- 2. board -->
+  <section class="screen" id="screenBoard" hidden>
+    <div class="board" id="board">
+      <div class="bhead"><span>№</span><span>Проверка</span><span>Значение</span><span>Состояние</span></div>
+
+      <div class="grouphead">Машина</div>
+
+      <div class="rowwrap" data-step="docker">
+        <button class="row" data-state="wait" aria-expanded="false" data-cmd="docker info --format '{{.ServerVersion}}'">
+          <span class="code">01</span>
+          <span class="name">Docker</span>
+          <span class="value" data-value>не проверено</span>
+          <span class="lamp" data-s="wait"><b></b><span>Ждёт</span></span>
+        </button>
+        <div class="drawer">
+          <h3>Что проверяется</h3>
+          <p>Демон Docker отвечает, и версия compose не старше v2. Если демон не запущен, табло скажет это одной строкой и даст команду — без стены логов.</p>
+          <div class="cmd"><code>docker info --format '{{.ServerVersion}}'</code><button class="copy" data-copy>Копировать</button></div>
+          <div class="actions">
+            <button class="act" data-run="docker">Проверить</button>
+            <button class="act ghost" data-close>Закрыть</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="rowwrap" data-step="ports">
+        <button class="row" data-state="wait" aria-expanded="false" data-cmd="lsof -nP -iTCP:8124,9001,3001,4319,8089 -sTCP:LISTEN">
+          <span class="code">02</span>
+          <span class="name">Порты</span>
+          <span class="value" data-value>не проверено</span>
+          <span class="lamp" data-s="wait"><b></b><span>Ждёт</span></span>
+        </button>
+        <div class="drawer">
+          <h3>Что проверяется</h3>
+          <p>Пять портов свободны: 8124 и 9001 у ClickHouse, 3001 у Grafana, 4319 у OTLP, 8089 у хуков. Занятый порт называется вместе с процессом, который его держит.</p>
+          <div class="actions"><button class="act" data-run="ports">Проверить</button><button class="act ghost" data-close>Закрыть</button></div>
+        </div>
+      </div>
+
+      <div class="rowwrap" data-step="secrets">
+        <button class="row" data-state="wait" aria-expanded="false" data-cmd="openssl rand -hex 32">
+          <span class="code">03</span>
+          <span class="name">Пароли и соль</span>
+          <span class="value" data-value>не создано</span>
+          <span class="lamp" data-s="wait"><b></b><span>Ждёт</span></span>
+        </button>
+        <div class="drawer">
+          <h3>Один раз, на этой машине</h3>
+          <p>Соль псевдонимизации и два пароля генерируются здесь и пишутся в <code>deploy/compose/.env</code> с правами 0600. Пароли не показываются повторно. Соль: hex, 32 символа. Без неё коллектор отказывает каждой OTLP-партии, и это видно в статусе.</p>
+          <table class="kv">
+            <tr><td>CARDO_SALT</td><td>9f3c…7a21 · hex, 64 символа</td></tr>
+            <tr><td>CLICKHOUSE_PASSWORD</td><td>сгенерирован · 0600</td></tr>
+            <tr><td>GRAFANA_PASSWORD</td><td>сгенерирован · 0600</td></tr>
+            <tr><td>Хранитель соли</td><td>вы · при пилоте — служба безопасности</td></tr>
+          </table>
+          <p style="margin-top:10px">В одно-машинной раскладке соль лежит рядом с паролем базы. Это компромисс оценки, а не устройство: в настоящем развёртывании её держит сейф, и аналитика её не видит.</p>
+          <div class="actions"><button class="act" data-run="secrets">Создать и записать</button><button class="act ghost" data-close>Закрыть</button></div>
+        </div>
+      </div>
+
+      <div class="grouphead">Запуск</div>
+
+      <div class="rowwrap" data-step="stack">
+        <button class="row" data-state="wait" aria-expanded="false" data-cmd="docker compose up -d --wait">
+          <span class="code">04</span>
+          <span class="name">Стек</span>
+          <span class="value" data-value>не запущен</span>
+          <span class="lamp" data-s="wait"><b></b><span>Ждёт</span></span>
+        </button>
+        <div class="drawer">
+          <h3>Что запускается</h3>
+          <p>ClickHouse, Grafana, коллектор и одноразовая миграция. Схема приезжает внутри образа: после обновления кода достаточно той же команды, отдельного migrate нет.</p>
+          <table class="kv">
+            <tr><td>ClickHouse</td><td>127.0.0.1:8124 · 9001</td></tr>
+            <tr><td>Grafana</td><td>127.0.0.1:3001</td></tr>
+            <tr><td>Коллектор</td><td>OTLP 4319 · хуки 8089</td></tr>
+            <tr><td>Миграция</td><td>одноразовая, ждёт коллектор</td></tr>
+          </table>
+          <div class="cmd"><code>docker compose up -d --wait</code><button class="copy" data-copy>Копировать</button></div>
+          <div class="actions"><button class="act" data-run="stack">Запустить</button><button class="act ghost" data-close>Закрыть</button></div>
+        </div>
+      </div>
+
+      <div class="grouphead">Данные</div>
+
+      <div class="rowwrap" data-step="verify">
+        <button class="row" data-state="wait" aria-expanded="false" data-cmd="cardo check --wait 30s">
+          <span class="code">05</span>
+          <span class="name">Данные доехали</span>
+          <span class="value" data-value>не проверено</span>
+          <span class="lamp" data-s="wait"><b></b><span>Ждёт</span></span>
+        </button>
+        <div class="drawer">
+          <h3>Проверка цепи, а не «контейнер поднялся»</h3>
+          <p>Табло отправляет синтетическую сессию и один хук, потом читает их обратно из ClickHouse и прогоняет запрос дэшборда. Зелёный здесь значит, что числа на дэшборде будут, а не что контейнеры живы.</p>
+          <div class="log" id="verifyLog" aria-live="polite">
+            <div><span class="t">--:--:--</span> ожидание запуска проверки</div>
+          </div>
+          <div class="cmd"><code>cardo check --wait 30s</code><button class="copy" data-copy>Копировать</button></div>
+          <div class="actions"><button class="act" data-run="verify">Проверить цепь</button><button class="act ghost" data-close>Закрыть</button></div>
+        </div>
+      </div>
+
+      <div class="rowwrap" data-step="firstrow">
+        <button class="row" data-state="wait" aria-expanded="false" data-cmd="cardo check --session">
+          <span class="code">06</span>
+          <span class="name">Своя сессия</span>
+          <span class="value" data-value>ждёт подключения</span>
+          <span class="lamp" data-s="wait"><b></b><span>Ждёт</span></span>
+        </button>
+        <div class="drawer">
+          <h3>Что должно появиться</h3>
+          <p>Одна строка из вашей собственной сессии Claude Code: время, длительность, число вызовов инструментов, версия. Ни текста промптов, ни путей, ни содержимого файлов.</p>
+          <div id="firstRowBox">
+            <p style="color:#8d8f81">Пока пусто. Сначала подключите Claude Code (следующий пункт), потом вернитесь сюда.</p>
+          </div>
+          <div class="actions"><button class="act" data-run="firstrow">Показать строку</button><button class="act ghost" data-close>Закрыть</button></div>
+        </div>
+      </div>
+
+      <div class="grouphead">Люди</div>
+
+      <div class="rowwrap" data-step="connect">
+        <button class="row" data-state="wait" aria-expanded="false" data-cmd="claude --settings deploy/managed-settings/local-evaluation.json">
+          <span class="code">07</span>
+          <span class="name">Claude Code</span>
+          <span class="value" data-value>не подключён</span>
+          <span class="lamp" data-s="wait"><b></b><span>Ждёт</span></span>
+        </button>
+        <div class="drawer">
+          <h3>Один раз, без флагов на каждый запуск</h3>
+          <p>Файл кладётся в настройки проекта или машины. Дальше инженер просто работает: ничего не помечает, не включает и не помнит. Двенадцать хуков, у каждого таймаут одна секунда: если коллектор недоступен, сессия продолжается.</p>
+          <div class="cmd"><code>cardo connect --once</code><button class="copy" data-copy>Копировать</button></div>
+          <table class="kv">
+            <tr><td class="on">включено</td><td>имена команд, субагентов, MCP · длительность · ошибки инструментов · версия</td></tr>
+            <tr><td class="off">выключено</td><td>текст промптов и ответов · содержимое файлов · параметры инструментов</td></tr>
+            <tr><td class="off">наружу</td><td>0 байт</td></tr>
+          </table>
+          <p style="margin-top:10px">Для команды тот же файл раскатывается через MDM, GPO или Intune, один раз и без установки агента на ноутбуки.</p>
+          <div class="actions"><button class="act" data-run="connect">Подключить</button><button class="act ghost" data-close>Закрыть</button></div>
+        </div>
+      </div>
+
+      <!-- pilot-only -->
+      <div class="rowwrap pilot-only" data-step="grafana">
+        <button class="row" data-state="wait" aria-expanded="false" data-cmd="psql-test: grafana_ro MUST NOT read raw tables">
+          <span class="code">08</span>
+          <span class="name">Логины лидов</span>
+          <span class="value" data-value>не созданы</span>
+          <span class="lamp" data-s="wait"><b></b><span>Ждёт</span></span>
+        </button>
+        <div class="drawer">
+          <h3>Читать сводки, но не людей</h3>
+          <p>Grafana лидов получает отдельного пользователя базы, которому разрешены только сгруппированные вьюхи. Проверка живая: табло пытается прочитать сырую и персональную таблицу и ждёт отказа. Отказ и есть успех.</p>
+          <table class="kv">
+            <tr><td>разрешено</td><td>gold_* · вьюхи с минимумом пять человек</td></tr>
+            <tr><td>отказано</td><td>raw_* · per-person · всё, что ниже пяти</td></tr>
+            <tr><td>без этого</td><td>логин лида не выдаётся</td></tr>
+          </table>
+          <div class="actions"><button class="act" data-run="grafana">Создать и проверить</button><button class="act ghost" data-close>Закрыть</button></div>
+        </div>
+      </div>
+
+      <div class="rowwrap pilot-only" data-step="team">
+        <button class="row" data-state="wait" aria-expanded="false" data-cmd="MDM: managed-settings.json">
+          <span class="code">09</span>
+          <span class="name">Файл на машины</span>
+          <span class="value" data-value>не раскатан</span>
+          <span class="lamp" data-s="wait"><b></b><span>Ждёт</span></span>
+        </button>
+        <div class="drawer">
+          <h3>Один файл, ноль установки</h3>
+          <p>Тот же JSON, что и для одного человека, только с адресом коллектора в сети организации. Ни демона, ни скрипта, ни расширения. Инженер может прочитать каждую строку: это весь клиент.</p>
+          <div class="cmd"><code>deploy/managed-settings/managed-settings.json</code><button class="copy" data-copy>Копировать путь</button></div>
+          <div class="actions"><button class="act" data-run="team">Считать раскатанным</button><button class="act ghost" data-close>Закрыть</button></div>
+        </div>
+      </div>
+
+      <div class="rowwrap pilot-only" data-step="notice">
+        <button class="row" data-state="wait" aria-expanded="false" data-cmd="cardo notice --format md">
+          <span class="code">10</span>
+          <span class="name">Текст инженерам</span>
+          <span class="value" data-value>не создан</span>
+          <span class="lamp" data-s="wait"><b></b><span>Ждёт</span></span>
+        </button>
+        <div class="drawer">
+          <h3>Что организация обязана сказать</h3>
+          <p>Кто держит соль. Какие настройки включены. Что данные не используются для оценки людей. Одна страница, без юридического языка, с теми же словами, что в файле настроек.</p>
+          <div class="actions"><button class="act" data-run="notice">Создать</button><button class="act ghost" data-close>Закрыть</button></div>
+        </div>
+      </div>
+
+      <div class="ticker" id="ticker"><b>Объявление</b><span>Выберите строку: <em>Enter</em> откроет её. Каждая проверка показывает команду, которую выполнит: табло ничего не скрывает.</span></div>
+    </div>
+
+    <div class="bar">
+      <div class="keys"><span><kbd>↑</kbd><kbd>↓</kbd> строка</span><span><kbd>Enter</kbd> открыть</span><span><kbd>C</kbd> команда</span><span><kbd>Esc</kbd> закрыть</span></div>
+      <div class="spacer"></div>
+      <button class="act ghost" id="againBtn" hidden>Проверить снова</button>
+      <div class="progress" id="progress"><b>0</b> / <span id="total">7</span> проверено</div>
+    </div>
+
+  </section>
+</div>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const $$ = s => Array.from(document.querySelectorAll(s));
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // clock
+  const clock = $('#clock');
+  const tick = () => {
+    const d = new Date();
+    clock.textContent = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+  };
+  tick(); setInterval(tick, 10000);
+
+  let path = null, failMode = false;
+
+  // flap: text settles immediately, the cell takes a two-step flap. No timers to drift.
+  function flip(el, text){
+    if (!el) return;
+    el.textContent = text;
+    if (reduce) return;
+    el.classList.remove('flap-in');
+    void el.offsetWidth;
+    el.classList.add('flap-in');
+  }
+
+  const LABEL = {wait:'Ждёт', run:'Идёт', ok:'Готово', fail:'Сбой', skip:'Пропуск'};
+
+  function say(text, kind){
+    const t = $('#ticker');
+    if (!t) return;
+    t.className = 'ticker' + (kind ? ' ' + kind : '');
+    t.querySelector('b').textContent = kind === 'fail' ? 'Ошибка' : kind === 'ok' ? 'Статус' : 'Объявление';
+    t.querySelector('span').innerHTML = text;
+  }
+
+  function setState(wrap, state, value){
+    const row = wrap.querySelector('.row');
+    const lampEl = wrap.querySelector('.lamp');
+    const valEl = wrap.querySelector('[data-value]');
+    row.dataset.state = state;
+    lampEl.dataset.s = state;
+    lampEl.querySelector('span').textContent = LABEL[state] || state;
+    if (value !== undefined) flip(valEl, value);
+    const step = wrap.dataset.step;
+    if (state === 'ok') store(step, 'ok');
+    if (state === 'fail') store(step, 'fail');
+    const name = row.querySelector('.name').textContent.trim();
+    if (state === 'run') say('Идёт проверка «<em>' + name + '</em>». Ничего не устанавливается в фоне, окно можно закрыть.', '');
+    if (state === 'fail') say('Сбой в «<em>' + name + '</em>». Причина и команда в раскрытой строке, переустанавливать ничего не нужно.', 'fail');
+    updateProgress();
+  }
+
+  function store(step, val){
+    try {
+      const m = JSON.parse(localStorage.getItem('cardo.steps') || '{}');
+      m[path + ':' + step] = val;
+      localStorage.setItem('cardo.steps', JSON.stringify(m));
+    } catch(e){}
+  }
+
+  function updateProgress(){
+    const wraps = visibleWraps();
+    const done = wraps.filter(w => w.querySelector('.row').dataset.state === 'ok').length;
+    $('#progress').innerHTML = '<b>' + done + '</b> / ' + wraps.length + ' проверено';
+    const all = done === wraps.length && wraps.length > 0;
+    $('#againBtn').hidden = !all;
+    if (all) say('Все проверки пройдены. Дальше делать нечего: ничего не запускается по расписанию, обновление той же командой.', 'ok');
+  }
+
+  function visibleWraps(){
+    return $$('.rowwrap').filter(w => {
+      if (w.classList.contains('pilot-only') && path !== 'pilot') return false;
+      if (path === 'solo' && ['grafana','team','notice'].includes(w.dataset.step)) return false;
+      return true;
+    });
+  }
+
+  // path selection
+  function choosePath(p){
+    path = p;
+    $('#screenDepart').hidden = true;
+    $('#screenBoard').hidden = false;
+    $$('.pilot-only').forEach(w => w.hidden = p !== 'pilot');
+    $$('.rowwrap').forEach(w => {
+      w.querySelector('.row').dataset.state = 'wait';
+      w.querySelector('.lamp').dataset.s = 'wait';
+      w.querySelector('.lamp span').textContent = 'Ждёт';
+      w.querySelector('[data-value]').textContent = 'не проверено';
+      w.classList.remove('open');
+      w.querySelector('.row').setAttribute('aria-expanded','false');
+    });
+    updateProgress();
+    $$('.row')[0].focus();
+  }
+  $$('.dep').forEach(b => b.addEventListener('click', () => choosePath(b.dataset.path)));
+
+  // rows
+  $$('.row').forEach(row => {
+    row.addEventListener('click', () => {
+      const wrap = row.closest('.rowwrap');
+      const open = wrap.classList.toggle('open');
+      row.setAttribute('aria-expanded', open ? 'true' : 'false');
+      $$('.rowwrap').forEach(w => { if (w !== wrap) { w.classList.remove('open'); w.querySelector('.row').setAttribute('aria-expanded','false'); } });
+      if (open) {
+        const r = wrap.querySelector('[data-run]');
+        if (r) r.focus({preventScroll:true});
+        wrap.scrollIntoView({block:'nearest'});
+      }
+    });
+  });
+
+  $$('[data-close]').forEach(b => b.addEventListener('click', e => {
+    const wrap = b.closest('.rowwrap');
+    wrap.classList.remove('open');
+    wrap.querySelector('.row').setAttribute('aria-expanded','false');
+    wrap.querySelector('.row').focus({preventScroll:true});
+  }));
+
+  // keyboard
+  addEventListener('keydown', e => {
+    if ($('#screenBoard').hidden) {
+      if (e.key === '1' || e.key === '2') { choosePath(e.key === '1' ? 'solo' : 'pilot'); }
+      return;
+    }
+    const rows = visibleWraps().map(w => w.querySelector('.row'));
+    const i = rows.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown' && i > -1) { e.preventDefault(); rows[Math.min(i+1, rows.length-1)].focus(); }
+    if (e.key === 'ArrowUp' && i > -1) { e.preventDefault(); rows[Math.max(i-1, 0)].focus(); }
+    if (e.key === 'Escape') { const open = $('.rowwrap.open'); if (open) { open.classList.remove('open'); open.querySelector('.row').setAttribute('aria-expanded','false'); open.querySelector('.row').focus(); } }
+    if ((e.key === 'c' || e.key === 'C') && i > -1) { copy(rows[i].dataset.cmd); }
+  });
+
+  // copy
+  function copy(text){
+    if (!text) return;
+    const done = () => {
+      const t = document.createElement('div');
+      t.textContent = 'СКОПИРОВАНО: ' + text;
+      t.style.cssText = 'position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#ece5d3;color:#141513;font:11px ui-monospace,monospace;letter-spacing:.08em;padding:9px 12px;z-index:9';
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 1600);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done).catch(done);
+    else done();
+  }
+  $$('[data-copy]').forEach(b => b.addEventListener('click', () => {
+    const cmd = b.closest('.drawer').querySelector('code');
+    copy(cmd ? cmd.textContent : '');
+  }));
+
+  // fail mode
+  $('#failToggle').addEventListener('click', e => {
+    failMode = !failMode;
+    e.currentTarget.setAttribute('aria-pressed', String(failMode));
+    e.currentTarget.textContent = failMode ? 'вкл' : 'выкл';
+    if (failMode) {
+      const w = $('[data-step="secrets"]');
+      setState(w, 'fail', 'соль не hex');
+      w.classList.add('open');
+      w.querySelector('.row').setAttribute('aria-expanded','true');
+    }
+  });
+
+  // running simulation
+  const RESULTS = {
+    docker:   ['ok','v27.3 · compose v2.29'],
+    ports:    ['ok','8124 9001 3001 4319 8089'],
+    secrets:  ['ok','.env · 0600 · salt 64 hex'],
+    stack:    ['ok','4 сервиса · migrate ok'],
+    verify:   ['ok','otlp + hook + запрос · ok'],
+    firstrow: ['ok','1 сессия · 4м 12с · 37 вызовов'],
+    connect:  ['ok','подключён · без флагов'],
+    grafana:  ['ok','чтение сырых строк · отказ'],
+    team:     ['ok','файл на машинах · 0 установки'],
+    notice:   ['ok','1 страница · md']
+  };
+
+  function runStep(step){
+    const wrap = document.querySelector('[data-step="' + step + '"]');
+    if (!wrap) return;
+    if (step === 'secrets' && failMode) {
+      setState(wrap, 'fail', 'соль 31 символ');
+      return;
+    }
+    setState(wrap, 'run', 'проверяю…');
+    const delay = step === 'stack' ? 2100 : step === 'verify' ? 2400 : 900;
+
+    if (step === 'verify') logVerify();
+    if (step === 'firstrow') setTimeout(showFirstRow, delay + 200);
+
+    setTimeout(() => {
+      const [st, val] = RESULTS[step] || ['ok','ok'];
+      setState(wrap, st, val);
+      if (step === 'firstrow') showFirstRow();
+    }, delay);
+  }
+
+  function logVerify(){
+    const log = $('#verifyLog');
+    log.innerHTML = '';
+    const lines = [
+      ['--:--:--','отправляю синтетическую OTLP-партию'],
+      ['--:--:--','отправляю хук SessionEnd'],
+      ['--:--:--','читаю обратно: raw_events'],
+      ['--:--:--','запрос дэшборда: gold_fleet_adoption']
+    ];
+    let i = 0;
+    const id = setInterval(() => {
+      if (i >= lines.length) { clearInterval(id); return; }
+      const d = new Date();
+      const t = [d.getHours(),d.getMinutes(),d.getSeconds()].map(n => String(n).padStart(2,'0')).join(':');
+      const div = document.createElement('div');
+      div.innerHTML = '<span class="t">' + t + '</span> ' + lines[i][1] + (i === 0 ? ' <span class="ok">принято</span>' : i === 1 ? ' <span class="ok">принято</span>' : i === 2 ? ' <span class="ok">1 строка</span>' : ' <span class="ok">данные есть</span>');
+      log.appendChild(div);
+      i++;
+    }, 420);
+  }
+
+  function showFirstRow(){
+    const box = $('#firstRowBox');
+    if (!box || box.dataset.shown) return;
+    box.dataset.shown = '1';
+    const d = new Date();
+    const t = [d.getHours(),d.getMinutes(),d.getSeconds()].map(n => String(n).padStart(2,'0')).join(':');
+    box.innerHTML =
+      '<table class="arrival"><thead><tr><th>Время</th><th>Сессия</th><th>Длительность</th><th>Вызовы</th><th>Модель</th></tr></thead>' +
+      '<tbody><tr><td><span class="tick"></span>' + t + '</td><td>6f2a…c41d</td><td>4м 12с</td><td>37</td><td>claude-sonnet-4.5</td></tr></tbody></table>' +
+      '<p>Это ваша сессия. Из неё ушли длительность, число вызовов, имена инструментов и версия. Не ушли: текст промптов, ответы, пути и содержимое файлов.</p>';
+  }
+
+  $$('[data-run]').forEach(b => b.addEventListener('click', () => runStep(b.dataset.run)));
+
+  $('#againBtn').addEventListener('click', () => {
+    $$('.rowwrap').forEach(w => {
+      if (w.hidden) return;
+      setState(w, 'wait', 'не проверено');
+    });
+  });
+
+  $$('.dep').forEach(b => b.addEventListener('click', () => { try { localStorage.setItem('cardo.path', b.dataset.path); } catch(e){} }));
+})();
+</script>
+</body>
+</html>
