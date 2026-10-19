@@ -49,3 +49,9 @@ Thumbs.db
 
 # scripts/preview.sh: which copy the preview holds
 .preview-state
+
+# release artifacts
+dist/
+
+# Hermes agent workspace
+.hermes/

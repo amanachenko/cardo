@@ -13,8 +13,8 @@ your engineering teams:
 - what adoption costs, and where the money goes on rework;
 - whether the policies your administrators set actually hold.
 
-It also gives each engineer a private coach. Nothing is installed on laptops, no data leaves your
-network, and engineers can check for themselves exactly what it collects.
+It also gives each engineer a private coach. Nothing is installed on laptops, no data about your
+organization leaves your network, and engineers can check for themselves exactly what it collects.
 
 ---
 
@@ -105,7 +105,11 @@ what the console shows, and each engineer sees their own position first.
 
 - **It measures approaches, not people.** "Is the skill we shipped used, and does it help?" is a
   fact about the skill. A ranking of engineers is a number people learn to game.
-- **It runs entirely in your network.** No phone-home, no hosted version, no benchmark upload.
+- **It runs in your network.** No usage phone-home, no hosted version, no benchmark upload. The only
+  outbound read is the public price list that turns token counts into a cost estimate (ADR-0049).
+- **Collection reads no content.** Prompts, code and file paths never reach a table (INV-1, INV-5).
+  `cardo import` is the one manual exception: run by the person, metadata only, text discarded
+  (ADR-0050).
 - **Nothing is installed on laptops.** Your device management pushes one settings file, which turns
   on Claude Code's own telemetry and a set of hooks. Claude Code waits for each hook's answer: a few
   milliseconds normally, and at most one second if the collector is out of reach. No hook can block
@@ -128,9 +132,15 @@ what the console shows, and each engineer sees their own position first.
 | | Status |
 |---|---|
 | Collection: the settings file, hooks, and a collector that hashes identity and drops content | **Built**, and checked against real Claude Code sessions |
+| Installation: one binary, a local board, and one-command checks | **Built**: `cardo ui`, `cardo up`, `cardo check`, `cardo check --proof` |
+| Verification: the pipeline is proved by a probe that deletes its own rows, and the install is verified by the engineer's own session | **Built** |
+| The Admin API path runs inside the stack as an optional poller, configured once from the board | **Built**; not yet run against a live Anthropic response |
+| A leadership login that can read gold views and nothing else | **Built**: `cardo gold`, proved refused on bronze and silver |
 | Artifact usage, instructions versions, context and model-switch cost, and a dashboard | **Built**, and checked against those sessions |
 | Reading Anthropic's usage data | **Built**; not yet run against a live organization |
-| Coach pages, efficiency comparisons, repository classification, teams from your directory, the board report | **Planned** |
+| Service runs (CI, agents) are labelled and kept out of people counts | **Built**: `actor_kind`/`workflow`, filters in the gold views, GitHub Actions block |
+| An operator console: overview, versioned artifact catalog, team directory, settings | **Built**: four surfaces; approval and rollback; hashed directory with a floor |
+| Coach pages, efficiency comparisons, repository classification, the board report | **Planned** |
 | Evidence report, coverage, SIEM events | **Planned** |
 | Named cost view, pull-request outcomes, other AI tools | **When an organization asks** |
 

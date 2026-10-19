@@ -11,6 +11,14 @@ The collector path has been checked against one engineer's real Claude Code sess
 run with a team, and the poller has never parsed a live Anthropic response
 ([risks.md](../risks.md) #12).
 
+The Admin API poller is now part of the stack (ADR-0043): a `poller` service behind the `admin`
+Compose profile, configured once from the board, so no operator machine needs a cron entry.
+
+The quickstart from work item 2 is built: one binary, `cardo ui` for the board, `cardo up` for the
+same steps without it, `cardo check` for a read-only pass, and `cardo check --proof` to require one
+real session with the fields the views read. The diagnostic probe (`cardo probe`) proves the
+pipeline and deletes its own rows, so no synthetic session ever reaches `silver_session`.
+
 [ADR-0030](adr/0030-stakeholders-and-questions.md) to [ADR-0037](adr/0037-policy-evidence.md)
 decided who Cardo is for and what each of them needs. This file turns that into work.
 
@@ -49,6 +57,12 @@ judges it by these, decided before the pilot starts:
 [`docs/overview.md`](overview.md#trying-it-in-your-organization) describes how an organization can
 run one.
 
+## Coordination
+
+Items 3–6 are marked *Taken* by work that is not in this tree (no `cardo pseudonym`, coach, export,
+or efficiency views here). Before building any of them, find that branch: duplicating a claimed item
+is worse than leaving it open.
+
 ## Work items
 
 The order of work, one pull request each. Each item says whether you can pick it up:
@@ -62,9 +76,11 @@ The order of work, one pull request each. Each item says whether you can pick it
 1. **The dashboard guards check every panel.** The INV-3 and volume tests read only top-level
    panels. A panel inside a row, or a template variable's query, is not checked. *Taken.*
 2. **A quickstart for one machine, and `cardo check`:** run the stack, send your own sessions to
-   it, and check in one command that what the views rely on has arrived. *Taken.*
+   it, and check in one command that what the views rely on has arrived. **Built:** a `cardo check` row that names every actor type the Admin API returns and fails on an undocumented one; `cardo ui`,
+   `cardo up`, `cardo check`, `cardo check --proof`; the proof is a real session, not a fixture.
 3. **`cardo pseudonym <email>`** ([ADR-0032](adr/0032-engineer-coach-by-shared-link.md),
-   [ADR-0034](adr/0034-identity-in-pilots.md)). *Taken.*
+   [ADR-0034](adr/0034-identity-in-pilots.md)). *Built:* prints the value and its salt version, read
+   from the same salt the collector uses; the address is never stored.
 4. **The coach, figures only, and `cardo coach`**
    ([ADR-0032](adr/0032-engineer-coach-by-shared-link.md),
    [ADR-0041](adr/0041-the-coach-suggests-what-the-fleet-has-shown.md)).
@@ -72,7 +88,9 @@ The order of work, one pull request each. Each item says whether you can pick it
      the person's own past.
    - **A CI rule:** every query is fixed to one pseudonym, or reads gold only.
 
-   *Taken; waits for 3.*
+   *Built:* `cardo coach <email>` prints the figures, and the console serves the same data as a
+   page at `#/coach` (operator preview) and `/coach/<pseudonym>?k=…` (per-person link), with an
+   eight-week trend and at most three suggestions ([ADR-0048](adr/0048-coach-in-the-console.md)).
 5. **Several machines' data in one store: export, import and removal, with their ADR.** The export
    is a file its owner can read before sending, with no repository names and no organization id.
    The import replaces by session, because the bronze tables have no key, and a second import would
@@ -90,13 +108,20 @@ The order of work, one pull request each. Each item says whether you can pick it
    *Taken.*
 7. **A gold-only ClickHouse user** for the leadership Grafana, with a live test that it is refused
    bronze and silver ([risks.md](../risks.md) #15). This must be done before anyone except the
-   operator gets a Grafana login. *Open.*
-8. **A second Grafana for personal pages**
-   ([ADR-0032](adr/0032-engineer-coach-by-shared-link.md)). *Open; waits for 7.*
-9. **Teams from a directory file** ([ADR-0034](adr/0034-identity-in-pilots.md)). *Needs a
-   decision:* the file's format, and how it is loaded.
+   operator gets a Grafana login. **Built:** `cardo gold` creates `cardo_ro`, the `leadership`
+   database of SQL SECURITY DEFINER views, grants `leadership.*` only, and proves the refusal live;
+   the `Cardo gold (read-only)` datasource uses it, and `cardo check` re-proves the boundary without
+   writing anything.
+8. **Per-person links for the coach** ([ADR-0048](adr/0048-coach-in-the-console.md)). *Built:* one
+   signed link per pseudonym (`/coach/<pseudonym>?k=…`), no second Grafana; rotating the board token
+   revokes every link at once, per-link revocation is not built.
+9. **Teams from a directory file** ([ADR-0034](adr/0034-identity-in-pilots.md)). *Built:* the
+   console accepts `email,team`, hashes on load (ADR-0046), shows coverage and the floor; a
+   `cardo teams` CLI check remains.
 10. **The service-run label and the CI settings block**
-    ([ADR-0036](adr/0036-service-runs-are-not-people.md)). *Open.*
+    ([ADR-0036](adr/0036-service-runs-are-not-people.md)). *Built:* actor kind and workflow from
+    resource attributes, service runs out of people views, a GitHub Actions block, and a check that
+    fails on undocumented actor types.
 11. **How each artifact arrived** ([ADR-0040](adr/0040-spread-is-a-vote-only-for-what-teams-chose.md)):
     - the operator's rollout list, which is also the inventory for finding what nobody uses;
     - artifact views that label a rolled-out artifact's spread as reach, with the before-and-after

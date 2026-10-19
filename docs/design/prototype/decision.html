@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cardo — три структуры визарда</title>
+<style>
+  :root{
+    --paper:#efede6;
+    --card:#f7f5ef;
+    --ink:#1a1916;
+    --muted:#6b675e;
+    --line:#c9c3b4;
+    --accent:#7a1f1a;
+    --ok:#2e5c3c;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:"Helvetica Neue",Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.45 var(--sans)}
+  ::selection{background:#1a1916;color:#f7f5ef}
+  .wrap{max-width:1220px;margin:0 auto;padding:44px 32px 64px}
+  header{display:flex;justify-content:space-between;align-items:baseline;gap:24px;border-bottom:1px solid var(--ink);padding-bottom:14px}
+  h1{font-size:26px;line-height:1.15;margin:0;letter-spacing:-.015em;font-weight:600;max-width:30ch}
+  .meta{font:12px/1.4 var(--mono);color:var(--muted);text-align:right}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:28px}
+  article{background:var(--card);border:1px solid var(--line);display:flex;flex-direction:column}
+  article[data-picked="1"]{border-color:var(--ink);outline:2px solid var(--ink);outline-offset:-2px}
+  .schem{height:232px;border-bottom:1px solid var(--line);padding:14px;position:relative;overflow:hidden;background:#e7e4da}
+  .cap{padding:16px 18px 0}
+  .cap h2{font-size:17px;margin:0 0 6px;line-height:1.25;letter-spacing:-.01em}
+  .cap p{margin:0;color:var(--muted);font-size:13.5px}
+  .why{padding:12px 18px 0;font-size:12.5px;line-height:1.5;color:var(--ink)}
+  .why b{font-family:var(--mono);font-weight:400;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);display:block;margin-bottom:4px}
+  .pick{margin:16px 18px 18px;padding:10px 12px;border:1px solid var(--ink);background:transparent;font:13px var(--mono);color:var(--ink);cursor:pointer;text-align:left;display:flex;justify-content:space-between;align-items:center}
+  .pick:hover,.pick:focus-visible{background:var(--ink);color:var(--card);outline:none}
+  .pick span{opacity:.55}
+  footer{margin-top:26px;display:flex;justify-content:space-between;gap:16px;font:12px/1.5 var(--mono);color:var(--muted)}
+
+  /* 1 — concourse board */
+  .board{display:grid;grid-template-columns:64px 1fr;gap:10px;height:100%}
+  .board .steps{display:flex;flex-direction:column;gap:6px}
+  .board .step{height:20px;border:1px solid var(--line);background:#dedbcf;display:flex;align-items:center;justify-content:center;font:9px var(--mono);color:#7a766b}
+  .board .step.on{background:var(--ink);color:var(--card);border-color:var(--ink)}
+  .board .rows{display:flex;flex-direction:column;gap:6px}
+  .board .row{height:30px;display:flex;gap:4px}
+  .board .cell{flex:1;background:#2a2925;color:#efece2;font:9px/1 var(--mono);display:flex;align-items:center;justify-content:center;letter-spacing:.04em}
+  .board .cell.q{background:#cfcbbd;color:#6b675e}
+  .board .cell.ok{background:#2e5c3c;color:#eef3ec}
+  .board .foot{grid-column:1/-1;height:22px;background:var(--ink);color:var(--card);font:9px var(--mono);display:flex;align-items:center;justify-content:space-between;padding:0 8px}
+
+  /* 2 — manual with fore-edge tabs */
+  .manual{display:grid;grid-template-columns:1fr 26px;height:100%;background:#f2efe6;border:1px solid var(--line);position:relative}
+  .page{padding:12px 14px;border-right:1px solid var(--line);display:grid;grid-template-columns:22px 1fr;gap:10px}
+  .margin{display:flex;flex-direction:column;gap:5px;align-items:flex-end;padding-top:2px}
+  .margin i{display:block;height:6px;background:#c9c3b4;width:18px}
+  .body{min-width:0}
+  .rules i{display:block;height:4px;background:#d6d1c4;margin-bottom:5px}
+  .rules i:nth-child(3n){width:72%}
+  .rules i:nth-child(4n){width:88%}
+  .field{margin-top:10px;border:1px solid var(--ink);height:22px;display:flex;align-items:center;padding:0 6px;font:9px var(--mono);color:#5d594f;justify-content:space-between}
+  .acetate{position:absolute;left:82px;top:56px;width:150px;height:96px;background:rgba(255,255,255,.42);border:1px solid #9d9788;box-shadow:1px 2px 0 rgba(26,25,22,.18);backdrop-filter:blur(.3px)}
+  .acetate::before,.acetate::after{content:"";position:absolute;left:9px;width:7px;height:7px;border-radius:50%;background:#e7e4da;border:1px solid #9d9788}
+  .acetate::before{top:9px}.acetate::after{bottom:9px}
+  .tabs{display:flex;flex-direction:column;justify-content:flex-start;gap:3px;padding:6px 0;background:#e2ded1}
+  .tab{height:26px;background:#cdc7b7;border:1px solid #bbb5a5;border-right:0;font:8px var(--mono);display:flex;align-items:center;justify-content:center;color:#5f5b51}
+  .tab.on{background:#c9a227;border-color:#a9871c;color:#241f10;flex:1.6}
+
+  /* 3 — transit diagram */
+  .transit{height:100%;display:grid;grid-template-rows:auto 1fr;gap:12px}
+  .line{display:flex;align-items:center;gap:0;padding:10px 2px 0}
+  .stn{width:14px;height:14px;border-radius:50%;border:2px solid var(--ink);background:#e7e4da;flex:none}
+  .stn.done{background:var(--ink)}
+  .stn.now{background:#b03a2e;border-color:#b03a2e}
+  .seg{height:3px;background:var(--ink);flex:1}
+  .seg.next{background:#c3bdad}
+  .panel{border:1px solid var(--line);background:#f2efe6;padding:10px;display:grid;grid-template-columns:1fr 74px;gap:8px;align-content:start}
+  .panel .big{height:58px;border:1px solid var(--line);background:#dedbcf;display:flex;align-items:center;justify-content:center;font:9px var(--mono);color:#6b675e}
+  .panel .side{display:flex;flex-direction:column;gap:5px}
+  .panel .side i{display:block;height:100%;border:1px solid var(--line);background:#e2ded1}
+  .panel .cmd{grid-column:1/-1;height:20px;background:var(--ink);color:var(--card);font:9px var(--mono);display:flex;align-items:center;padding:0 6px}
+  @media (max-width:980px){.grid{grid-template-columns:1fr}.schem{height:210px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Три структуры визарда Cardo. Выберите одну — дальше собираю её целиком.</h1>
+    <div class="meta">surface: quickstart-launcher<br>mode: operate · code-led<br>seed a1c07896</div>
+  </header>
+
+  <div class="grid">
+    <article data-choice="board">
+      <div class="schem">
+        <div class="board">
+          <div class="steps">
+            <div class="step on">01</div><div class="step">02</div><div class="step">03</div>
+            <div class="step">04</div><div class="step">05</div><div class="step">06</div>
+          </div>
+          <div class="rows">
+            <div class="row"><div class="cell">DOCKER</div><div class="cell">ON</div><div class="cell q">WAIT</div></div>
+            <div class="row"><div class="cell q">CLICKHOUSE</div><div class="cell q">8181</div><div class="cell q">WAIT</div></div>
+            <div class="row"><div class="cell q">COLLECTOR</div><div class="cell q">4319</div><div class="cell q">WAIT</div></div>
+            <div class="row"><div class="cell q">FIRST ROW</div><div class="cell q">—</div><div class="cell q">WAIT</div></div>
+          </div>
+          <div class="foot"><span>↑↓ ROWS · ENTER SEND</span><span>1 / 6</span></div>
+        </div>
+      </div>
+      <div class="cap">
+        <h2>Табло отправлений</h2>
+        <p>Экран — конкорс: строки проверок перещёлкиваются, как буквы на split-flap, когда данные реально доехали.</p>
+      </div>
+      <div class="why"><b>Сильная сторона</b>Аха «мои данные доехали» виден физически: строка меняется с WAIT на значение. Статус — главный объект, а не украшение.</div>
+      <button class="pick" data-pick="board">Выбрать <span>[1]</span></button>
+    </article>
+
+    <article data-choice="manual">
+      <div class="schem">
+        <div class="manual">
+          <div class="page">
+            <div class="margin"><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="body">
+              <div class="rules"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+              <div class="field"><span>CARDO_SALT</span><span>••••••••</span></div>
+              <div class="field"><span>GRAFANA_PASSWORD</span><span>••••••</span></div>
+            </div>
+          </div>
+          <div class="tabs">
+            <div class="tab on">1</div><div class="tab">2</div><div class="tab">3</div>
+            <div class="tab">4</div><div class="tab">5</div><div class="tab">6</div>
+          </div>
+          <div class="acetate"></div>
+        </div>
+      </div>
+      <div class="cap">
+        <h2>Руководство с ацетатным листом</h2>
+        <p>Шаги — ступенчатые язычки на обрезе книги. Прозрачный лист поверх страницы — это слой «что именно уходит».</p>
+      </div>
+      <div class="why"><b>Сильная сторона</b>Приватность показана, а не описана: ацетат накладывается на страницу и проявляет ровно те поля, которые уйдут. Язычки = прогресс и оглавление одновременно.</div>
+      <button class="pick" data-pick="manual">Выбрать <span>[2]</span></button>
+    </article>
+
+    <article data-choice="transit">
+      <div class="schem">
+        <div class="transit">
+          <div class="line">
+            <div class="stn done"></div><div class="seg"></div>
+            <div class="stn done"></div><div class="seg"></div>
+            <div class="stn now"></div><div class="seg next"></div>
+            <div class="stn"></div><div class="seg next"></div>
+            <div class="stn"></div>
+          </div>
+          <div class="panel">
+            <div class="big">CONTROL CHECK</div>
+            <div class="side"><i></i><i></i><i></i></div>
+            <div class="cmd">cardo check --wait 30s</div>
+          </div>
+        </div>
+      </div>
+      <div class="cap">
+        <h2>Линия метро</h2>
+        <p>Весь запуск — одна линия со станциями; пересадка на каждом шаге ведёт в панель с деталями и командой.</p>
+      </div>
+      <div class="why"><b>Сильная сторона</b>Путь целиком виден с первого экрана, шаг нельзя потерять. Слабее для проверки: строки-статусы уходят в боковую панель.</div>
+      <button class="pick" data-pick="transit">Выбрать <span>[3]</span></button>
+    </article>
+  </div>
+
+  <footer>
+    <span>1 / 2 / 3 — выбрать · карточка подсветится</span>
+    <span id="state">ничего не выбрано</span>
+  </footer>
+</div>
+
+<script>
+  const titles = {board:'табло отправлений', manual:'руководство с ацетатом', transit:'линия метро'};
+  const state = document.getElementById('state');
+  function pick(name){
+    document.querySelectorAll('article').forEach(a => a.dataset.picked = a.dataset.choice === name ? '1' : '0');
+    state.textContent = 'выбрано: ' + titles[name];
+    try { localStorage.setItem('cardo.surface', name); } catch(e){}
+  }
+  document.querySelectorAll('.pick').forEach(b => b.addEventListener('click', () => pick(b.dataset.pick)));
+  addEventListener('keydown', e => {
+    const map = {'1':'board','2':'manual','3':'transit'};
+    if (map[e.key]) pick(map[e.key]);
+  });
+  try {
+    const saved = localStorage.getItem('cardo.surface');
+    if (saved) pick(saved);
+  } catch(e){}
+</script>
+</body>
+</html>

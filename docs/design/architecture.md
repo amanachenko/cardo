@@ -120,7 +120,51 @@ and an empty day on a dashboard is indistinguishable from a day nobody worked.
 The store is replace-per-day rather than append, because both analytics APIs revise recent days and
 an appending poller would silently double every total.
 
-### The collector path
+### The installer
+
+`cmd/cardo` carries the reference installation as steps (`internal/launcher`): docker, ports, secrets,
+the compose stack, three health checks, the Claude Code settings file, a diagnostic probe and the
+proof from a real session. The CLI and the board call the same `RunStep`, so the browser has no second
+implementation. The board is loopback-only, authenticated by a token that is kept per port under the
+user cache and exchanged for an HttpOnly cookie; every action is a POST with that cookie.
+
+Two steps are deliberately not part of "install everything": `probe` (diagnostic) and `session`
+(proof). The probe writes one OTLP log and one hook event with a per-run marker, reads both counts
+back from ClickHouse, then deletes those rows — `silver_session` groups bronze by `session_id` with no
+filter of its own, so a probe left behind would become a phantom session. The proof is the engineer's
+own session, and `cardo check --proof` is what makes a CI run require it.
+
+### The Admin API poller in the stack
+
+`cardo poll -every 24h` runs as the `poller` service behind the Compose profile `admin` (ADR-0043).
+The profile is added only when `CARDO_ADMIN_KEY` is set, so a collector-only install never carries a
+container that cannot work and `compose up --wait` never waits for an exited one. The board's start
+screen writes the key to `.env` (0600, write-only) and shows the last day, rows and days that landed
+in `bronze_actor_day`; `Run now` restarts the service, which polls immediately. Backfill stays a CLI
+act (`cardo poll -days 30`), because an installation is not a historical import.
+
+### Who can read what
+
+The operator's Grafana uses the `cardo` ClickHouse user and can read every layer. The leadership
+datasource (`Cardo gold (read-only)`) uses `cardo_ro`, which is granted `SELECT` on the `leadership`
+database only: nine `SQL SECURITY DEFINER` views over the gold layer, created by `cardo gold`. The
+step proves the boundary live — a query against `cardo.bronze_actor_day` or `cardo.silver_session`
+must be refused before the step passes — and `cardo check` repeats that proof without creating
+anything. DEFiner rights are what let the grant stay on `leadership.*` without reaching bronze or
+silver underneath.
+
+
+## The console
+
+The same binary serves four surfaces after the stack is up: **Overview** (checks, sessions, poller,
+warnings, recent changes), **Catalog** (`settings_artifact_versions` + immutable files under
+`<compose-dir>/catalog/`), **Teams** (`settings_teams_batches` + `settings_teams`, hashed on load) and
+**Settings** (pilot mode, project directory, min group size, org artifacts, admin key). Install is no
+longer a peer tab: it is the repair room reached from Settings or the Overview next action (ADR-0044).
+Every write goes through `settings_changes`, and the leadership Grafana reads `leadership` views owned by
+`cardo` with `SQL SECURITY DEFINER` (ADR-0022, ADR-0045).
+
+## The collector path
 
 ```
   developer machine                         reference stack / organization's network

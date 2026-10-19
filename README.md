@@ -15,6 +15,57 @@ not your engineers.
 
 ---
 
+## Install the launcher
+
+The launcher is one binary. It installs the stack, verifies it, and serves the installation board on
+loopback. Docker Desktop 24 or later must be running first; nothing else is required.
+
+macOS and Linux:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/amanachenko/cardo/main/install.sh | sh
+```
+
+Windows (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/amanachenko/cardo/main/install.ps1 | iex
+```
+
+Both installers download the archive and `checksums.txt` for the same release and refuse to unpack
+anything whose SHA-256 does not match. Neither needs `sudo` or administrator rights: the binary goes
+to `~/.local/bin` or `%LOCALAPPDATA%\Cardo\bin`, and only the user `PATH` is touched.
+
+Then:
+
+```sh
+cardo ui     # opens the installation board
+```
+
+CI runs are not people: `deploy/ci/github-actions.card.yaml` turns on telemetry for GitHub Actions with
+`cardo.actor=service` and `cardo.workflow=<workflow>`; those runs count as work and cost, never as a
+person, a team member or a coach subject (ADR-0036).
+
+The board is a console, not only an installer: **Overview** (is everything fresh, and what to do next),
+**Catalog** (versioned enablement artifacts with a diff before approval), **Teams** (a hashed directory,
+coverage, floors) and **Settings** (path, poller, floor, org artifacts). The installer itself lives in
+Settings → Installation → *Open install and repair*, and on the Overview next-action when a check fails.
+How each surface works, and how to run the coach, the transcript importer and the watcher:
+**[docs/console-coach-history.md](docs/console-coach-history.md)**.
+
+`cardo up` runs the same installation without the board, `cardo check` re-runs the checks read-only,
+and `cardo connect --project <dir>` installs the Claude Code settings file.
+
+The Admin API path is configured on the same board: paste an organization admin key once and the
+`poller` service starts inside the stack (Compose profile `admin`) on the interval you choose. The key
+is written to `deploy/compose/.env` with mode 0600, never shown again, and the poller runs no cron on
+any machine. Without a key the service is never started.
+
+The installer downloads the binary from GitHub; the stack it installs sends nothing out. `cardo probe`
+proves the local pipeline with one synthetic event and deletes its rows immediately, so the session
+model never counts it; `cardo check --proof` passes only when one of your own sessions has the fields
+the views read.
+
 ## The question it answers
 
 You shipped an org-wide skill three weeks ago. Your managed `CLAUDE.md` is 400 lines. You have an
@@ -54,10 +105,12 @@ of work: **[docs/roadmap.md](docs/roadmap.md)**.
 
 **Never, under any configuration:**
 
-- reads your session transcripts (INV-1)
+- reads your session transcripts on the collection path (INV-1). `cardo import` reads them only when
+  you run it yourself, keeps lengths and token counts, and never stores the text (ADR-0050)
 - stores your email address (INV-2)
 - stores prompts, code, or the paths of files you touched (INV-5)
-- sends anything outside your organization's network (INV-7)
+- sends anything about your organization outside its network (INV-7). The one outbound read is the
+  public OpenRouter price list, unauthenticated and daily (ADR-0049)
 
 **Collected without asking** (short by design; the list is the boundary, and adding to it requires a
 recorded decision): session start and end, model and effort, tokens and cost, tool *classes*, skill
@@ -128,7 +181,7 @@ it ([measurement](docs/research/2026-09-23-admin-api-individual-account.md)).
 | 0 | ADRs, invariants, research snapshots, risks | **done** |
 | 1 | `cardo` poller, pseudonymizer, both storage targets, SQL layers, dashboard, invariant tests | **done except verification** — no live API run |
 | 2 | Managed settings, hook pack, collector config, artifact dashboard | **done**: collection checked against a real Claude Code, views and dashboard against those sessions; no fleet yet |
-| 3 | The coach page, the efficiency family, repository identity, teams from a directory, service-run labels, the board report, the evidence report | decided 2026-09-25 ([ADR-0030 to 0037](docs/adr/README.md)); built in the order of the [work items](docs/roadmap.md#work-items) |
+| 3 | The coach page, the efficiency family, repository identity, service-run labels, the board report, the evidence report — **teams from a directory is built** in the console (hashed loader, coverage, floors) | decided 2026-09-25 ([ADR-0030 to 0037](docs/adr/README.md)); built in the order of the [work items](docs/roadmap.md#work-items) |
 
 ### Try it without a key
 
@@ -236,6 +289,43 @@ dashboards solve the collector stack; [`mcp-scan`](https://github.com/invariantl
 MCP security scanning. Full survey:
 [docs/research/2026-09-21-prior-art-survey.md](docs/research/2026-09-21-prior-art-survey.md).
 
+## Retention
+
+Raw rows are deleted on a window you set once. `0` keeps everything; anything else is applied by the
+poller after every run, and `cardo prune` does the same by hand:
+
+```sh
+cardo prune -days 30 --dry-run   # count, delete nothing
+cardo prune -days 30             # delete raw rows older than 30 days
+```
+
+The window also changes the ClickHouse TTL on the bronze tables, so it works in both directions
+(the tables ship with 90 days). Silver and gold are views; they shorten with the raw rows.
+
+## Verify the Admin API path without a key
+
+The poller's endpoint is pinned; a local stand-in is the one exception, and it must be on loopback.
+
+```sh
+./bin/cardo mock-admin -port 8791 -days 2 -users 2 -api-keys 1
+```
+
+In another shell, point the poller at it with the same salt and ClickHouse the stack uses:
+
+```sh
+export CARDO_ADMIN_KEY=sk-ant-mock CARDO_SALT=... \
+       CARDO_CLICKHOUSE_URL=http://127.0.0.1:8124 \
+       CARDO_CLICKHOUSE_USER=... CARDO_CLICKHOUSE_PASSWORD=...
+./bin/cardo poll -base-url http://127.0.0.1:8791 -days 2 -store clickhouse
+```
+
+Expect `user_actor` and `api_actor` rows, no email addresses in `payload`, and `cardo check`
+reporting `ACTOR TYPES  api_actor N · user_actor M  OK`. Adding `-unknown 1` to the stand-in makes
+that row fail with the undocumented type's name. Delete the synthetic rows with
+`ALTER TABLE cardo.bronze_actor_day DELETE WHERE org_id = '00000000-0000-4000-8000-00000000cafe'`.
+
+A base URL that is not loopback is refused: the key cannot be pointed at a host someone else runs.
+
 ## Contributing
 
 Welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first: commits are signed off, and nothing from a
@@ -246,3 +336,16 @@ real organization is ever committed. Report security problems privately, as
 
 Apache-2.0, copyright The Cardo Authors ([NOTICE](NOTICE)). No CLA. See
 [ADR-0038](docs/adr/0038-public-under-a-collective-copyright.md).
+
+## Coach
+
+`cardo coach you@example.com` prints your own figures for the last 28 days against the 28 before
+them: sessions, prompts, cost, peak context, failed tool calls, and the artifacts you loaded. It
+ends with at most three suggestions, each naming a fix. There is no rank, no percentile and no
+single score, and no other person's rows are read. The console serves the same page at `#/coach`
+(operator preview) and issues a per-person link you can hand out; the link carries one pseudonym and
+nothing else. `-days` changes the window, `-json` prints the
+report for a page or a test. Importing your existing transcripts, keeping them current with the
+watcher, and the link's security model are covered in
+[docs/console-coach-history.md](docs/console-coach-history.md).
+

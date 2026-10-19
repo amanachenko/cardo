@@ -1,0 +1,23 @@
+# The leadership datasource. It exists so a login handed to an engineering leader cannot reach bronze
+# or silver: the ClickHouse user behind it is granted SELECT on the leadership database only, and the
+# grant is proved by `cardo gold` (roadmap item 7).
+#
+# Until `cardo gold` has created the user, this datasource fails to authenticate — which is the safe
+# direction: no leader is shown a panel that reads a raw layer.
+apiVersion: 1
+
+datasources:
+  - name: Cardo gold (read-only)
+    uid: cardo-gold
+    type: grafana-clickhouse-datasource
+    isDefault: false
+    editable: false
+    jsonData:
+      host: clickhouse
+      port: 9000
+      protocol: native
+      secure: false
+      username: ${GRAFANA_RO_USER}
+      defaultDatabase: leadership
+    secureJsonData:
+      password: ${GRAFANA_RO_PASSWORD}
