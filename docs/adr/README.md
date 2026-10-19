@@ -51,7 +51,7 @@ The hard rules that these decisions produce live in
 | [0039](0039-hooks-wait-at-most-one-second.md) | Every hook waits at most one second, and a model switch is read after it happens | Accepted | 2026-10-06 |
 | [0040](0040-spread-is-a-vote-only-for-what-teams-chose.md) | Spread is a vote only for what teams chose | Accepted, not built | 2026-10-08 |
 | [0041](0041-the-coach-suggests-what-the-fleet-has-shown.md) | The coach suggests only what the fleet has shown | Accepted, not built | 2026-10-08 |
-| [0042](0042-the-north-star.md) | Organizations decide what becomes standard, without watching anyone | Proposed | 2026-10-14 |
+| [0042](0042-the-north-star.md) | Organizations decide what becomes standard, without watching anyone | Accepted | 2026-10-14 |
 
 ADR-0030 to ADR-0037 came out of one design review on 2026-09-25, which asked who Cardo is for and
 what each of them needs. Its evidence is
