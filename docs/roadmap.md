@@ -90,7 +90,7 @@ missing is an organization running Cardo safely, so this comes first.
 
 #### The leaders' side: what should become standard?
 
-*Lead, proposed and settled in review:* the project's owner.
+*Lead:* the project's owner.
 
 - **How each artifact arrived: rolled out to everyone, or picked up by choice**
   ([spread is a vote only for what teams chose](adr/0040-spread-is-a-vote-only-for-what-teams-chose.md)).
@@ -108,8 +108,7 @@ missing is an organization running Cardo safely, so this comes first.
 
 #### The engineer's side: what does struggle look like, and how does a person find out?
 
-*Lead, proposed and settled in review:* a contributor who knows from experience what an agent
-getting stuck looks like.
+*Lead:* a contributor who knows from experience what an agent getting stuck looks like.
 
 - **The signs of struggle, first version** ([what "works" means](adr/0031-what-works-means.md)).
   Older documents call this the efficiency family. It replaces the friction panels, and drops the

@@ -1,6 +1,6 @@
 # ADR-0042 — Organizations decide what becomes standard, without watching anyone
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-10-14
 **Evidence:** Judgment, no evidence. It comes from a discussion between the project's owner and a
 contributor about where effort is worth most, from
