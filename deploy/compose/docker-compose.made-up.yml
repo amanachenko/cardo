@@ -1,0 +1,59 @@
+# The made-up organization's stack: a third Cardo, beside the one that collects and the preview,
+# holding only invented engineers (ADR-0051). It is where the views are seen, and checked, on an
+# organization's worth of sessions before any organization's real data exists.
+#
+# Run it through scripts/made-up.sh. By hand it would be:
+#
+#   docker compose -p cardo-madeup --env-file .env.made-up \
+#     -f docker-compose.yml -f docker-compose.made-up.yml up -d
+#
+# What differs from docker-compose.yml:
+#
+#   - Its own project name, so its own containers, network and volumes.
+#   - Its own ports, all on loopback: Grafana 3003, ClickHouse's HTTP interface 8126, OTLP 4320 and
+#     hooks 8090. No native ClickHouse port: the script goes through `docker exec`.
+#   - Its own image tag for `cardo`, so building it never replaces the one the live stack runs.
+#   - A collector that also reads made-up/collector-made-up.yml: one rule that takes a hook event's
+#     time from a header the generator sends. That file says why, and why the shipped collector
+#     never gets it.
+#   - The invented organization's naming patterns, fixed here rather than read from .env, so what
+#     the generator names and what the views label always agree.
+#   - A Grafana that files the dashboards under a folder named for what they show, opens on a page
+#     that says it, and has its own session cookie.
+
+name: cardo-madeup
+
+services:
+  clickhouse:
+    ports: !override
+      - "127.0.0.1:8126:8123"
+
+  migrate:
+    image: cardo-madeup:dev
+    environment:
+      CARDO_ORG_ARTIFACTS: "^(review|onboarding|test-fixer|jira|example-standards-v[0-9]+[.]md)$$"
+
+  collector:
+    command:
+      - "--config=/etc/otelcol-contrib/config.yaml"
+      - "--config=/etc/otelcol-contrib/made-up.yaml"
+    environment:
+      CARDO_ORG_ARTIFACTS: "^(review|onboarding|test-fixer|jira|example-standards-v[0-9]+[.]md)$$"
+      CARDO_ORG_REPOS: "^git[.]example[.]com/"
+    ports: !override
+      - "127.0.0.1:4320:4318"
+      - "127.0.0.1:8090:8088"
+    volumes:
+      - ./made-up/collector-made-up.yml:/etc/otelcol-contrib/made-up.yaml:ro
+
+  grafana:
+    ports: !override
+      - "127.0.0.1:3003:3000"
+    environment:
+      # Its own session cookie. Browsers keep cookies by host, not by port, so with Grafana's
+      # default name, signing in to one Grafana on 127.0.0.1 signs you out of the others.
+      GF_AUTH_LOGIN_COOKIE_NAME: cardo_madeup_session
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/made-up-home.json
+    volumes:
+      - ./made-up/grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/cardo.yml:ro
+      - ./made-up/grafana/home.json:/etc/grafana/made-up-home.json:ro
