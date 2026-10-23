@@ -16,7 +16,17 @@ import (
 
 // The presets whose stories are held to their text: the one people look at, and the one a CI job
 // checks. The large preset is for size, and is held only to its shape (TestPresetsCanTellTheirStories).
-var storyPresets = []string{"review", "ci"}
+//
+// Under the race detector only the CI preset is. CI's unit tests run with -race on four cores, and
+// there the review preset alone took eight and a half minutes to generate, so the two together
+// passed go test's ten-minute limit. A story check has no goroutines of its own for the detector to
+// watch; the generator's workers are TestSameSeedSameOrganization's, which runs under it too.
+var storyPresets = func() []string {
+	if raceDetector {
+		return []string{"ci"}
+	}
+	return []string{"review", "ci"}
+}()
 
 var (
 	keysMu sync.Mutex
