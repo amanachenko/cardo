@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2"
+	"slices"
 	"strings"
 	"time"
 )
@@ -27,7 +28,13 @@ type session struct {
 	r *rand.Rand
 
 	id       string
+	kind     sessionKind
+	week     int // the week of the history it starts in, from 1
+	ws       *weekState
 	version  string
+	buggy    bool // the release has the caching bug
+	scripted bool // started by a script: one prompt, every tool allowed, nobody at the keyboard
+	terminal string
 	repo     *Repo
 	paths    paths
 	resource []kv
@@ -40,11 +47,17 @@ type session struct {
 
 	t         time.Time // the session's own clock
 	model     string
-	prefix    int // the conversation's fixed prefix: system prompt, tools, instructions files
+	planModel string // the person's own model, which the session's work is planned at
+	prefix    int    // the conversation's fixed prefix: system prompt, tools, instructions files
+	extra     int    // the part of the prefix the stories added, which the plan leaves out
 	main      conv
 	compactAt int
 	promptID  string
-	skill     string // the custom command this prompt runs, which every request in it names
+	skill     string // the custom command or skill this prompt runs, which every request in it names
+	first     string // the command the session's first prompt runs, if any
+	editBoost bool   // Edit and Write are likelier: the session used /deploy-check
+	callJira  bool   // the session calls the Jira connector once
+	inRetry   bool   // the requests being sent are the flaky test command's reruns
 
 	allowed              map[string]bool // tools a "don't ask again" answer allowed for the rest of the session
 	usedInPrompt         map[string]bool
@@ -74,6 +87,27 @@ type sessionTally struct {
 	cost                   float64
 	hooks, records, points int
 	uses                   []use
+
+	// What the friction and context views count.
+	mainRequests                  int
+	startContext                  int // the context of its first main-thread request
+	editProposals, editRejections int
+	acceptedEdits                 int
+	permissionPrompts             int
+	permissionWaitMs              int64
+	compactions, autoCompactions  int
+
+	// What the stories' figures need.
+	kind                   sessionKind
+	week                   int
+	first                  string
+	buggy                  bool
+	standards              int // the version of example-standards it loaded, if any
+	retryLoops, failedRuns int
+	retryRequests          int
+	retryCost              float64
+	bugCost                float64 // what the caching bug added
+	end                    time.Time
 }
 
 type use struct {
@@ -88,26 +122,67 @@ type paths struct {
 
 func ms(n float64) time.Duration { return time.Duration(n * float64(time.Millisecond)) }
 
+// sessionKind is what started a session.
+type sessionKind int
+
+const (
+	worked    sessionKind = iota // the person, at their keyboard
+	overnight                    // a long loop left running overnight
+	gaming                       // the script that runs /review in sessions that do nothing else
+)
+
+// weekState is what a person has already done in the current week, which some stories depend on.
+type weekState struct {
+	week        int
+	deployCheck bool // used /deploy-check
+	jira        bool // called the Jira connector
+}
+
 // writeSession writes one whole session that starts at start and may spend about budget.
-func writeSession(o *Org, p *Person, r *rand.Rand, day int, start time.Time, budget float64) *session {
+func writeSession(o *Org, p *Person, r *rand.Rand, kind sessionKind, start time.Time, budget float64, ws *weekState) *session {
+	day := int(start.Sub(o.Start) / (24 * time.Hour))
+	st := o.Preset.Stories
+	rel := o.release(p, day)
 	s := &session{
-		o: o, p: p, r: r, t: start, model: p.Model,
+		o: o, p: p, r: r, t: start, model: p.Model, planModel: p.Model,
 		id:            uuid(r),
-		version:       p.versionOn(day),
+		kind:          kind,
+		week:          day/7 + 1,
+		ws:            ws,
+		version:       version(rel),
+		buggy:         o.buggy(rel),
+		scripted:      p.Style.Scripted || kind == gaming,
+		terminal:      p.Terminal,
 		allowed:       map[string]bool{},
 		costByModel:   map[string]float64{},
 		tokensByModel: map[string]*[4]int{},
 	}
-	s.tally.id = s.id
+	if kind == gaming {
+		s.terminal = "non-interactive"
+	}
+	if st.ExpensiveModel > 0 && s.week >= st.ExpensiveModel && p.Team.Name == st.ExpensiveTeam {
+		s.model = expensiveModel
+	}
+	s.tally.id, s.tally.kind, s.tally.week, s.tally.buggy = s.id, kind, s.week, s.buggy
 	s.compactAt = s.nextCompaction()
 	s.pickRepo()
 	s.paths = p.pathsFor(s.repo, s.id)
 	s.resource = s.resourceAttrs()
 
 	s.loadInstructions()
+	if st.Connector > 0 && s.week >= st.Connector {
+		s.prefix += connectorTokens
+		s.extra += connectorTokens
+		if p.JiraWeeks[s.week] && !ws.jira && !s.scripted {
+			ws.jira, s.callJira = true, true
+		}
+	}
 	// Claude Code's own prefix is the same in every session, so the person's other sessions
 	// usually have it in the cache already.
 	s.main = conv{sent: s.prefix, cached: basePrefixTokens, last: s.t}
+	s.first = s.firstCommand()
+	s.tally.first = s.first
+	s.editBoost = s.first == "deploy-check"
 
 	style := p.Style
 	requests := s.planRequests(budget * (1 - 0.6*style.Subagents) * 0.92)
@@ -115,16 +190,19 @@ func writeSession(o *Org, p *Person, r *rand.Rand, day int, start time.Time, bud
 	if style.Prompts[1] > style.Prompts[0] {
 		prompts = int(math.Round(logUniform(r, float64(style.Prompts[0]), float64(style.Prompts[1]))))
 	}
+	if s.scripted || kind == overnight {
+		prompts = 1
+	}
 	prompts = max(1, min(prompts, requests))
 
 	s.t = s.t.Add(ms(3000 + 25000*r.Float64()))
 	for i, n := range split(r, requests, prompts) {
-		if i > 0 && !style.Scripted {
+		if i > 0 && !s.scripted {
 			s.t = s.t.Add(time.Duration(logNormal(r, float64(style.Think), 0.8)))
 			s.maybeBuiltin()
 		}
-		s.prompt(n)
-		if !style.Scripted && r.Float64() < 0.02 {
+		s.prompt(i, n)
+		if !s.scripted && r.Float64() < 0.02 {
 			s.hook(s.t.Add(ms(400)), "ConfigChange",
 				field{"prompt_id", s.promptID},
 				field{"file_path", s.join(s.paths.cwd, ".claude", "settings.local.json")},
@@ -135,20 +213,42 @@ func writeSession(o *Org, p *Person, r *rand.Rand, day int, start time.Time, bud
 	s.t = s.t.Add(time.Duration(logNormal(r, float64(20*time.Second), 0.8)))
 	s.hook(s.t, "SessionEnd", field{"prompt_id", s.promptID}, field{"reason", pick(r, endReasons)})
 	s.writeMetrics(start)
+	s.tally.end = s.last
 	return s
 }
 
+// firstCommand is the command the session starts with: /review from the gaming script,
+// /deploy-check for someone who has taken it up, /review in a team it was rolled out to, or none.
+func (s *session) firstCommand() string {
+	st := s.o.Preset.Stories
+	switch {
+	case s.kind == gaming:
+		return "review"
+	case s.scripted || s.kind == overnight:
+		return ""
+	case s.p.DeployCheckWeek > 0 && s.week >= s.p.DeployCheckWeek && (!s.ws.deployCheck || s.r.Float64() < deployCheckChance):
+		s.ws.deployCheck = true
+		return "deploy-check"
+	case st.Review > 0 && s.week >= st.Review && !onTeam(st.NoReview, s.p.Team.Name) && s.r.Float64() < reviewChance:
+		return "review"
+	}
+	return ""
+}
+
 // planRequests finds how many main-thread requests spend about the budget, from what one request
-// costs on average at this session's context size.
+// costs on average at this session's context size. It plans at the person's own model and
+// without the context the stories added, so that a story changes what the work costs and not how
+// much of it there is.
 func (s *session) planRequests(budget float64) int {
-	price := Prices[s.model]
+	price := Prices[s.planModel]
 	style := s.p.Style
 	add := style.Growth * math.Exp(0.8*0.8/2)
 	out := style.Output * math.Exp(0.5)
 	step := add + out
-	span := float64(autoCompactTokens - s.prefix)
+	prefix := s.prefix - s.extra
+	span := float64(autoCompactTokens - prefix)
 	cost := func(n int) float64 {
-		avg := float64(s.prefix) + math.Min(float64(n)*step, span)/2
+		avg := float64(prefix) + math.Min(float64(n)*step, span)/2
 		return float64(n) * (avg*price.CacheRead + step*price.CacheWrite + out*price.Output + 20*price.Input)
 	}
 	lo, hi := 1, maxRequestsPerSession
@@ -241,12 +341,22 @@ func (s *session) loadInstructions() {
 	s.use(s.t, "instructions", "", "CLAUDE.md", false, false)
 	s.prefix += 1500 + r.IntN(4500)
 	if s.repo.Org {
-		name := "example-standards-v2.md"
+		st := s.o.Preset.Stories
+		version := 2
+		if st.InstructionsV3 > 0 && s.week >= st.InstructionsV3 && !onTeam(st.StayOnV2, s.p.Team.Name) {
+			version = 3
+		}
+		name := fmt.Sprintf("example-standards-v%d.md", version)
 		s.hook(next(), "InstructionsLoaded",
 			field{"memory_type", "Project"}, field{"parent_file_path", project},
 			field{"file_path", s.join(s.paths.cwd, name)}, field{"load_reason", "include"})
 		s.use(s.t, "instructions", name, "other", true, false)
 		s.prefix += 5000
+		if version == 3 {
+			s.prefix += instructionsV3Tokens
+			s.extra += instructionsV3Tokens
+		}
+		s.tally.standards = version
 	}
 }
 
@@ -302,16 +412,32 @@ func (s *session) builtinPrompt(name string) {
 	s.log(s.t, "user_prompt", "prompt_length", itoa(len(name)+1), "command_name", name, "command_source", "builtin")
 }
 
-// prompt is one prompt the person types, answered with n main-thread requests.
-func (s *session) prompt(n int) {
+// prompt is the session's i-th prompt, answered with n main-thread requests.
+func (s *session) prompt(i, n int) {
 	r := s.r
 	s.promptID = uuid(r)
 	s.usedInPrompt = map[string]bool{}
 	command, source := s.pickCommand()
+	if i == 0 && s.first != "" {
+		command, source = s.first, "projectSettings"
+	}
 	builtin := source == "builtin"
 	s.skill = ""
 	if command != "" && !builtin {
 		s.skill = command
+		s.usedInPrompt["skill|"+command] = true
+	}
+	if command == "" {
+		// A skill the model chooses itself: every request in the prompt names it, and Claude Code
+		// sends no expansion for it.
+		st := s.o.Preset.Stories
+		switch x := r.Float64(); {
+		case st.Connector > 0 && s.week >= st.Connector && x < apiGuidelinesChance:
+			s.skill = "api-guidelines"
+		case st.PerfBudget > 0 && s.week >= st.PerfBudget && onTeam(st.PerfBudgetTeams, s.p.Team.Name) &&
+			x > 1-perfBudgetChance:
+			s.skill = "perf-budget"
+		}
 	}
 
 	length := int(math.Max(5, math.Min(6000, logNormal(r, 140, 1))))
@@ -343,24 +469,32 @@ func (s *session) prompt(n int) {
 	s.main.sent += length / 4
 
 	subagent := r.Float64() < s.p.Style.Subagents
+	flaky := -1
+	if st := s.o.Preset.Stories; s.p.Team.Name == st.FlakyTeam && !s.scripted && n > 1 && r.Float64() < flakyChance {
+		flaky = r.IntN(n - 1)
+	}
 	for k := range n {
 		if s.main.sent+s.main.out > s.compactAt {
 			s.compact("auto")
 		}
 		s.request(&s.main, "repl_main_thread", s.model, "", s.add(), s.output(), 0)
-		if k == n-1 {
-			break
-		}
-		if subagent && k == 0 {
+		switch {
+		case k == n-1:
+		case subagent && k == 0:
 			s.subagent()
-			continue
+		case s.callJira:
+			s.callJira = false
+			s.callTool(nil, "mcp__jira__"+mcpOperations[r.IntN(len(mcpOperations))], "")
+		case k == flaky:
+			s.retryLoop()
+		default:
+			s.toolCall(nil)
 		}
-		s.toolCall(nil)
 	}
 
 	// Claude Code's prompt-suggestion helper, after some turns: it fires a SubagentStop with no
 	// start, then a request of its own (observed on 2.1.281).
-	if !s.p.Style.Scripted && r.Float64() < 0.2 {
+	if !s.scripted && r.Float64() < 0.2 {
 		s.t = s.t.Add(ms(200))
 		s.subagentStop(s.t, agentID(r), "")
 		helper := conv{sent: s.main.sent + s.main.out, cached: s.main.sent, last: s.main.last}
@@ -372,7 +506,7 @@ func (s *session) prompt(n int) {
 // pickCommand decides whether a prompt is a slash command, and which.
 func (s *session) pickCommand() (name, source string) {
 	r := s.r
-	if s.p.Style.Scripted {
+	if s.scripted || s.kind == overnight {
 		return "", ""
 	}
 	day := int(s.t.Sub(s.o.Start).Hours() / 24)
@@ -417,6 +551,13 @@ func (s *session) request(c *conv, query, model, agent string, add, out int, dur
 	if s.t.Sub(c.last) > time.Hour {
 		read = 0
 	}
+	if s.buggy && r.Float64() < bugColdChance {
+		// What reading it normally would have saved: the tokens written instead, at the
+		// difference between the two prices.
+		cold := min(read, basePrefixTokens)
+		s.tally.bugCost += float64(read-cold) * (price.CacheWrite - price.CacheRead)
+		read = cold
+	}
 	input := min(1+r.IntN(40), sent-read)
 	write := sent - read - input
 	cost := float64(input)*price.Input + float64(read)*price.CacheRead +
@@ -442,10 +583,24 @@ func (s *session) request(c *conv, query, model, agent string, add, out int, dur
 		pairs = append(pairs, "agent.name", agent)
 	}
 	s.log(s.t, "api_request", pairs...)
+	if s.skill != "" && !s.usedInPrompt["skill|"+s.skill] {
+		s.usedInPrompt["skill|"+s.skill] = true
+		s.use(s.t, "skill", s.skill, "", orgName(s.skill), false)
+	}
 
 	c.sent, c.out, c.cached, c.last = sent, out, sent, s.t
 	s.tally.requests++
 	s.tally.cost += cost
+	if query == "repl_main_thread" {
+		if s.tally.mainRequests == 0 {
+			s.tally.startContext = sent
+		}
+		s.tally.mainRequests++
+	}
+	if s.inRetry {
+		s.tally.retryRequests++
+		s.tally.retryCost += cost
+	}
 	s.costByModel[model] += cost
 	tk := s.tokensByModel[model]
 	if tk == nil {
@@ -466,13 +621,26 @@ type subagentRun struct {
 var subagentTools = []weighted{{"Read", 0.5}, {"Grep", 0.3}, {"Glob", 0.15}, {"Bash", 0.05}}
 var mcpOperations = []string{"search", "get_issue", "list", "query"}
 
+// The tools a request in an overnight loop ends in: mostly running the tests and fixing what
+// they find.
+var overnightMix = []weighted{{"Bash", 0.45}, {"Read", 0.25}, {"Edit", 0.2}, {"Grep", 0.1}}
+
 // toolCall runs one tool the last request asked for, with the permission prompt it needs.
-func (s *session) toolCall(in *subagentRun) {
+func (s *session) toolCall(in *subagentRun) { s.callTool(in, "", "") }
+
+// callTool runs tool, or one picked the way the session picks them when tool is empty. outcome
+// is "fail" or "pass" for a test run whose result is known, and empty otherwise.
+func (s *session) callTool(in *subagentRun, tool, outcome string) {
 	r := s.r
-	var tool string
-	if in != nil {
+	switch {
+	case tool != "":
+	case in != nil:
 		tool = pick(r, subagentTools)
-	} else {
+	case s.kind == overnight:
+		tool = pick(r, overnightMix)
+	case s.editBoost:
+		tool = pick(r, boosted(toolMix, deployCheckEditBoost, "Edit", "Write"))
+	default:
 		tool = pick(r, toolMix)
 	}
 	server := ""
@@ -483,11 +651,13 @@ func (s *session) toolCall(in *subagentRun) {
 			server = s.p.MCPServers[r.IntN(len(s.p.MCPServers))]
 			tool = "mcp__" + server + "__" + mcpOperations[r.IntN(len(mcpOperations))]
 		}
+	} else if strings.HasPrefix(tool, "mcp__") {
+		server = strings.Split(tool, "__")[1]
 	}
 	id := toolUseID(r)
 	start := s.t.Add(ms(5 + 20*r.Float64()))
 
-	if s.p.Mode == "auto" && tool == "Bash" && r.Float64() < 0.01 {
+	if s.p.Mode == "auto" && tool == "Bash" && outcome == "" && r.Float64() < 0.01 {
 		// Auto mode refuses the call: a rejection by configuration in OTel, PermissionDenied in
 		// the hooks, and no result (observed on 2.1.290).
 		s.log(start, "tool_decision", "tool_name", tool, "tool_use_id", id, "decision", "reject", "source", "config")
@@ -529,8 +699,19 @@ func (s *session) toolCall(in *subagentRun) {
 		if source == "user_permanent" {
 			s.allowed[tool] = true
 		}
+		s.tally.permissionPrompts++
+		// As the view measures it: from the prompt to the answer, in whole milliseconds of each.
+		s.tally.permissionWaitMs += decided.UnixMilli() - start.UnixMilli()
 	}
 	s.log(decided, "tool_decision", "tool_name", tool, "tool_use_id", id, "decision", decision, "source", source)
+	if tool == "Edit" || tool == "Write" {
+		s.tally.editProposals++
+		if decision == "reject" {
+			s.tally.editRejections++
+		} else {
+			s.tally.acceptedEdits++
+		}
+	}
 	if server != "" && !s.usedInPrompt["mcp|"+server] {
 		s.usedInPrompt["mcp|"+server] = true
 		s.use(firstSeen, "mcp", server, "", orgName(server) || orgName("mcp__"+server+"__"), false)
@@ -539,9 +720,21 @@ func (s *session) toolCall(in *subagentRun) {
 		s.t = decided.Add(ms(20))
 		return
 	}
-	done := decided.Add(toolDuration(r, tool))
+	took := toolDuration(r, tool)
+	switch {
+	case outcome != "":
+		took = time.Duration(logNormal(r, float64(25*time.Second), 0.4)) // the whole test suite
+	case s.kind == overnight && tool == "Bash":
+		took = time.Duration(logNormal(r, float64(time.Minute), 0.6))
+	}
+	done := decided.Add(took)
 	success := "true"
-	if r.Float64() < 0.06 {
+	switch {
+	case outcome == "fail":
+		success = "false"
+		s.tally.failedRuns++
+	case outcome == "pass":
+	case r.Float64() < 0.06:
 		success = "false"
 	}
 	s.log(done, "tool_result", "tool_name", tool, "tool_use_id", id, "success", success,
@@ -552,9 +745,40 @@ func (s *session) toolCall(in *subagentRun) {
 	s.t = done.Add(ms(20))
 }
 
+// retryLoop is the flaky team's test command failing: the model runs it, reads the failure, and
+// runs it again, until it passes. Each rerun is a request more than the prompt was planned with.
+func (s *session) retryLoop() {
+	runs := 3 + s.r.IntN(5)
+	s.tally.retryLoops++
+	for i := range runs {
+		if i == runs-1 {
+			s.callTool(nil, "Bash", "pass")
+			return
+		}
+		s.callTool(nil, "Bash", "fail")
+		if s.main.sent+s.main.out > s.compactAt {
+			s.compact("auto")
+		}
+		s.inRetry = true
+		s.request(&s.main, "repl_main_thread", s.model, "", 400+s.r.IntN(2500), s.output(), 0)
+		s.inRetry = false
+	}
+}
+
+// boosted is a mix with the named tools' weights multiplied by factor.
+func boosted(mix []weighted, factor float64, tools ...string) []weighted {
+	out := slices.Clone(mix)
+	for i := range out {
+		if slices.Contains(tools, out[i].Value) {
+			out[i].Weight *= factor
+		}
+	}
+	return out
+}
+
 // asks says whether a call to tool brings up a permission prompt for this person.
 func (s *session) asks(tool string) bool {
-	if s.p.Style.Scripted || s.p.Mode == "auto" || s.allowed[tool] {
+	if s.scripted || s.p.Mode == "auto" || s.allowed[tool] {
 		return false
 	}
 	r := s.r
@@ -661,6 +885,10 @@ func (s *session) pickSubagent() (kind string, builtin bool) {
 // compact summarizes the conversation, on the person's /compact or automatically near the window.
 func (s *session) compact(trigger string) {
 	r := s.r
+	s.tally.compactions++
+	if trigger == "auto" {
+		s.tally.autoCompactions++
+	}
 	before := s.main.sent + s.main.out
 	s.hook(s.t.Add(ms(5)), "PreCompact",
 		field{"prompt_id", s.promptID}, field{"trigger", trigger}, field{"custom_instructions", ""})
@@ -722,7 +950,7 @@ func (s *session) log(at time.Time, event string, pairs ...string) {
 	a := attrs(
 		"user.id", s.p.deviceID, "session.id", s.id, "app.version", s.version,
 		"organization.id", organizationID, "user.email", s.p.Email, "user.account_uuid", s.p.accountUUID,
-		"terminal.type", s.p.Terminal, "event.name", event,
+		"terminal.type", s.terminal, "event.name", event,
 		"event.timestamp", at.Format("2006-01-02T15:04:05.000Z"), "event.sequence", itoa(s.seq),
 		"prompt.id", s.promptID,
 	)
@@ -753,7 +981,7 @@ func (s *session) writeMetrics(start time.Time) {
 		return attrs(append([]string{
 			"user.id", s.p.deviceID, "session.id", s.id, "app.version", s.version,
 			"organization.id", organizationID, "user.email", s.p.Email, "user.account_uuid", s.p.accountUUID,
-			"terminal.type", s.p.Terminal,
+			"terminal.type", s.terminal,
 		}, extra...)...)
 	}
 	at := nanos(s.last)
@@ -845,12 +1073,6 @@ func (p *Person) pathsFor(repo *Repo, sid string) paths {
 }
 
 func (s *session) join(parts ...string) string { return strings.Join(parts, s.paths.sep) }
-
-// versionOn is the Claude Code version the person runs on a day: a release every two days,
-// reaching them after their own lag.
-func (p *Person) versionOn(day int) string {
-	return fmt.Sprintf("2.1.%d", 250+max(0, day-p.UpgradeLag)/2)
-}
 
 func uuid(r *rand.Rand) string {
 	a, b := r.Uint64(), r.Uint64()

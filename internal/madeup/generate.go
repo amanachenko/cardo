@@ -76,21 +76,33 @@ feed:
 
 // writePerson writes one person's whole history, day by day.
 func (o *Org) writePerson(ctx context.Context, p *Person, sink Sink) (*tally, error) {
-	t := newTally()
+	t := newTally(o.Preset.Stories)
 	b := &batch{sink: sink}
+	ws := &weekState{}
 	for day := range o.Days {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 		r := newRand(o.Seed, uint64(day+1)<<40|uint64(p.Index))
-		for _, start := range o.schedule(r, p, day) {
-			perSession := p.MonthlySpend / p.MonthlySessions
-			budget := perSession * logNormal(r, 1, 0.6) / math.Exp(0.18)
-			s := writeSession(o, p, r, day, start, budget)
+		for _, pl := range o.schedule(r, p, day) {
+			if week := int(pl.at.Sub(o.Start)/(24*time.Hour))/7 + 1; week != ws.week {
+				ws = &weekState{week: week}
+			}
+			var budget float64
+			switch pl.kind {
+			case overnight:
+				budget = logUniform(r, 12, 36)
+			case gaming:
+				budget = logUniform(r, 0.03, 0.08)
+			default:
+				perSession := p.MonthlySpend / p.MonthlySessions
+				budget = perSession * logNormal(r, 1, 0.6) / math.Exp(0.18)
+			}
+			s := writeSession(o, p, r, pl.kind, pl.at, budget, ws)
 			if !s.last.Before(o.End()) {
 				continue // it would run past the end of the history
 			}
-			t.add(&s.tally, p.Team.Name)
+			t.add(&s.tally, p)
 			if err := b.add(s); err != nil {
 				return nil, err
 			}
@@ -102,12 +114,42 @@ func (o *Org) writePerson(ctx context.Context, p *Person, sink Sink) (*tally, er
 	return t, nil
 }
 
-// schedule gives the start times of a person's sessions on one day, in order.
-func (o *Org) schedule(r *rand.Rand, p *Person, day int) []time.Time {
+// planned is a session to write: when it starts, and what starts it.
+type planned struct {
+	at   time.Time
+	kind sessionKind
+}
+
+// schedule gives a person's sessions on one day, in order.
+func (o *Org) schedule(r *rand.Rand, p *Person, day int) []planned {
 	if day < p.JoinDay || p.DaysOff[day] {
 		return nil
 	}
 	date := o.Start.AddDate(0, 0, day)
+	local := func(hours float64) time.Time {
+		return date.Add(time.Duration((hours - p.Team.UTC) * float64(time.Hour)))
+	}
+	wd := date.Weekday()
+	workday := wd != time.Saturday && wd != time.Sunday
+	var out []planned
+	if p.Gamer && workday && day/7+1 >= o.Preset.Stories.Gamer {
+		// The script runs one /review session after another through the working day.
+		at := local(9.5 + r.Float64())
+		for range gamerSessionsMin + r.IntN(gamerSessionsMax-gamerSessionsMin+1) {
+			out = append(out, planned{at, gaming})
+			at = at.Add(time.Duration(logNormal(r, float64(4*time.Minute), 0.3)))
+		}
+	}
+	if p.Overnight && wd >= time.Monday && wd <= time.Thursday && r.Float64() < 0.7 {
+		out = append(out, planned{local(22 + 1.5*r.Float64()), overnight})
+	}
+	out = append(out, o.ownSessions(r, p, date, local)...)
+	slices.SortFunc(out, func(a, b planned) int { return a.at.Compare(b.at) })
+	return out
+}
+
+// ownSessions gives the sessions a person starts themselves on one day.
+func (o *Org) ownSessions(r *rand.Rand, p *Person, date time.Time, local func(float64) time.Time) []planned {
 	s := p.Style
 	chance := s.ActiveDay
 	if wd := date.Weekday(); wd == time.Saturday || wd == time.Sunday {
@@ -119,9 +161,6 @@ func (o *Org) schedule(r *rand.Rand, p *Person, day int) []time.Time {
 	perActiveDay := p.MonthlySessions / (21.7*s.ActiveDay + 8.7*s.Weekend)
 	n := max(1, poisson(r, perActiveDay*logNormal(r, 1, 0.35)))
 
-	local := func(hours float64) time.Time {
-		return date.Add(time.Duration((hours - p.Team.UTC) * float64(time.Hour)))
-	}
 	var out []time.Time
 	if s.Scripted {
 		// A script runs its sessions one after another, in a few batches a day.
@@ -153,8 +192,11 @@ func (o *Org) schedule(r *rand.Rand, p *Person, day int) []time.Time {
 			out = append(out, local(h))
 		}
 	}
-	slices.SortFunc(out, func(a, b time.Time) int { return a.Compare(b) })
-	return out
+	plans := make([]planned, len(out))
+	for i, at := range out {
+		plans[i] = planned{at, worked}
+	}
+	return plans
 }
 
 // batch gathers one person's sessions into OTLP requests.

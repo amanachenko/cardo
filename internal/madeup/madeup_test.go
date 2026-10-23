@@ -32,6 +32,19 @@ var small = madeup.Preset{
 		{Name: "beta", People: 7, UTC: -5, Repos: []string{"beta-app", "beta-lib"}},
 		{Name: "gamma", People: 3, UTC: 0, Repos: []string{"gamma-tool"}},
 	},
+	// Every story, squeezed into two weeks, so the requests decoded below include each one.
+	Stories: madeup.Stories{
+		DeployCheck:    []madeup.Spread{{Week: 1, Team: "alpha", People: 3}, {Week: 2, Team: "beta", People: 3}},
+		InstructionsV3: 2, StayOnV2: []string{"gamma"},
+		Review: 2, NoReview: []string{"gamma"},
+		Connector:      2,
+		ExpensiveModel: 2, ExpensiveTeam: "beta",
+		Bug:        [2]int{1, 1},
+		PerfBudget: 2, PerfBudgetTeams: []string{"alpha"},
+		FlakyTeam: "alpha",
+		Gamer:     2, GamerTeam: "alpha",
+		Overnight: 1,
+	},
 }
 
 var start = time.Date(2026, 7, 27, 0, 0, 0, 0, time.UTC)
@@ -238,7 +251,10 @@ func TestAnswerKeyMatchesWhatWasSent(t *testing.T) {
 	}
 	for _, d := range k.Days {
 		g := got.Days[d.Day+"|"+d.Team]
-		if d.People != g.People || d.Sessions != g.Sessions || d.Prompts != g.Prompts || !near(d.CostUSD, g.CostUSD) {
+		if near(d.CostUSD, g.CostUSD) {
+			g.CostUSD = d.CostUSD // the key rounds each day to the micro-dollar
+		}
+		if d != g {
 			t.Errorf("%s %s: the key has %+v; what was sent has %+v", d.Day, d.Team, d, g)
 		}
 	}
@@ -256,13 +272,17 @@ func TestAnswerKeyMatchesWhatWasSent(t *testing.T) {
 			t.Errorf("week of %s: the key's artifacts differ from what was sent.\n key: %+v\nsent: %+v",
 				kw.Week, kw.Artifacts, gw.Artifacts)
 		}
+		if !slices.Equal(kw.Other, gw.Other) {
+			t.Errorf("week of %s: the key's names under the minimum add up differently from what was "+
+				"sent.\n key: %+v\nsent: %+v", kw.Week, kw.Other, gw.Other)
+		}
 	}
 }
 
 // The organization is uneven in the ways that decide whether a chart misleads: spend and session
 // counts each spread widely across people, and do not move together.
 func TestPeopleSpreadUnevenly(t *testing.T) {
-	k := generate(t, madeup.Presets["review"], 12, 8, discard{})
+	k := review(t)
 	months := 84 / 30.4
 	var spend, sessions []float64
 	for _, p := range k.People {
@@ -309,6 +329,18 @@ type wireSession struct {
 	first         time.Time
 	requests      int
 	cost          float64
+
+	mainRequests                  int
+	firstMain                     time.Time
+	startContext                  int
+	editProposals, editRejections int
+	compactions, autoCompactions  int
+}
+
+// A permission prompt's start, or a person's answer to one, as silver_policy_decision pairs them.
+type wirePermission struct {
+	session, prompt, tool string
+	at                    time.Time
 }
 
 type wireUse struct {
@@ -328,6 +360,7 @@ type wireSink struct {
 	sessions               map[string]*wireSession
 	prompts                map[[2]string]bool // session, prompt: true if a built-in command
 	uses                   []wireUse
+	asked, answered        []wirePermission
 	earliest, latest       time.Time
 }
 
@@ -444,6 +477,7 @@ func (w *wireSink) Logs(body []byte) error {
 				if s.first.IsZero() || at.Before(s.first) {
 					s.first = at
 				}
+				num := func(k string) int { n, _ := strconv.Atoi(a[k]); return n }
 				switch a["event.name"] {
 				case "api_request":
 					s.requests++
@@ -452,11 +486,38 @@ func (w *wireSink) Logs(body []byte) error {
 					if a["skill.name"] != "" {
 						w.uses = append(w.uses, wireUse{sid, pid, "skill", a["skill.name"], "", at, false})
 					}
+					if a["query_source"] == "repl_main_thread" {
+						s.mainRequests++
+						if s.firstMain.IsZero() || at.Before(s.firstMain) {
+							s.firstMain = at
+							s.startContext = num("input_tokens") + num("cache_read_tokens") + num("cache_creation_tokens")
+						}
+					}
 				case "user_prompt":
 					w.prompts[[2]string{sid, pid}] = a["command_source"] == "builtin"
 				case "tool_decision":
-					if tool := a["tool_name"]; strings.HasPrefix(tool, "mcp__") {
+					tool := a["tool_name"]
+					if strings.HasPrefix(tool, "mcp__") {
 						w.uses = append(w.uses, wireUse{sid, pid, "mcp", strings.Split(tool, "__")[1], "", at, false})
+					}
+					if tool == "Edit" || tool == "Write" {
+						s.editProposals++
+						if a["decision"] == "reject" {
+							s.editRejections++
+						}
+					}
+					if strings.HasPrefix(a["source"], "user") {
+						w.answered = append(w.answered, wirePermission{sid, pid, tool, at})
+					}
+				case "hook_execution_start":
+					if a["hook_event"] == "PermissionRequest" {
+						tool := strings.TrimPrefix(a["hook_name"], "PermissionRequest:")
+						w.asked = append(w.asked, wirePermission{sid, pid, tool, at})
+					}
+				case "compaction":
+					s.compactions++
+					if a["trigger"] == "auto" {
+						s.autoCompactions++
 					}
 				}
 			}
@@ -539,6 +600,7 @@ func (w *wireSink) key() wireKeyView {
 	v := wireKeyView{People: map[string]madeup.KeyPerson{}, Days: map[string]madeup.KeyDay{}, Weeks: map[string]madeup.KeyWeek{}}
 	type set = map[string]bool
 	dayPeople, weekPeople := map[string]set{}, map[string]set{}
+	contexts := map[string][]int{}
 	add := func(m map[string]set, k, v string) {
 		if m[k] == nil {
 			m[k] = set{}
@@ -557,6 +619,14 @@ func (w *wireSink) key() wireKeyView {
 		d.Day, d.Team = day, s.cohort
 		d.Sessions++
 		d.CostUSD += s.cost
+		d.EditProposals += s.editProposals
+		d.EditRejections += s.editRejections
+		d.Compactions += s.compactions
+		d.AutoCompactions += s.autoCompactions
+		if s.mainRequests > 0 {
+			d.SessionsWithRequests++
+			contexts[day+"|"+s.cohort] = append(contexts[day+"|"+s.cohort], s.startContext)
+		}
 		v.Days[day+"|"+s.cohort] = d
 		add(dayPeople, day+"|"+s.cohort, s.email)
 		wk := v.Weeks[week]
@@ -586,6 +656,32 @@ func (w *wireSink) key() wireKeyView {
 	for k, people := range dayPeople {
 		d := v.Days[k]
 		d.People = len(people)
+		if c := contexts[k]; len(c) > 0 {
+			slices.Sort(c)
+			d.StartContextP50 = c[min(len(c)-1, len(c)/2)]
+		}
+		v.Days[k] = d
+	}
+
+	// Each permission prompt is answered by the first answer at or after it, for the same
+	// session, prompt and tool, as the view's ASOF join takes it.
+	answers := map[[3]string][]time.Time{}
+	for _, a := range w.answered {
+		k := [3]string{a.session, a.prompt, a.tool}
+		answers[k] = append(answers[k], a.at)
+	}
+	for _, ts := range answers {
+		slices.SortFunc(ts, func(a, b time.Time) int { return a.Compare(b) })
+	}
+	for _, q := range w.asked {
+		s := w.sessions[q.session]
+		k := s.first.Format(time.DateOnly) + "|" + s.cohort
+		d := v.Days[k]
+		d.PermissionPrompts++
+		ts := answers[[3]string{q.session, q.prompt, q.tool}]
+		if i, _ := slices.BinarySearchFunc(ts, q.at, func(a, b time.Time) int { return a.Compare(b) }); i < len(ts) {
+			d.PermissionWaitMs += ts[i].UnixMilli() - q.at.UnixMilli()
+		}
 		v.Days[k] = d
 	}
 
@@ -638,7 +734,38 @@ func (w *wireSink) key() wireKeyView {
 		})
 		v.Weeks[k.week] = wk
 	}
+	// The names fewer than five people used in a week, added up per kind with each person and
+	// session counted once.
+	other := map[[2]string]*struct {
+		people, sessions set
+		uses             int
+	}{}
+	for k, a := range arts {
+		org := k.name != "" && (k.kind == "instructions" || orgPattern.MatchString(k.name))
+		if org || a.builtin || k.name == "" || len(a.people) >= madeup.MinGroupSize {
+			continue
+		}
+		o := other[[2]string{k.week, k.kind}]
+		if o == nil {
+			o = &struct {
+				people, sessions set
+				uses             int
+			}{people: set{}, sessions: set{}}
+			other[[2]string{k.week, k.kind}] = o
+		}
+		maps.Copy(o.people, a.people)
+		maps.Copy(o.sessions, a.sessions)
+		o.uses += a.uses
+	}
+	for wk, o := range other {
+		w := v.Weeks[wk[0]]
+		w.Other = append(w.Other, madeup.KeyArtifact{
+			Kind: wk[1], Name: "other", People: len(o.people), Sessions: len(o.sessions), Uses: o.uses,
+		})
+		v.Weeks[wk[0]] = w
+	}
 	for week, wk := range v.Weeks {
+		slices.SortFunc(wk.Other, func(a, b madeup.KeyArtifact) int { return cmp.Compare(a.Kind, b.Kind) })
 		wk.ActivePeople = len(weekPeople[week])
 		sort.Slice(wk.Artifacts, func(i, j int) bool {
 			a, b := wk.Artifacts[i], wk.Artifacts[j]

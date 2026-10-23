@@ -155,6 +155,13 @@ const (
 	maxRequestsPerSession = 5000
 )
 
+// How many days after a release people run it. Claude Code updates itself, so most people run a
+// release within a day or two; a few have turned that off and upgrade when they think of it.
+var upgradeLags = []struct {
+	Share float64
+	Days  [2]int // from, to
+}{{0.7, [2]int{0, 1}}, {0.2, [2]int{2, 6}}, {0.1, [2]int{7, 20}}}
+
 // Effort levels people set, with weights. Claude Code's own default is xhigh.
 var effortLevels = []weighted{{"xhigh", 0.7}, {"high", 0.2}, {"medium", 0.1}}
 

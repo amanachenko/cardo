@@ -5,6 +5,7 @@
 #
 #   scripts/made-up.sh up       build this checkout and start the made-up stack, with fresh passwords and salt
 #   scripts/made-up.sh load     invent the organization's twelve weeks and send them through the made-up collector
+#   scripts/made-up.sh check    compare the views with the answer key the load wrote, and list each story and gap
 #   scripts/made-up.sh probe    send one backdated hook event and one OTel record, and check both kept their time
 #   scripts/made-up.sh down     remove the made-up stack and everything it holds
 #
@@ -14,7 +15,7 @@
 # (deploy/compose/docker-compose.made-up.yml), and it sends only to those ports.
 #
 # Runs in bash: Git Bash on Windows, or any macOS or Linux shell. Needs Docker with compose, curl,
-# and for load, Go.
+# and for load and check, Go.
 
 set -euo pipefail
 # Git Bash rewrites arguments that look like paths before docker sees them. None here should be.
@@ -32,6 +33,7 @@ hooks_url=http://127.0.0.1:8090/v1/hooks
 health_url=http://127.0.0.1:8090/health
 otlp_url=http://127.0.0.1:4320
 grafana_url=http://127.0.0.1:3003
+clickhouse_url=http://127.0.0.1:8126
 
 die() { echo "made-up: $*" >&2; exit 1; }
 
@@ -197,6 +199,19 @@ cmd_load() {
   echo "Answer key: $key_file"
 }
 
+# Each gold view against the answer key the load wrote: test/madeup_check_test.go, which reads
+# only this stack's ClickHouse. With -v it lists each story, where it should show, and the gaps.
+cmd_check() {
+  [ -n "$(container_of clickhouse)" ] || die "the made-up stack is not running. Start it with: scripts/made-up.sh up"
+  [ -f "$root/$key_file" ] || die "there is no answer key at $key_file. Load the stack first: scripts/made-up.sh load"
+  command -v go >/dev/null || die "check needs Go on PATH, to run test/madeup_check_test.go from this checkout"
+  local password
+  password=$(sed -n 's/^CLICKHOUSE_PASSWORD=//p' "$env_file")
+  echo "== Comparing the made-up stack's views with the answer key"
+  # The password goes to the test in its environment, never in an argument.
+  (cd "$root" && CARDO_MADEUP_URL=$clickhouse_url CARDO_MADEUP_PASSWORD=$password     go test ./test/ -run '^TestMadeUpViewsMatchTheAnswerKey$' -count=1 -v)
+}
+
 # A total from the answer key. Each name appears once in it, in "totals".
 total() { grep -m1 "\"$1\":" "$root/$key_file" | tr -dc 0-9; }
 
@@ -222,9 +237,10 @@ case ${1:-} in
   up)    cmd_up ;;
   load)  shift; cmd_load "$@" ;;
   probe) cmd_probe ;;
+  check) cmd_check ;;
   down)  cmd_down ;;
   *)
-    sed -n '2,17p' "$root/scripts/made-up.sh" | sed 's/^# \{0,1\}//'
+    sed -n '2,18p' "$root/scripts/made-up.sh" | sed 's/^# \{0,1\}//'
     exit 2
     ;;
 esac

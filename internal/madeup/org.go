@@ -12,7 +12,7 @@ import (
 // OrgArtifacts is the made-up organization's CARDO_ORG_ARTIFACTS: the names of what it ships
 // itself. docker-compose.made-up.yml gives the collector and the views the same pattern, and
 // test/madeup_test.go holds the two together.
-const OrgArtifacts = `^(review|onboarding|test-fixer|jira|example-standards-v[0-9]+[.]md)$`
+const OrgArtifacts = `^(review|onboarding|test-fixer|jira|api-guidelines|perf-budget|example-standards-v[0-9]+[.]md)$`
 
 // OrgRepos is its CARDO_ORG_REPOS: every repository on its own git host.
 const OrgRepos = `^git[.]example[.]com/`
@@ -22,11 +22,13 @@ var orgPattern = regexp.MustCompile(OrgArtifacts)
 // organizationID is what every made-up session sends as organization.id.
 const organizationID = "00000000-0000-4000-8000-00000000e0e0"
 
-// Preset is a made-up organization's size: how many people, in which teams, over how many weeks.
+// Preset is a made-up organization's size: how many people, in which teams, over how many weeks,
+// and when its stories happen.
 type Preset struct {
-	Name  string
-	Weeks int
-	Teams []TeamSpec
+	Name    string
+	Weeks   int
+	Teams   []TeamSpec
+	Stories Stories
 }
 
 // TeamSpec is one team: its name, which is also its cohort label, how many people it has, and its
@@ -50,6 +52,23 @@ var Presets = map[string]Preset{
 			{"data", 8, 2, []string{"pipelines", "warehouse"}},
 			{"web", 6, -8, []string{"web-frontend", "design-system"}},
 			{"security", 3, 1, []string{"secrets-scanner"}},
+		},
+		Stories: Stories{
+			DeployCheck: []Spread{
+				{2, "platform", 1}, {3, "platform", 1}, {4, "platform", 2}, {5, "platform", 3},
+				{6, "payments", 2}, {7, "payments", 2}, {7, "platform", 1}, {8, "data", 2},
+				{9, "payments", 1}, {9, "data", 1}, {10, "mobile", 2}, {11, "mobile", 1},
+				{11, "payments", 1}, {12, "data", 1}, {12, "mobile", 1},
+			},
+			InstructionsV3: 4, StayOnV2: []string{"mobile", "web"},
+			Review: 6, NoReview: []string{"web", "security"},
+			Connector:      6,
+			ExpensiveModel: 8, ExpensiveTeam: "platform",
+			Bug:        [2]int{10, 11},
+			PerfBudget: 10, PerfBudgetTeams: []string{"payments", "data"},
+			FlakyTeam: "mobile",
+			Gamer:     7, GamerTeam: "payments",
+			Overnight: 2,
 		},
 	},
 }
@@ -102,6 +121,12 @@ type Person struct {
 	Subagents    []string // subagents they start, besides Claude Code's own
 	MCPServers   []string // MCP servers they have connected
 	Repos        []Repo
+
+	// Their parts in the stories (stories.go).
+	DeployCheckWeek int          // the week they start using /deploy-check; 0 if they never do
+	JiraWeeks       map[int]bool // the weeks they call the Jira connector
+	Overnight       bool         // leaves a long loop running overnight, a few nights a week
+	Gamer           bool         // runs /review from a script, dozens of times a working day
 
 	// Identifiers Claude Code sends beside the email address, which the collector removes.
 	deviceID, accountUUID string
@@ -178,6 +203,7 @@ func NewOrg(p Preset, seed uint64, start time.Time, weeks int) (*Org, error) {
 		pr.traits(o)
 	}
 	assignShared(r, o.People)
+	assignStories(r, o)
 	return o, nil
 }
 
@@ -239,7 +265,14 @@ func (p *Person) traits(o *Org) {
 	p.Mode = pick(r, s.Modes)
 	p.MonthlySpend = logUniform(r, s.Spend[0], s.Spend[1])
 	p.MonthlySessions = logUniform(r, s.Sessions[0], s.Sessions[1])
-	p.UpgradeLag = r.IntN(15)
+	x := r.Float64()
+	for _, l := range upgradeLags {
+		if x < l.Share || l == upgradeLags[len(upgradeLags)-1] {
+			p.UpgradeLag = l.Days[0] + r.IntN(l.Days[1]-l.Days[0]+1)
+			break
+		}
+		x -= l.Share
+	}
 	p.BashAllow = 0.2 + 0.6*r.Float64()
 	p.UserClaudeMD = r.Float64() < 0.6
 
