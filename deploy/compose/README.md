@@ -88,6 +88,19 @@ and not on all of those. The views report a session's events on the day it start
 still running at the copy keeps adding to that day on the live stack. `compare` checks every
 dashboard view day by day, and names each day that differs for that reason.
 
+## Seeing the views on a made-up organization
+
+Your own sessions are one person's, so almost every view shows "other" under the five-person
+minimum. A third stack holds 60 invented engineers instead, sent through the collector, with
+stories planted in them and an answer key to check each view against:
+
+```bash
+bash scripts/made-up.sh up && bash scripts/made-up.sh load && bash scripts/made-up.sh check
+```
+
+Its Grafana is on <http://127.0.0.1:3003>. Nothing seen in it is a finding. How to run it, what
+was planted and what no view shows yet: [the made-up organization](../../docs/made-up-organization.md).
+
 ## Serving a team over the network
 
 The stack above serves one machine. For a group of engineers, such as a small team trying Cardo
