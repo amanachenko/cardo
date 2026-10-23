@@ -40,7 +40,16 @@ type TeamSpec struct {
 	Repos  []string
 }
 
-// Presets by name. The review preset is the one people look at.
+// Presets by name.
+//
+//   - review: 60 people in six teams over twelve weeks, the one people look at.
+//   - ci: 40 people in five teams over eight weeks, every story on a shorter timeline, for a check
+//     that has to finish in a CI job.
+//   - large: 500 people in twelve teams on the review preset's timeline, to see how long a load
+//     takes and how fast the views answer at that size. Its stories are planted the same way, and
+//     some read differently among 500: one person's script is a tenth of /review's sessions
+//     rather than most of them, and the rarely used skill reaches 20 to 30 people a week. Only
+//     review and ci are held to their stories' text (stories_test.go).
 var Presets = map[string]Preset{
 	"review": {
 		Name:  "review",
@@ -53,24 +62,75 @@ var Presets = map[string]Preset{
 			{"web", 6, -8, []string{"web-frontend", "design-system"}},
 			{"security", 3, 1, []string{"secrets-scanner"}},
 		},
+		Stories: reviewStories,
+	},
+	"ci": {
+		Name:  "ci",
+		Weeks: 8,
+		Teams: []TeamSpec{
+			{"platform", 12, 0, []string{"platform-infra", "build-tools"}},
+			{"payments", 11, 1, []string{"payments-api", "ledger"}},
+			{"mobile", 8, -5, []string{"mobile-app", "mobile-sdk"}},
+			{"data", 6, 2, []string{"pipelines", "warehouse"}},
+			{"security", 3, 1, []string{"secrets-scanner"}},
+		},
+		// The review preset's stories in eight weeks. The rollouts come first, in week 2, so the
+		// expensive model's before (weeks 3 and 4) and after (weeks 5 and 6) both have them, and
+		// the caching bug comes after both, in week 7.
 		Stories: Stories{
 			DeployCheck: []Spread{
-				{2, "platform", 1}, {3, "platform", 1}, {4, "platform", 2}, {5, "platform", 3},
-				{6, "payments", 2}, {7, "payments", 2}, {7, "platform", 1}, {8, "data", 2},
-				{9, "payments", 1}, {9, "data", 1}, {10, "mobile", 2}, {11, "mobile", 1},
-				{11, "payments", 1}, {12, "data", 1}, {12, "mobile", 1},
+				{1, "platform", 1}, {2, "platform", 2}, {3, "platform", 4}, {4, "payments", 2},
+				{5, "data", 2}, {6, "payments", 1}, {6, "mobile", 2}, {7, "data", 1}, {8, "mobile", 1},
 			},
-			InstructionsV3: 4, StayOnV2: []string{"mobile", "web"},
-			Review: 6, NoReview: []string{"web", "security"},
-			Connector:      6,
-			ExpensiveModel: 8, ExpensiveTeam: "platform",
-			Bug:        [2]int{10, 11},
-			PerfBudget: 10, PerfBudgetTeams: []string{"payments", "data"},
+			InstructionsV3: 2, StayOnV2: []string{"mobile"},
+			Review: 2, NoReview: []string{"security"},
+			Connector:      2,
+			ExpensiveModel: 5, ExpensiveTeam: "platform",
+			Bug:        [2]int{7, 7},
+			PerfBudget: 7, PerfBudgetTeams: []string{"payments", "data"},
 			FlakyTeam: "mobile",
-			Gamer:     7, GamerTeam: "payments",
+			Gamer:     3, GamerTeam: "payments",
 			Overnight: 2,
 		},
 	},
+	"large": {
+		Name:  "large",
+		Weeks: 12,
+		Teams: []TeamSpec{
+			{"payments", 80, 1, []string{"payments-api", "ledger"}},
+			{"platform", 70, 0, []string{"platform-infra", "build-tools"}},
+			{"mobile", 60, -5, []string{"mobile-app", "mobile-sdk"}},
+			{"data", 50, 2, []string{"pipelines", "warehouse"}},
+			{"web", 45, -8, []string{"web-frontend", "design-system"}},
+			{"search", 45, 5.5, []string{"search-api", "indexer"}},
+			{"growth", 40, -5, []string{"growth-experiments", "growth-site"}},
+			{"identity", 35, 1, []string{"identity-api", "sso-bridge"}},
+			{"billing", 30, 0, []string{"billing-api", "invoices"}},
+			{"support-tools", 25, 2, []string{"support-console", "ticket-sync"}},
+			{"docs", 17, -3, []string{"docs-site"}},
+			{"security", 3, 1, []string{"secrets-scanner"}},
+		},
+		Stories: reviewStories,
+	},
+}
+
+// reviewStories is the review preset's timeline, which the large preset shares.
+var reviewStories = Stories{
+	DeployCheck: []Spread{
+		{2, "platform", 1}, {3, "platform", 1}, {4, "platform", 2}, {5, "platform", 3},
+		{6, "payments", 2}, {7, "payments", 2}, {7, "platform", 1}, {8, "data", 2},
+		{9, "payments", 1}, {9, "data", 1}, {10, "mobile", 2}, {11, "mobile", 1},
+		{11, "payments", 1}, {12, "data", 1}, {12, "mobile", 1},
+	},
+	InstructionsV3: 4, StayOnV2: []string{"mobile", "web"},
+	Review: 6, NoReview: []string{"web", "security"},
+	Connector:      6,
+	ExpensiveModel: 8, ExpensiveTeam: "platform",
+	Bug:        [2]int{10, 11},
+	PerfBudget: 10, PerfBudgetTeams: []string{"payments", "data"},
+	FlakyTeam: "mobile",
+	Gamer:     7, GamerTeam: "payments",
+	Overnight: 2,
 }
 
 // People is the preset's headcount.

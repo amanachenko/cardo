@@ -4,12 +4,15 @@
 # organization's worth of data before any organization's real data exists.
 #
 #   scripts/made-up.sh up       build this checkout and start the made-up stack, with fresh passwords and salt
-#   scripts/made-up.sh load     invent the organization's twelve weeks and send them through the made-up collector
-#   scripts/made-up.sh check    compare the views with the answer key the load wrote, and list each story and gap
+#   scripts/made-up.sh load     invent the organization's history and send it through the made-up collector
+#   scripts/made-up.sh check    compare the views with the answer key the load wrote, list each story and gap,
+#                               and time every dashboard query through the made-up Grafana
 #   scripts/made-up.sh probe    send one backdated hook event and one OTel record, and check both kept their time
 #   scripts/made-up.sh down     remove the made-up stack and everything it holds
 #
-# load passes any flags on to cmd/cardo-madeup, for example -seed 2 or -weeks 2.
+# load passes any flags on to cmd/cardo-madeup, for example -seed 2 or -weeks 2. Its -preset is the
+# organization's size: review, 60 people over twelve weeks (the default, the one to look at); ci,
+# 40 people over eight weeks; or large, 500 people over twelve weeks.
 #
 # It never touches another stack. Its compose project is always cardo-madeup, with its own ports
 # (deploy/compose/docker-compose.made-up.yml), and it sends only to those ports.
@@ -172,6 +175,7 @@ cmd_load() {
   [ "$before" = "$(printf '0\t0\t0')" ] || die "the made-up stack already holds a load (hook events, log records, metric points: $(echo "$before" | tr '\t' ' ')). Loading again would count every session twice. Run scripts/made-up.sh down, then up, first."
 
   mkdir -p "$compose_dir/made-up/loaded"
+  SECONDS=0
   echo "== Inventing the made-up organization, and sending it through the made-up collector"
   # A path relative to the checkout: with MSYS_NO_PATHCONV set, Go on Windows would read Git
   # Bash's /c/... as a folder named c.
@@ -194,22 +198,26 @@ cmd_load() {
   echo "   sent:   $(echo "$want" | tr '\t' ' ')   (hook events, log records, metric points)"
   echo "   stored: $(echo "$got" | tr '\t' ' ')"
   [ "$want" = "$got" ] || die "the made-up stack stored a different number of rows than were sent. See: docker compose -p $project logs collector"
+  echo "   loaded in $((SECONDS / 60)) min $((SECONDS % 60)) s"
   echo
   echo "Made-up Grafana: $grafana_url (admin, with GRAFANA_PASSWORD from deploy/compose/$env_file)."
   echo "Answer key: $key_file"
 }
 
-# Each gold view against the answer key the load wrote: test/madeup_check_test.go, which reads
-# only this stack's ClickHouse. With -v it lists each story, where it should show, and the gaps.
+# Each gold view against the answer key the load wrote (test/madeup_check_test.go), and every
+# dashboard query through this stack's Grafana, timed (test/madeup_dashboards_test.go). They read
+# only this stack. With -v they list each story, where it should show, the gaps, and each query's
+# time and rows.
 cmd_check() {
   [ -n "$(container_of clickhouse)" ] || die "the made-up stack is not running. Start it with: scripts/made-up.sh up"
   [ -f "$root/$key_file" ] || die "there is no answer key at $key_file. Load the stack first: scripts/made-up.sh load"
   command -v go >/dev/null || die "check needs Go on PATH, to run test/madeup_check_test.go from this checkout"
-  local password
+  local password grafana_password
   password=$(sed -n 's/^CLICKHOUSE_PASSWORD=//p' "$env_file")
-  echo "== Comparing the made-up stack's views with the answer key"
-  # The password goes to the test in its environment, never in an argument.
-  (cd "$root" && CARDO_MADEUP_URL=$clickhouse_url CARDO_MADEUP_PASSWORD=$password     go test ./test/ -run '^TestMadeUpViewsMatchTheAnswerKey$' -count=1 -v)
+  grafana_password=$(sed -n 's/^GRAFANA_PASSWORD=//p' "$env_file")
+  echo "== Comparing the made-up stack's views with the answer key, and timing its dashboards"
+  # The passwords go to the tests in their environment, never in an argument.
+  (cd "$root" && CARDO_MADEUP_URL=$clickhouse_url CARDO_MADEUP_PASSWORD=$password     CARDO_MADEUP_GRAFANA_URL=$grafana_url CARDO_MADEUP_GRAFANA_PASSWORD=$grafana_password     go test ./test/ -run '^TestMadeUp(ViewsMatchTheAnswerKey|DashboardsAnswer)$' -count=1 -v -timeout 30m)
 }
 
 # A total from the answer key. Each name appears once in it, in "totals".
@@ -240,7 +248,7 @@ case ${1:-} in
   check) cmd_check ;;
   down)  cmd_down ;;
   *)
-    sed -n '2,18p' "$root/scripts/made-up.sh" | sed 's/^# \{0,1\}//'
+    sed -n '2,21p' "$root/scripts/made-up.sh" | sed 's/^# \{0,1\}//'
     exit 2
     ;;
 esac

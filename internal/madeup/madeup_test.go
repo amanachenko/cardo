@@ -282,7 +282,7 @@ func TestAnswerKeyMatchesWhatWasSent(t *testing.T) {
 // The organization is uneven in the ways that decide whether a chart misleads: spend and session
 // counts each spread widely across people, and do not move together.
 func TestPeopleSpreadUnevenly(t *testing.T) {
-	k := review(t)
+	k := keyOf(t, "review")
 	months := 84 / 30.4
 	var spend, sessions []float64
 	for _, p := range k.People {

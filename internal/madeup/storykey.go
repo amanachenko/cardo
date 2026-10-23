@@ -60,7 +60,7 @@ func storyFigures(o *Org, k *Key, sums map[string]float64) []KeyStory {
 	deployCheck := len(st.DeployCheck) > 0 && in(st.DeployCheck[0].Week)
 
 	var out []KeyStory
-	for _, c := range catalog {
+	for _, c := range catalog(o.Preset, weeks) {
 		ks := KeyStory{Name: c.Name, Planted: c.Planted, Shows: c.Shows, Gap: c.Gap}
 		fig := func(name string, v float64) {
 			ks.Figures = append(ks.Figures, KeyFigure{name, math.Round(v*1e4) / 1e4})

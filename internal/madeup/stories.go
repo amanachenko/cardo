@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"slices"
+	"strconv"
+	"strings"
 )
 
 // The stories: patterns put into the made-up organization on purpose, each aimed at a view
@@ -111,122 +113,225 @@ type Story struct {
 	Gap string
 }
 
-// catalog is the list of stories, in the order the answer key and the docs give them.
-var catalog = []Story{
-	{
-		Name: "deploy-check-spreads",
-		Planted: "/deploy-check, a command one engineer wrote, starts in one team in week 2. It crosses five " +
-			"people in week 5 and reaches four teams by week 12. Each person using it uses it every week they work.",
-		Shows: "Enablement, \"Built by engineers, used by several\": \"other\" until week 5, then named, " +
-			"with its peak weekly people.",
-		Gap: "No view says which teams use an artifact, so its spread from one team to four cannot be " +
-			"seen, and spread across teams is the vote for what teams chose (ADR-0040).",
-	},
-	{
-		Name: "instructions-v3",
-		Planted: "The organization ships example-standards-v3.md in week 4, about a fifth more context " +
-			"for every session that loads it. Two teams keep loading v2.",
-		Shows: "Enablement, \"Versions in use\" and \"Sessions on a stale version\": v2 stays in use. " +
-			"\"Context a session starts from\": larger from week 4 in the teams on v3.",
-	},
-	{
-		Name: "review-rollout",
-		Planted: "/review, the organization's own command, is rolled out in week 6 to every team but two " +
-			"small ones. Sessions that use it are no different from those that do not.",
-		Shows: "Enablement, \"Weekly reach of the organization's artifacts\": /review rises in week 6. " +
-			"Whether it helps is the cost-per-edit story.",
-	},
-	{
-		Name: "connector-rarely-called",
-		Planted: "A Jira connector is set up for everyone in week 6. Its tools are in every session's " +
-			"context from then on, and about three people call it each week.",
-		Shows: "Enablement, \"Weekly reach of the organization's artifacts\": jira's reach stays at a few " +
-			"people. \"Context a session starts from\": every session carries its tools.",
-	},
-	{
-		Name:    "skill-rarely-triggers",
-		Planted: "The api-guidelines skill is set up for everyone in week 6, and the model rarely uses it.",
-		Shows:   "Enablement, \"Weekly reach of the organization's artifacts\": a few people a week.",
-	},
-	{
-		Name: "flaky-tests",
-		Planted: "One team's test command fails now and then. Sessions run it 3 to 7 times in a row, the " +
-			"model reading each failure, until it passes.",
-		Gap: "No view shows failing tool calls, or a command run again and again: silver_tool_call " +
-			"has whether each call succeeded, and no gold view reads it.",
-	},
-	{
-		Name: "compactions-by-style",
-		Planted: "Compactions per session differ widely by way of working: dozens in a long autonomous " +
-			"run, almost none in a session that asks one quick question.",
-		Shows: "Enablement, \"Compactions per session, with sessions\": the fleet's average, day by day.",
-		Gap: "One average hides that a few long sessions make most of the compactions. No view shows " +
-			"how compactions spread across sessions.",
-	},
-	{
-		Name: "permission-waits",
-		Planted: "People in the default permission mode answer prompts for edits and commands; people in " +
-			"auto mode answer none.",
-		Shows: "Enablement, \"Permission waits, with the prompts answered\".",
-	},
-	{
-		Name: "heavy-tail",
-		Planted: "A few people spend much of the money: monthly spend runs from about $100 to $4,000, " +
-			"and does not follow session counts.",
-		Gap: "By design no view shows one person's spend to anyone else (the per-person rule, INV-3). " +
-			"The view of cost over a published budget (ADR-0033) is not built, and the fleet " +
-			"dashboard's spend per engineer reads the cost data this stack does not have yet.",
-	},
-	{
-		Name: "expensive-default",
-		Planted: "One team makes the most expensive model its default in week 8, and its spend for the " +
-			"same work rises about three times.",
-		Shows: "Enablement, \"Daily spend by cohort\": the team's spend rises from week 8.",
-		Gap: "The collector's views have no spend by model, so the chart shows that the spend rose, not " +
-			"why. The fleet dashboard's \"Model mix by spend\" reads the cost data this stack does not " +
-			"have yet.",
-	},
-	{
-		Name: "caching-bug",
-		Planted: "Claude Code releases in weeks 10 and 11 have a caching bug that raises cost per request. " +
-			"A release early in week 12 fixes it, and people upgrade at their own pace.",
-		Gap: "No view shows cost per request by Claude Code version. \"Daily spend by cohort\" rises " +
-			"everywhere, with nothing to say why.",
-	},
-	{
-		Name: "overnight-loops",
-		Planted: "Two people leave a long loop running overnight, a few nights a week, for hours with " +
-			"nobody at the keyboard.",
-		Gap: "No view shows sessions that run while nobody is there, or what they cost.",
-	},
-	{
-		Name: "cost-per-edit",
-		Planted: "Sessions that use /deploy-check cost about 30% less per accepted edit than the same " +
-			"people's other sessions. Sessions that use /review cost the same as those that do not.",
-		Gap: "No view compares sessions that used an artifact with sessions that did not, so neither " +
-			"the difference nor its absence can be seen.",
-	},
-	{
-		Name: "privacy-floor",
-		Planted: "A three-person team, a command four people use, and personal commands, subagents and " +
-			"connectors no more than two people use.",
-		Shows: "Every view: the team is always \"other\", and so are the names, every week " +
-			"(the five-person minimum, ADR-0029).",
-	},
-	{
-		Name: "usage-gaming",
-		Planted: "From week 7 one person runs /review from a script, dozens of times a working day, in " +
-			"sessions that do nothing else.",
-		Shows: "Enablement, \"The organization's artifacts in use\": /review's sessions and uses jump " +
-			"in week 7, and its peak weekly people do not.",
-	},
-	{
-		Name: "two-changes-at-once",
-		Planted: "perf-budget, a skill of the organization's, is rolled out to two teams in week 10, the " +
-			"week the caching bug arrives. It changes nothing, and those teams' cost per request rises.",
-		Gap: "No view sets a before against an after, so nothing warns that two things changed in the " +
-			"same week, and a reader credits the skill with the bug.",
-	},
+// catalog is the list of stories for a preset's history of weeks, in the order the answer key and
+// the docs give them. The weeks and teams in each story's text are the preset's own.
+func catalog(p Preset, weeks int) []Story {
+	st := p.Stories
+	spread := st.spread(weeks)
+	small := smallTeam(p)
+	db := 0
+	for _, c := range sharedCommands {
+		if c.Name == "db-migrate" {
+			db = c.People
+		}
+	}
+	bug := fmt.Sprintf("week %d", st.Bug[0])
+	if st.Bug[1] > st.Bug[0] {
+		bug = fmt.Sprintf("weeks %d and %d", st.Bug[0], st.Bug[1])
+	}
+	stay := fmt.Sprintf("The %s teams keep", join(st.StayOnV2))
+	if len(st.StayOnV2) == 1 {
+		stay = fmt.Sprintf("The %s team keeps", st.StayOnV2[0])
+	}
+	night := fmt.Sprintf("%s people leave", upper(count(st.Overnight)))
+	if st.Overnight == 1 {
+		night = "One person leaves"
+	}
+
+	return []Story{
+		{
+			Name: "deploy-check-spreads",
+			Planted: fmt.Sprintf("/deploy-check, a command one engineer wrote, starts in %s in week %d. "+
+				"It crosses five people in week %d and reaches %s by week %d. Each person using it uses it "+
+				"every week they work.", teams(spread.firstTeams), spread.first, spread.named,
+				teams(spread.lastTeams), weeks),
+			Shows: fmt.Sprintf("Enablement, \"Built by engineers, used by several\": \"other\" until week %d, "+
+				"then named, with its peak weekly people.", spread.named),
+			Gap: fmt.Sprintf("No view says which teams use an artifact, so its spread from %s to %s cannot "+
+				"be seen, and spread across teams is the vote for what teams chose (ADR-0040).",
+				teams(spread.firstTeams), count(spread.lastTeams)),
+		},
+		{
+			Name: "instructions-v3",
+			Planted: fmt.Sprintf("The organization ships example-standards-v3.md in week %d, about a fifth "+
+				"more context for every session that loads it. %s loading v2.", st.InstructionsV3, stay),
+			Shows: fmt.Sprintf("Enablement, \"Versions in use\" and \"Sessions on a stale version\": v2 stays "+
+				"in use. \"Context a session starts from\": larger from week %d in the teams on v3.",
+				st.InstructionsV3),
+		},
+		{
+			Name: "review-rollout",
+			Planted: fmt.Sprintf("/review, the organization's own command, is rolled out in week %d to every "+
+				"team but %s. Sessions that use it are no different from those that do not.",
+				st.Review, join(st.NoReview)),
+			Shows: fmt.Sprintf("Enablement, \"Weekly reach of the organization's artifacts\": /review rises "+
+				"in week %d. Whether it helps is the cost-per-edit story.", st.Review),
+		},
+		{
+			Name: "connector-rarely-called",
+			Planted: fmt.Sprintf("A Jira connector is set up for everyone in week %d. Its tools are in every "+
+				"session's context from then on, and about %s people call it each week.",
+				st.Connector, count(jiraCallersPerWeek)),
+			Shows: "Enablement, \"Weekly reach of the organization's artifacts\": jira's reach stays at a few " +
+				"people. \"Context a session starts from\": every session carries its tools.",
+		},
+		{
+			Name: "skill-rarely-triggers",
+			Planted: fmt.Sprintf("The api-guidelines skill is set up for everyone in week %d, and the model "+
+				"rarely uses it.", st.Connector),
+			Shows: "Enablement, \"Weekly reach of the organization's artifacts\": a few people a week.",
+		},
+		{
+			Name: "flaky-tests",
+			Planted: fmt.Sprintf("The %s team's test command fails now and then. Sessions run it 3 to 7 "+
+				"times in a row, the model reading each failure, until it passes.", st.FlakyTeam),
+			Gap: "No view shows failing tool calls, or a command run again and again: silver_tool_call " +
+				"has whether each call succeeded, and no gold view reads it.",
+		},
+		{
+			Name: "compactions-by-style",
+			Planted: "Compactions per session differ widely by way of working: dozens in a long autonomous " +
+				"run, almost none in a session that asks one quick question.",
+			Shows: "Enablement, \"Compactions per session, with sessions\": the fleet's average, day by day.",
+			Gap: "One average hides that a few long sessions make most of the compactions. No view shows " +
+				"how compactions spread across sessions.",
+		},
+		{
+			Name: "permission-waits",
+			Planted: "People in the default permission mode answer prompts for edits and commands; people in " +
+				"auto mode answer none.",
+			Shows: "Enablement, \"Permission waits, with the prompts answered\".",
+		},
+		{
+			Name: "heavy-tail",
+			Planted: "A few people spend much of the money: monthly spend runs from about $100 to $4,000, " +
+				"and does not follow session counts.",
+			Gap: "By design no view shows one person's spend to anyone else (the per-person rule, INV-3). " +
+				"The view of cost over a published budget (ADR-0033) is not built, and the fleet " +
+				"dashboard's spend per engineer reads the cost data this stack does not have yet.",
+		},
+		{
+			Name: "expensive-default",
+			Planted: fmt.Sprintf("The %s team makes the most expensive model its default in week %d, and "+
+				"its spend for the same work rises about three times.", st.ExpensiveTeam, st.ExpensiveModel),
+			Shows: fmt.Sprintf("Enablement, \"Daily spend by cohort\": the team's spend rises from week %d.",
+				st.ExpensiveModel),
+			Gap: "The collector's views have no spend by model, so the chart shows that the spend rose, not " +
+				"why. The fleet dashboard's \"Model mix by spend\" reads the cost data this stack does not " +
+				"have yet.",
+		},
+		{
+			Name: "caching-bug",
+			Planted: fmt.Sprintf("Claude Code releases in %s have a caching bug that raises cost per request. "+
+				"A release early in week %d fixes it, and people upgrade at their own pace.", bug, st.Bug[1]+1),
+			Gap: "No view shows cost per request by Claude Code version. \"Daily spend by cohort\" rises " +
+				"everywhere, with nothing to say why.",
+		},
+		{
+			Name: "overnight-loops",
+			Planted: night + " a long loop running overnight, a few nights a week, for hours with nobody " +
+				"at the keyboard.",
+			Gap: "No view shows sessions that run while nobody is there, or what they cost.",
+		},
+		{
+			Name: "cost-per-edit",
+			Planted: "Sessions that use /deploy-check cost about 30% less per accepted edit than the same " +
+				"people's other sessions. Sessions that use /review cost the same as those that do not.",
+			Gap: "No view compares sessions that used an artifact with sessions that did not, so neither " +
+				"the difference nor its absence can be seen.",
+		},
+		{
+			Name: "privacy-floor",
+			Planted: fmt.Sprintf("A team of %s (%s), a command %s people use, and personal commands, "+
+				"subagents and connectors no more than two people use.", count(small.People), small.Name, count(db)),
+			Shows: "Every view: the team is always \"other\", and so are the names, every week " +
+				"(the five-person minimum, ADR-0029).",
+		},
+		{
+			Name: "usage-gaming",
+			Planted: fmt.Sprintf("From week %d one person in the %s team runs /review from a script, dozens "+
+				"of times a working day, in sessions that do nothing else.", st.Gamer, st.GamerTeam),
+			Shows: fmt.Sprintf("Enablement, \"The organization's artifacts in use\": /review's sessions and "+
+				"uses jump in week %d, and its peak weekly people do not.", st.Gamer),
+		},
+		{
+			Name: "two-changes-at-once",
+			Planted: fmt.Sprintf("perf-budget, a skill of the organization's, is rolled out to the %s teams "+
+				"in week %d, the week the caching bug arrives. It changes nothing, and those teams' cost "+
+				"per request rises.", join(st.PerfBudgetTeams), st.PerfBudget),
+			Gap: "No view sets a before against an after, so nothing warns that two things changed in the " +
+				"same week, and a reader credits the skill with the bug.",
+		},
+	}
+}
+
+// deployCheckSpread is what a preset's /deploy-check steps add up to: the week it starts and in
+// how many teams, the week its people first reach the five-person minimum, so the views name it,
+// and how many teams it is in by the end.
+type deployCheckSpread struct {
+	first, firstTeams, named, lastTeams int
+}
+
+func (st Stories) spread(weeks int) deployCheckSpread {
+	var s deployCheckSpread
+	people := 0
+	seen := map[string]bool{}
+	for _, step := range st.DeployCheck {
+		if step.Week > weeks {
+			break
+		}
+		if s.first == 0 {
+			s.first = step.Week
+		}
+		if step.Week == s.first && !seen[step.Team] {
+			s.firstTeams++
+		}
+		seen[step.Team] = true
+		people += step.People
+		if s.named == 0 && people >= MinGroupSize {
+			s.named = step.Week
+		}
+	}
+	s.lastTeams = len(seen)
+	return s
+}
+
+// smallTeam is the preset's smallest team: the one the five-person minimum always hides.
+func smallTeam(p Preset) TeamSpec {
+	small := p.Teams[0]
+	for _, t := range p.Teams {
+		if t.People < small.People {
+			small = t
+		}
+	}
+	return small
+}
+
+// count writes a small number as a word, as the stories do.
+func count(n int) string {
+	words := []string{"no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"}
+	if n >= 0 && n < len(words) {
+		return words[n]
+	}
+	return strconv.Itoa(n)
+}
+
+func upper(s string) string { return strings.ToUpper(s[:1]) + s[1:] }
+
+// teams is "one team", "two teams" and so on.
+func teams(n int) string {
+	if n == 1 {
+		return "one team"
+	}
+	return count(n) + " teams"
+}
+
+// join lists names as a sentence does: "a", "a and b", "a, b and c".
+func join(names []string) string {
+	if len(names) < 2 {
+		return strings.Join(names, "")
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
 }
 
 // assignStories gives people their parts: who picks up /deploy-check and when, who calls the
@@ -348,5 +453,5 @@ func (o *Org) buggy(release int) bool {
 // onTeam says whether a team is in a story's list.
 func onTeam(teams []string, team string) bool { return slices.Contains(teams, team) }
 
-// Catalog is the list of stories, in order: the gap list is the ones with a Gap.
-func Catalog() []Story { return slices.Clone(catalog) }
+// Catalog is a preset's list of stories, in order: the gap list is the ones with a Gap.
+func Catalog(p Preset) []Story { return catalog(p, p.Weeks) }
