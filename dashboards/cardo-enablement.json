@@ -38,7 +38,7 @@
       "description": "Commands, skills, subagents, MCP servers and instructions files whose names match CARDO_ORG_ARTIFACTS. People are counted per week and cannot be added across weeks, so this shows the busiest week in the range beside the size of the fleet that week. The organization's own names are always shown, however few people use them (ADR-0029).",
       "gridPos": {
         "h": 9,
-        "w": 12,
+        "w": 24,
         "x": 0,
         "y": 1
       },
@@ -90,9 +90,9 @@
       "description": "Commands, skills, subagents and MCP servers the organization did not ship, named only once at least the minimum group size of people (five unless raised) used one in the same week. Several people writing the same thing is a missing organization artifact. Everything below the threshold is counted as \"other\" and never named, and nothing here is per person (ADR-0025, ADR-0029).",
       "gridPos": {
         "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 1
+        "w": 24,
+        "x": 0,
+        "y": 10
       },
       "targets": [
         {
@@ -131,7 +131,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 10
+        "y": 19
       },
       "targets": [
         {
@@ -141,8 +141,8 @@
           },
           "refId": "A",
           "editorType": "sql",
-          "queryType": "table",
-          "format": 1,
+          "queryType": "timeseries",
+          "format": 0,
           "rawSql": "SELECT week AS time, artifact, people FROM cardo.gold_artifact_usage WHERE is_org AND week >= toMonday(toDate($__fromTime)) AND week <= toDate($__toTime) ORDER BY week"
         }
       ],
@@ -160,7 +160,8 @@
           "color": {
             "mode": "palette-classic"
           },
-          "min": 0
+          "min": 0,
+          "displayName": "${__field.labels.artifact}"
         },
         "overrides": []
       }
@@ -175,7 +176,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 18
+        "y": 27
       }
     },
     {
@@ -189,9 +190,9 @@
       "description": "The organization's versioned instructions files (acme-security-v3.md) and who loads each version. A version that is not current is people on a stale one. Current means the highest version anyone loaded while the data was retained; a version shipped and not yet loaded cannot be seen (ADR-0026).",
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 24,
         "x": 0,
-        "y": 19
+        "y": 28
       },
       "targets": [
         {
@@ -228,9 +229,9 @@
       "description": "Per week and file: sessions that loaded a version older than the current one, beside every session that loaded the file at all.",
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 19
+        "w": 24,
+        "x": 0,
+        "y": 36
       },
       "targets": [
         {
@@ -240,8 +241,8 @@
           },
           "refId": "A",
           "editorType": "sql",
-          "queryType": "table",
-          "format": 1,
+          "queryType": "timeseries",
+          "format": 0,
           "rawSql": "SELECT week AS time, family, sumIf(sessions, NOT is_current) AS stale_sessions, sum(sessions) AS all_sessions FROM cardo.gold_instructions_versions WHERE week >= toMonday(toDate($__fromTime)) AND week <= toDate($__toTime) GROUP BY week, family ORDER BY week"
         }
       ],
@@ -259,7 +260,8 @@
           "color": {
             "mode": "palette-classic"
           },
-          "min": 0
+          "min": 0,
+          "displayName": "${__field.labels.family} ${__field.name}"
         },
         "overrides": []
       }
@@ -274,7 +276,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 27
+        "y": 44
       }
     },
     {
@@ -290,7 +292,7 @@
         "h": 9,
         "w": 8,
         "x": 0,
-        "y": 28
+        "y": 45
       },
       "targets": [
         {
@@ -362,7 +364,7 @@
         "h": 9,
         "w": 8,
         "x": 8,
-        "y": 28
+        "y": 45
       },
       "targets": [
         {
@@ -434,7 +436,7 @@
         "h": 9,
         "w": 8,
         "x": 16,
-        "y": 28
+        "y": 45
       },
       "targets": [
         {
@@ -506,7 +508,7 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 37
+        "y": 54
       },
       "targets": [
         {
@@ -542,7 +544,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 44
+        "y": 61
       }
     },
     {
@@ -558,7 +560,7 @@
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 45
+        "y": 62
       },
       "targets": [
         {
@@ -568,8 +570,8 @@
           },
           "refId": "A",
           "editorType": "sql",
-          "queryType": "table",
-          "format": 1,
+          "queryType": "timeseries",
+          "format": 0,
           "rawSql": "SELECT day AS time, cohort, turn_peak_context_p50, turn_peak_context_p90, turns FROM cardo.gold_context_daily WHERE $__timeFilter(day) ORDER BY day"
         }
       ],
@@ -587,7 +589,8 @@
           "color": {
             "mode": "palette-classic"
           },
-          "min": 0
+          "min": 0,
+          "displayName": "${__field.labels.cohort} ${__field.name}"
         },
         "overrides": [
           {
@@ -626,7 +629,7 @@
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 45
+        "y": 62
       },
       "targets": [
         {
@@ -636,8 +639,8 @@
           },
           "refId": "A",
           "editorType": "sql",
-          "queryType": "table",
-          "format": 1,
+          "queryType": "timeseries",
+          "format": 0,
           "rawSql": "SELECT day AS time, cohort, session_start_context_p50, sessions_with_requests FROM cardo.gold_context_daily WHERE $__timeFilter(day) ORDER BY day"
         }
       ],
@@ -655,7 +658,8 @@
           "color": {
             "mode": "palette-classic"
           },
-          "min": 0
+          "min": 0,
+          "displayName": "${__field.labels.cohort} ${__field.name}"
         },
         "overrides": [
           {
@@ -692,9 +696,9 @@
       "description": "The measured cost is the next main-thread request on the new model: the cache it wrote and its whole cost. Claude Code's estimate assumes the whole context is rewritten, and in the switch observed it was 3.2 times the measured cost (ADR-0027). The estimate is shown only beside the measurement.",
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 24,
         "x": 0,
-        "y": 54
+        "y": 71
       },
       "targets": [
         {
@@ -731,9 +735,9 @@
       "description": "Claude Code's own cost per API request, main thread, subagents and its helpers together.",
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 54
+        "w": 24,
+        "x": 0,
+        "y": 79
       },
       "targets": [
         {
@@ -743,8 +747,8 @@
           },
           "refId": "A",
           "editorType": "sql",
-          "queryType": "table",
-          "format": 1,
+          "queryType": "timeseries",
+          "format": 0,
           "rawSql": "SELECT day AS time, cohort, cost_usd FROM cardo.gold_context_daily WHERE $__timeFilter(day) ORDER BY day"
         }
       ],
@@ -762,7 +766,8 @@
           "color": {
             "mode": "palette-classic"
           },
-          "min": 0
+          "min": 0,
+          "displayName": "${__field.labels.cohort}"
         },
         "overrides": []
       }
