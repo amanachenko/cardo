@@ -282,6 +282,10 @@ func TestAnswerKeyMatchesWhatWasSent(t *testing.T) {
 // The organization is uneven in the ways that decide whether a chart misleads: spend and session
 // counts each spread widely across people, and do not move together.
 func TestPeopleSpreadUnevenly(t *testing.T) {
+	if raceDetector {
+		t.Skip("the review preset takes minutes to generate under the race detector (see storyPresets), " +
+			"and this test has no goroutines of its own for it to watch")
+	}
 	k := keyOf(t, "review")
 	months := 84 / 30.4
 	var spend, sessions []float64
