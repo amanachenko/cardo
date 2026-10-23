@@ -386,6 +386,14 @@ exporters:
   # `cardo migrate`. async_insert is false for the same reason cardo's own client sends
   # async_insert=0 -- a server default is not a contract -- and the batch below already does the
   # coalescing async inserts would. A 10 s flush keeps the part count, and the wakeups, low.
+  #
+  # The queue counts records, not requests. By default it counts requests and holds 1,000 of them,
+  # and each hook event is a request of its own, while a batch is written only once it holds
+  # 8,192 records or its 10 s are up. So the queue filled long before any batch did, and only the
+  # timer emptied it. The collector stored at most 100 hook events a second and answered the rest
+  # 500, and Claude Code does not resend a hook (measured on 0.161.0). Counted in records, the queue
+  # holds six batches. While ClickHouse is unreachable it fills, at well under 100 MB, and then
+  # refuses, as before.
   clickhouse/hooks:
     endpoint: ${env:CARDO_CLICKHOUSE_ENDPOINT}
     username: ${env:CARDO_CLICKHOUSE_USER}
@@ -396,6 +404,8 @@ exporters:
     logs_table_name: bronze_hook_events
     timeout: 10s
     sending_queue:
+      sizer: items
+      queue_size: 50000
       batch:
         flush_timeout: 10s
 
@@ -412,6 +422,8 @@ exporters:
         name: bronze_otel_metrics_sum
     timeout: 10s
     sending_queue:
+      sizer: items
+      queue_size: 50000
       batch:
         flush_timeout: 10s
 

@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -350,6 +351,37 @@ func TestINV7_CollectorExportsOnlyToClickHouse(t *testing.T) {
 	}
 	if !regexp.MustCompile(`(?m)^    metrics:\n      level: none$`).MatchString(cfg) {
 		t.Error("the collector's own metrics must stay off (service.telemetry.metrics.level: none)")
+	}
+}
+
+// Every exporter's queue counts records and holds several batches. Counted in requests, as by
+// default, its 1,000 places hold 1,000 hook events, since each hook event is a request of its own,
+// while a batch is written only at 8,192 records or when its flush timeout is up. The collector
+// then stored at most 100 hook events a second and answered the rest 500, and Claude Code does not
+// resend a hook (measured on 0.161.0).
+func TestCollectorQueuesCountRecords(t *testing.T) {
+	const defaultBatch = 8192
+	exporters := sectionBlocks(collectorConfig(t), "exporters")
+	if len(exporters) == 0 {
+		t.Fatal("found no exporters; the config parser is wrong or the config is")
+	}
+	for name, block := range exporters {
+		if !regexp.MustCompile(`(?m)^      sizer: items$`).MatchString(block) {
+			t.Errorf("exporter %s: its sending_queue must count records (sizer: items). Counted in "+
+				"requests, it fills with one hook event per place long before a batch is full.", name)
+		}
+		batch := defaultBatch
+		if m := regexp.MustCompile(`(?m)^        min_size: (\d+)$`).FindStringSubmatch(block); m != nil {
+			batch, _ = strconv.Atoi(m[1])
+		}
+		m := regexp.MustCompile(`(?m)^      queue_size: (\d+)$`).FindStringSubmatch(block)
+		if m == nil {
+			t.Errorf("exporter %s: its sending_queue needs a queue_size of several batches", name)
+			continue
+		}
+		if n, _ := strconv.Atoi(m[1]); n < 4*batch {
+			t.Errorf("exporter %s: a queue of %d records holds fewer than four batches of %d", name, n, batch)
+		}
 	}
 }
 
