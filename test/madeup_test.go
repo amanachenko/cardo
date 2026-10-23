@@ -1,12 +1,15 @@
 package test
 
 import (
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/amanachenko/cardo/internal/madeup"
 )
 
 // The made-up organization (ADR-0051) runs a collector that takes a hook event's time from a
@@ -205,6 +208,53 @@ func TestMadeUpStackStaysLocalAndApart(t *testing.T) {
 			t.Errorf("scripts/made-up.sh sends to port %s, which the made-up stack does not publish. "+
 				"It must send only to its own stack.", m[1])
 		}
+	}
+}
+
+// The generator (cmd/cardo-madeup) sends only to the made-up stack. Its addresses are fixed in
+// internal/madeup, with no flag to change them, and they must be the ports this stack publishes
+// for its collector, which no other stack uses. It names the organization's own artifacts and
+// repositories with the patterns this stack's collector and views are given, or the views would
+// label what it planted differently from what the answer key says.
+func TestMadeUpGeneratorSendsOnlyToTheMadeUpStack(t *testing.T) {
+	compose := madeUpFile(t, "docker-compose.made-up.yml")
+	for _, c := range []struct{ url, mapping string }{
+		{madeup.HooksURL, `"127.0.0.1:8090:8088"`},
+		{madeup.HealthURL, `"127.0.0.1:8090:8088"`},
+		{madeup.OTLPURL, `"127.0.0.1:4320:4318"`},
+	} {
+		u, err := url.Parse(c.url)
+		if err != nil {
+			t.Fatal(err)
+		}
+		host := strings.Trim(c.mapping, `"`)
+		host = host[:strings.LastIndex(host, ":")]
+		if u.Scheme != "http" || u.Host != host || !strings.Contains(compose, "- "+c.mapping) {
+			t.Errorf("the generator sends to %s; it must send only to the made-up collector, which "+
+				"docker-compose.made-up.yml publishes as %s", c.url, c.mapping)
+		}
+	}
+
+	artifacts := regexp.MustCompile(`(?m)^\s*CARDO_ORG_ARTIFACTS:\s*"(.*)"\s*$`).FindAllStringSubmatch(compose, -1)
+	if len(artifacts) != 2 {
+		t.Fatalf("expected CARDO_ORG_ARTIFACTS on migrate and on the collector; found it %d times", len(artifacts))
+	}
+	for _, m := range artifacts {
+		if got := strings.ReplaceAll(m[1], "$$", "$"); got != madeup.OrgArtifacts {
+			t.Errorf("docker-compose.made-up.yml sets CARDO_ORG_ARTIFACTS to %q; the generator names "+
+				"the organization's artifacts with %q. Change both together.", got, madeup.OrgArtifacts)
+		}
+	}
+	repos := regexp.MustCompile(`(?m)^\s*CARDO_ORG_REPOS:\s*"(.*)"\s*$`).FindStringSubmatch(compose)
+	if repos == nil || repos[1] != madeup.OrgRepos {
+		t.Errorf("docker-compose.made-up.yml's CARDO_ORG_REPOS must be the generator's %q", madeup.OrgRepos)
+	}
+
+	overlay := madeUpFile(t, "made-up", "collector-made-up.yml")
+	if !strings.Contains(overlay, `"(?i)^`+strings.ToLower(madeup.TimeHeader)+`$"`) ||
+		!strings.Contains(overlay, `"header.`+madeup.TimeHeader+`"`) {
+		t.Errorf("the generator sends each hook event's time in %s, and the made-up collector must "+
+			"read that header", madeup.TimeHeader)
 	}
 }
 

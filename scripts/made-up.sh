@@ -4,13 +4,17 @@
 # organization's worth of data before any organization's real data exists.
 #
 #   scripts/made-up.sh up       build this checkout and start the made-up stack, with fresh passwords and salt
+#   scripts/made-up.sh load     invent the organization's twelve weeks and send them through the made-up collector
 #   scripts/made-up.sh probe    send one backdated hook event and one OTel record, and check both kept their time
 #   scripts/made-up.sh down     remove the made-up stack and everything it holds
+#
+# load passes any flags on to cmd/cardo-madeup, for example -seed 2 or -weeks 2.
 #
 # It never touches another stack. Its compose project is always cardo-madeup, with its own ports
 # (deploy/compose/docker-compose.made-up.yml), and it sends only to those ports.
 #
-# Runs in bash: Git Bash on Windows, or any macOS or Linux shell. Needs Docker with compose, and curl.
+# Runs in bash: Git Bash on Windows, or any macOS or Linux shell. Needs Docker with compose, curl,
+# and for load, Go.
 
 set -euo pipefail
 # Git Bash rewrites arguments that look like paths before docker sees them. None here should be.
@@ -20,6 +24,8 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 compose_dir="$root/deploy/compose"
 env_file=.env.made-up
 project=cardo-madeup
+# Relative to the checkout; deploy/compose/made-up/.gitignore keeps it out of git.
+key_file=deploy/compose/made-up/loaded/answer-key.json
 
 # The made-up stack's published ports, from docker-compose.made-up.yml.
 hooks_url=http://127.0.0.1:8090/v1/hooks
@@ -149,6 +155,51 @@ cmd_probe() {
   echo "PASS"
 }
 
+counts() {
+  ch --query "SELECT (SELECT count() FROM cardo.bronze_hook_events), (SELECT count() FROM cardo.bronze_otel_logs), (SELECT count() FROM cardo.bronze_otel_metrics_sum) FORMAT TSV"
+}
+
+# The made-up organization's history, invented from a seed by cmd/cardo-madeup and sent through the
+# made-up collector as Claude Code would send it. The answer key, what was planted, is written
+# beside this stack's files and removed with it.
+cmd_load() {
+  [ -n "$(container_of collector)" ] || die "the made-up stack is not running. Start it with: scripts/made-up.sh up"
+  command -v go >/dev/null || die "load needs Go on PATH, to run cmd/cardo-madeup from this checkout"
+  local before
+  before=$(counts)
+  [ "$before" = "$(printf '0\t0\t0')" ] || die "the made-up stack already holds a load (hook events, log records, metric points: $(echo "$before" | tr '\t' ' ')). Loading again would count every session twice. Run scripts/made-up.sh down, then up, first."
+
+  mkdir -p "$compose_dir/made-up/loaded"
+  echo "== Inventing the made-up organization, and sending it through the made-up collector"
+  # A path relative to the checkout: with MSYS_NO_PATHCONV set, Go on Windows would read Git
+  # Bash's /c/... as a folder named c.
+  (cd "$root" && go run ./cmd/cardo-madeup -key "$key_file" "$@")
+
+  echo "== Waiting for the collector's last flush"
+  local now last="" tries=0
+  while :; do
+    now=$(counts)
+    [ "$now" = "$last" ] && break
+    last=$now
+    tries=$((tries + 1))
+    [ "$tries" -le 30 ] || break
+    sleep 12
+  done
+
+  local want got
+  want="$(total hook_events)	$(total log_records)	$(total metric_points)"
+  got=$now
+  echo "   sent:   $(echo "$want" | tr '\t' ' ')   (hook events, log records, metric points)"
+  echo "   stored: $(echo "$got" | tr '\t' ' ')"
+  [ "$want" = "$got" ] || die "the made-up stack stored a different number of rows than were sent. See: docker compose -p $project logs collector"
+  echo
+  echo "Made-up Grafana: $grafana_url (admin, with GRAFANA_PASSWORD from deploy/compose/$env_file)."
+  echo "Answer key: $key_file"
+}
+
+# A total from the answer key. Each name appears once in it, in "totals".
+total() { grep -m1 "\"$1\":" "$root/$key_file" | tr -dc 0-9; }
+
 cmd_down() {
   if [ -f "$env_file" ]; then
     compose down -v --remove-orphans
@@ -162,16 +213,18 @@ cmd_down() {
     rm -f .env.made-up-down
   fi
   rm -f "$env_file"
-  echo "Made-up stack removed, with its data. The cardo-madeup:dev image is kept for the next build;"
+  rm -f "$root/$key_file"
+  echo "Made-up stack removed, with its data and answer key. The cardo-madeup:dev image is kept for the next build;"
   echo "docker image rm cardo-madeup:dev removes it."
 }
 
 case ${1:-} in
   up)    cmd_up ;;
+  load)  shift; cmd_load "$@" ;;
   probe) cmd_probe ;;
   down)  cmd_down ;;
   *)
-    sed -n '2,13p' "$root/scripts/made-up.sh" | sed 's/^# \{0,1\}//'
+    sed -n '2,17p' "$root/scripts/made-up.sh" | sed 's/^# \{0,1\}//'
     exit 2
     ;;
 esac

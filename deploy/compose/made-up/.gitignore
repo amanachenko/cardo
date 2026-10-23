@@ -1,0 +1,3 @@
+# scripts/made-up.sh load writes the answer key of what it invented here. It is made up, the next
+# load writes a new one, and down removes it.
+/loaded/
