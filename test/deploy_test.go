@@ -207,8 +207,10 @@ func variableSQL(v map[string]any) string {
 // scores 100%. A panel that charts a rate must chart the volume it is measured over beside it.
 //
 // Each rate the gold views publish is paired with the column that is its volume. The friction
-// index's three components are all here (ADR-0008): edit rejection, permission waits and
-// compactions.
+// index's three components stay here (ADR-0008), edit rejection, permission waits and compactions,
+// although no panel charts them now: one that comes back comes back with its volume. A share of
+// sessions is charted with the sessions, and a share of a release's requests or a figure per
+// request with the requests.
 //
 // The volume must be an output column, selected bare or named with AS. Appearing in the SQL is
 // not enough: a panel computes its rate from the volume, as in
@@ -225,6 +227,11 @@ var rateVolumes = []struct {
 	{"permission_wait_s", outputColumn(`permission_answered`), "permission_answered"},
 	{"permission_prompts_per_prompt", outputColumn(`prompts`), "prompts"},
 	{"people_share", outputColumn(`active_people`), "active_people"},
+	{"current_share", outputColumn(`[a-z_]*sessions`), "sessions"},
+	{"stale_share", outputColumn(`[a-z_]*sessions`), "sessions"},
+	{"session_share", outputColumn(`[a-z_]*sessions`), "sessions"},
+	{"cache_read_share", outputColumn(`requests`), "requests"},
+	{"_per_request", outputColumn(`requests`), "requests"},
 }
 
 // outputColumn matches a column in a lower-cased SELECT list: after AS, or bare between commas,
@@ -262,9 +269,11 @@ func TestADR0008_RatesAreChartedWithTheirDenominator(t *testing.T) {
 			}
 		}
 	}
-	// The acceptance rate is on the Admin API dashboard and the rejection rate on the collector's.
-	// If either disappears from every panel, this test has stopped checking what it was written for.
-	for _, rate := range []string{"acceptance_rate", "rejection_rate"} {
+	// The acceptance rate is on the Admin API dashboard, and the shares and the cache figures on the
+	// collector's. If one disappears from every panel, this test has stopped checking what it was
+	// written for, and the list changes with the dashboard.
+	for _, rate := range []string{"acceptance_rate", "people_share", "current_share", "stale_share",
+		"session_share", "cache_read_share", "_per_request"} {
 		if checked[rate] == 0 {
 			t.Errorf("no panel charting %s was found to check; this test would pass vacuously", rate)
 		}

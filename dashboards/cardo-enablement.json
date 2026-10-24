@@ -1,7 +1,7 @@
 {
   "uid": "cardo-enablement",
   "title": "Cardo — enablement",
-  "description": "What the organization shipped for Claude Code and whether it is used, what engineers built for themselves that several now use, and the friction and context costs around it, from the hook pack and native OTel. Every panel reads a gold view. A home-grown name or a cohort is shown only once enough people are in it (ADR-0029), and there is no per-person row anywhere (INV-3).",
+  "description": "What the organization rolled out for Claude Code and who uses it, what engineers brought in that several now use, which version of the shared instructions people load, where work gets stuck, and where the money goes. From the hook pack and native OTel; every panel reads a gold view. Figures are weekly, Monday to Sunday, and a week shows once it is over. A team, or a name the organization did not roll out, is shown only in weeks when at least five people are in it (the minimum group size, which can be raised); below that it is counted as other. There is no per-person row anywhere.",
   "tags": [
     "cardo"
   ],
@@ -10,13 +10,37 @@
   "schemaVersion": 39,
   "refresh": "",
   "time": {
-    "from": "now-30d",
+    "from": "now-90d",
     "to": "now"
+  },
+  "annotations": {
+    "list": [
+      {
+        "name": "Organization's artifacts first used",
+        "enable": true,
+        "iconColor": "purple",
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "cardo-clickhouse"
+        },
+        "target": {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "Anno",
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT time, text FROM (SELECT toDateTime(min(first_week)) AS time, concat('First used: ', kind, ' ', artifact) AS text, is_org, min(min(first_week)) OVER () AS data_start FROM cardo.gold_artifact_usage GROUP BY kind, artifact, is_org) WHERE is_org AND time > toDateTime(data_start) AND time >= toDateTime(toMonday(toDate($__fromTime))) AND time <= $__toTime ORDER BY time"
+        }
+      }
+    ]
   },
   "panels": [
     {
       "id": 1,
-      "title": "Artifacts: what the organization shipped, and what engineers built",
+      "title": "Artifacts: what the organization rolled out, and what engineers brought in",
       "type": "row",
       "collapsed": false,
       "panels": [],
@@ -35,9 +59,9 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "cardo-clickhouse"
       },
-      "description": "Commands, skills, subagents, MCP servers and instructions files whose names match CARDO_ORG_ARTIFACTS. People are counted per week and cannot be added across weeks, so this shows the busiest week in the range beside the size of the fleet that week. The organization's own names are always shown, however few people use them (ADR-0029).",
+      "description": "For the operator. Each command, skill, subagent, MCP server and instructions file the organization rolled out (the names that match CARDO_ORG_ARTIFACTS), with the people who used it in the last complete week of the range, out of everyone who used Claude Code that week. Helps decide what to announce again, train people on, or retire. It cannot show who an artifact was rolled out to, so a skill installed for one team reads as a small share of the whole fleet; that comes with the rollout list. The organization's own names are always shown, however few people use them.",
       "gridPos": {
-        "h": 9,
+        "h": 8,
         "w": 24,
         "x": 0,
         "y": 1
@@ -52,7 +76,7 @@
           "editorType": "sql",
           "queryType": "table",
           "format": 1,
-          "rawSql": "SELECT kind, artifact, max(people) AS peak_weekly_people, max(active_people) AS active_people, max(people_share) AS peak_weekly_people_share, sum(sessions) AS sessions, sum(uses) AS uses FROM cardo.gold_artifact_usage WHERE is_org AND week >= toMonday(toDate($__fromTime)) AND week <= toDate($__toTime) GROUP BY kind, artifact ORDER BY peak_weekly_people DESC, sessions DESC"
+          "rawSql": "WITH toMonday(least(toDate($__toTime) + 1, today())) - 7 AS last_week SELECT kind, artifact, people_total AS people_last_week, fleet_total AS active_people, round(people_total / nullIf(fleet_total, 0), 4) AS people_share, toString(first_total) AS first_used FROM (SELECT kind, artifact, sumIf(people, week = last_week) AS people_total, min(first_week) AS first_total FROM cardo.gold_artifact_usage WHERE is_org AND week >= toMonday(toDate($__fromTime)) AND week <= last_week GROUP BY kind, artifact) AS u CROSS JOIN (SELECT max(active_people) AS fleet_total FROM cardo.gold_artifact_usage WHERE week = last_week) AS f ORDER BY people_last_week DESC, artifact"
         }
       ],
       "fieldConfig": {
@@ -63,7 +87,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "peak_weekly_people_share"
+              "options": "people_share"
             },
             "properties": [
               {
@@ -77,46 +101,22 @@
       "options": {
         "showHeader": true,
         "cellHeight": "sm"
-      }
-    },
-    {
-      "id": 3,
-      "title": "Built by engineers, used by several",
-      "type": "table",
-      "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "cardo-clickhouse"
       },
-      "description": "Commands, skills, subagents and MCP servers the organization did not ship, named only once at least the minimum group size of people (five unless raised) used one in the same week. Several people writing the same thing is a missing organization artifact. Everything below the threshold is counted as \"other\" and never named, and nothing here is per person (ADR-0025, ADR-0029).",
-      "gridPos": {
-        "h": 9,
-        "w": 24,
-        "x": 0,
-        "y": 10
-      },
-      "targets": [
+      "transformations": [
         {
-          "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "cardo-clickhouse"
-          },
-          "refId": "A",
-          "editorType": "sql",
-          "queryType": "table",
-          "format": 1,
-          "rawSql": "SELECT kind, artifact, max(people) AS peak_weekly_people, max(active_people) AS active_people, sum(sessions) AS sessions, sum(uses) AS uses FROM cardo.gold_artifact_usage WHERE NOT is_org AND NOT is_builtin AND artifact != '' AND week >= toMonday(toDate($__fromTime)) AND week <= toDate($__toTime) GROUP BY kind, artifact ORDER BY artifact = 'other', peak_weekly_people DESC, sessions DESC"
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "kind": "Kind",
+              "artifact": "Name",
+              "people_last_week": "People last week",
+              "active_people": "Everyone active last week",
+              "people_share": "Share",
+              "first_used": "First week used"
+            }
+          }
         }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "none"
-        },
-        "overrides": []
-      },
-      "options": {
-        "showHeader": true,
-        "cellHeight": "sm"
-      }
+      ]
     },
     {
       "id": 4,
@@ -126,12 +126,12 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "cardo-clickhouse"
       },
-      "description": "Distinct people who used each of the organization's artifacts, per week.",
+      "description": "For the operator and the adoption owner. The people who used each of the organization's artifacts, per week, against everyone who used Claude Code that week (the bars). Shows whether a rollout took, held or faded. People are counted per week and cannot be added up across weeks. The markers are the first week each of the organization's artifacts was used: a marker beside a change is a lead, not proof of its cause. An artifact already in use when the data begins has no marker.",
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 24,
         "x": 0,
-        "y": 19
+        "y": 9
       },
       "targets": [
         {
@@ -143,7 +143,18 @@
           "editorType": "sql",
           "queryType": "timeseries",
           "format": 0,
-          "rawSql": "SELECT week AS time, artifact, people FROM cardo.gold_artifact_usage WHERE is_org AND week >= toMonday(toDate($__fromTime)) AND week <= toDate($__toTime) ORDER BY week"
+          "rawSql": "WITH toMonday(least(toDate($__toTime) + 1, today())) - 7 AS last_week SELECT week AS time, artifact, people FROM cardo.gold_artifact_usage WHERE is_org AND week >= toMonday(toDate($__fromTime)) AND week <= last_week ORDER BY time, artifact"
+        },
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "B",
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "WITH toMonday(least(toDate($__toTime) + 1, today())) - 7 AS last_week SELECT time, fleet_total AS active_people FROM (SELECT week AS time, max(active_people) AS fleet_total FROM cardo.gold_artifact_usage WHERE week >= toMonday(toDate($__fromTime)) AND week <= last_week GROUP BY week) ORDER BY time"
         }
       ],
       "fieldConfig": {
@@ -163,12 +174,113 @@
           "min": 0,
           "displayName": "${__field.labels.artifact}"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Everyone who used Claude Code"
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "bars"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 15
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "never"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8e8e8e"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
       }
     },
     {
+      "id": 3,
+      "title": "Brought in by engineers, used by several",
+      "type": "table",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "cardo-clickhouse"
+      },
+      "description": "For the adoption owner and the champions. Commands, skills, subagents and MCP servers the organization did not roll out, named once at least five people used one in the same week. Several people choosing the same thing is the case for making it official, and spread across teams is the stronger vote. Teams is how many teams its users were in, never which. Read for the last complete week of the range and four weeks before it; a blank means it was not named that week, because fewer than five people used it, if anyone did. Other is everything below five: how much has not converged yet. It cannot show whether a name helps; that comes later.",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "WITH toMonday(least(toDate($__toTime) + 1, today())) - 7 AS last_week SELECT kind, artifact, if(countIf(week = last_week) = 0, NULL, maxIf(teams, week = last_week)) AS teams_last_week, if(countIf(week = last_week) = 0, NULL, sumIf(people, week = last_week)) AS people_last_week, if(countIf(week = last_week - 28) = 0, NULL, sumIf(people, week = last_week - 28)) AS people_4_weeks_before, toString(min(first_week)) AS first_used FROM cardo.gold_artifact_usage WHERE NOT is_org AND NOT is_builtin AND artifact != '' AND week IN (last_week, last_week - 28) GROUP BY kind, artifact ORDER BY artifact = 'other', people_last_week DESC, artifact"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "kind": "Kind",
+              "artifact": "Name",
+              "teams_last_week": "Teams last week",
+              "people_last_week": "People last week",
+              "people_4_weeks_before": "People 4 weeks before",
+              "first_used": "First week used"
+            }
+          }
+        }
+      ]
+    },
+    {
       "id": 5,
-      "title": "Instructions files: who is on which version",
+      "title": "Shared instructions: which version people load",
       "type": "row",
       "collapsed": false,
       "panels": [],
@@ -176,7 +288,22 @@
         "h": 1,
         "w": 24,
         "x": 0,
+        "y": 26
+      }
+    },
+    {
+      "id": 18,
+      "title": "How versions are read",
+      "type": "text",
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
         "y": 27
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Cardo reads an instructions file's version from its name**, because it never reads what a file says. `example-engineering-standards-v3.md` is version 3 of `example-engineering-standards`. The organization adopts this convention when it ships a file, for example a rule named `.claude/rules/acme-security-v3.md`.\n\n- **Current** is the highest version anyone had loaded by the end of that week. A version shipped and not yet loaded by anybody cannot be seen.\n- **Older** is a session still loading an earlier version: a machine that has not picked up the new file.\n- A file with no version in its name is listed without one, and is never counted as older.\n- Only the organization's own files are named (those that match CARDO_ORG_ARTIFACTS). Other instructions files' names are dropped before they are stored."
       }
     },
     {
@@ -187,12 +314,12 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "cardo-clickhouse"
       },
-      "description": "The organization's versioned instructions files (acme-security-v3.md) and who loads each version. A version that is not current is people on a stale one. Current means the highest version anyone loaded while the data was retained; a version shipped and not yet loaded cannot be seen (ADR-0026).",
+      "description": "For the operator. Each version of the organization's instructions files: whether it was current in the last complete week of the range, the people and sessions that loaded it that week, its share of the sessions that loaded the file, and the first week anyone loaded it. Helps decide whether a new version has reached people, and when the old one can be removed. It shows how many are still on an older version, never who.",
       "gridPos": {
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 28
+        "y": 33
       },
       "targets": [
         {
@@ -204,34 +331,64 @@
           "editorType": "sql",
           "queryType": "table",
           "format": 1,
-          "rawSql": "SELECT family, instructions_name, version, is_current, max(people) AS peak_weekly_people, sum(sessions) AS sessions, sum(loads) AS loads FROM cardo.gold_instructions_versions WHERE week >= toMonday(toDate($__fromTime)) AND week <= toDate($__toTime) GROUP BY family, instructions_name, version, is_current ORDER BY family, version DESC"
+          "rawSql": "WITH toMonday(least(toDate($__toTime) + 1, today())) - 7 AS last_week SELECT family, instructions_name, version_total AS version, multiIf(NOT versioned_total, '', version_total = family_current, 'current', 'older') AS status, people_total AS people_last_week, sessions_total AS sessions, round(sessions_total / nullIf(family_sessions, 0), 4) AS session_share, toString(first_total) AS first_loaded FROM (SELECT family, instructions_name, any(version) AS version_total, max(is_versioned) AS versioned_total, sumIf(people, week = last_week) AS people_total, sumIf(sessions, week = last_week) AS sessions_total, min(first_week) AS first_total, max(maxIf(current_version, week = last_week)) OVER (PARTITION BY family) AS family_current, sum(sumIf(sessions, week = last_week)) OVER (PARTITION BY family) AS family_sessions FROM cardo.gold_instructions_versions WHERE week >= toMonday(toDate($__fromTime)) AND week <= last_week GROUP BY family, instructions_name) ORDER BY family, version DESC"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "none"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "session_share"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "showHeader": true,
         "cellHeight": "sm"
-      }
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "family": "Instructions file",
+              "instructions_name": "Name loaded",
+              "version": "Version",
+              "status": "Last week",
+              "people_last_week": "People last week",
+              "sessions": "Sessions last week",
+              "session_share": "Share of the file's sessions",
+              "first_loaded": "First week loaded"
+            }
+          }
+        }
+      ]
     },
     {
       "id": 7,
-      "title": "Sessions on a stale version, with all sessions loading the file",
+      "title": "Sessions on an older version",
       "type": "timeseries",
       "datasource": {
         "type": "grafana-clickhouse-datasource",
         "uid": "cardo-clickhouse"
       },
-      "description": "Per week and file: sessions that loaded a version older than the current one, beside every session that loaded the file at all.",
+      "description": "For the operator. The share of sessions that loaded an older version of each file, per week, with the sessions that loaded the file at all (the bars). After a new version ships this should fall towards zero; a level that stays up is machines that never picked up the change. The markers are the first week each of the organization's artifacts was used: a marker beside a change is a lead, not proof of its cause. An artifact already in use when the data begins has no marker.",
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 24,
         "x": 0,
-        "y": 36
+        "y": 41
       },
       "targets": [
         {
@@ -243,68 +400,7 @@
           "editorType": "sql",
           "queryType": "timeseries",
           "format": 0,
-          "rawSql": "SELECT week AS time, family, sumIf(sessions, NOT is_current) AS stale_sessions, sum(sessions) AS all_sessions FROM cardo.gold_instructions_versions WHERE week >= toMonday(toDate($__fromTime)) AND week <= toDate($__toTime) GROUP BY week, family ORDER BY week"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "none",
-          "custom": {
-            "drawStyle": "bars",
-            "lineWidth": 1,
-            "fillOpacity": 60,
-            "showPoints": "never",
-            "pointSize": 5,
-            "spanNulls": false
-          },
-          "color": {
-            "mode": "palette-classic"
-          },
-          "min": 0,
-          "displayName": "${__field.labels.family} ${__field.name}"
-        },
-        "overrides": []
-      }
-    },
-    {
-      "id": 8,
-      "title": "Friction (ADR-0008), always beside the volume it is measured over",
-      "type": "row",
-      "collapsed": false,
-      "panels": [],
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 44
-      }
-    },
-    {
-      "id": 9,
-      "title": "Edit rejection rate, with the edits it is measured over",
-      "type": "timeseries",
-      "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "cardo-clickhouse"
-      },
-      "description": "Rejected edits over edits proposed (Edit, MultiEdit, Write, NotebookEdit), across the fleet. The bars are the edits proposed: a day with no rejections and no edits is not a good day.",
-      "gridPos": {
-        "h": 9,
-        "w": 8,
-        "x": 0,
-        "y": 45
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "cardo-clickhouse"
-          },
-          "refId": "A",
-          "editorType": "sql",
-          "queryType": "table",
-          "format": 1,
-          "rawSql": "SELECT time, round(rejections_total / nullIf(proposals_total, 0), 4) AS edit_rejection_rate, proposals_total AS edit_proposals FROM (SELECT day AS time, sum(edit_rejections) AS rejections_total, sum(edit_proposals) AS proposals_total FROM cardo.gold_friction_daily WHERE $__timeFilter(day) GROUP BY day) ORDER BY time"
+          "rawSql": "WITH toMonday(least(toDate($__toTime) + 1, today())) - 7 AS last_week SELECT time, family, round((sessions_total - current_total) / nullIf(sessions_total, 0), 4) AS stale_share, sessions_total AS sessions FROM (SELECT week AS time, family, sum(sessions) AS sessions_total, sum(sessions_current) AS current_total FROM cardo.gold_instructions_by_team_weekly WHERE week >= toMonday(toDate($__fromTime)) AND week <= last_week GROUP BY week, family) ORDER BY time, family"
         }
       ],
       "fieldConfig": {
@@ -313,9 +409,9 @@
           "custom": {
             "drawStyle": "line",
             "lineWidth": 2,
-            "fillOpacity": 10,
-            "showPoints": "auto",
-            "pointSize": 5,
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 6,
             "spanNulls": false
           },
           "color": {
@@ -326,89 +422,37 @@
         "overrides": [
           {
             "matcher": {
-              "id": "byName",
-              "options": "edit_proposals"
+              "id": "byRegexp",
+              "options": "^stale_share"
             },
             "properties": [
               {
-                "id": "custom.drawStyle",
-                "value": "bars"
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 40
-              },
-              {
-                "id": "custom.axisPlacement",
-                "value": "right"
-              },
-              {
-                "id": "unit",
-                "value": "none"
+                "id": "displayName",
+                "value": "${__field.labels.family}: on an older version"
               }
             ]
-          }
-        ]
-      }
-    },
-    {
-      "id": 10,
-      "title": "Permission waits, with the prompts answered",
-      "type": "timeseries",
-      "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "cardo-clickhouse"
-      },
-      "description": "Mean seconds a person took to answer a permission prompt, both ends on the laptop's clock. The bars are the prompts answered. Waits that had to fall back to the collector's clock are counted in the table below.",
-      "gridPos": {
-        "h": 9,
-        "w": 8,
-        "x": 8,
-        "y": 45
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "cardo-clickhouse"
           },
-          "refId": "A",
-          "editorType": "sql",
-          "queryType": "table",
-          "format": 1,
-          "rawSql": "SELECT time, round(wait_s_total / nullIf(answered_total, 0), 1) AS permission_wait_s_mean, answered_total AS permission_answered FROM (SELECT day AS time, sum(permission_wait_s_total) AS wait_s_total, sum(permission_answered) AS answered_total FROM cardo.gold_friction_daily WHERE $__timeFilter(day) GROUP BY day) ORDER BY time"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "showPoints": "auto",
-            "pointSize": 5,
-            "spanNulls": false
-          },
-          "color": {
-            "mode": "palette-classic"
-          },
-          "min": 0
-        },
-        "overrides": [
           {
             "matcher": {
-              "id": "byName",
-              "options": "permission_answered"
+              "id": "byRegexp",
+              "options": "^sessions"
             },
             "properties": [
+              {
+                "id": "displayName",
+                "value": "${__field.labels.family}: sessions loading it"
+              },
               {
                 "id": "custom.drawStyle",
                 "value": "bars"
               },
               {
                 "id": "custom.fillOpacity",
-                "value": 40
+                "value": 25
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
               },
               {
                 "id": "custom.axisPlacement",
@@ -417,126 +461,195 @@
               {
                 "id": "unit",
                 "value": "none"
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "never"
               }
             ]
           }
         ]
-      }
-    },
-    {
-      "id": 11,
-      "title": "Compactions per session, with sessions",
-      "type": "timeseries",
-      "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "cardo-clickhouse"
-      },
-      "description": "Compactions, manual and automatic, over sessions started that day. The bars are the sessions.",
-      "gridPos": {
-        "h": 9,
-        "w": 8,
-        "x": 16,
-        "y": 45
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "cardo-clickhouse"
-          },
-          "refId": "A",
-          "editorType": "sql",
-          "queryType": "table",
-          "format": 1,
-          "rawSql": "SELECT time, round(compactions_total / nullIf(sessions_total, 0), 4) AS compactions_per_session, sessions_total AS sessions FROM (SELECT day AS time, sum(compactions) AS compactions_total, sum(sessions) AS sessions_total FROM cardo.gold_friction_daily WHERE $__timeFilter(day) GROUP BY day) ORDER BY time"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "none",
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "showPoints": "auto",
-            "pointSize": 5,
-            "spanNulls": false
-          },
-          "color": {
-            "mode": "palette-classic"
-          },
-          "min": 0
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "sessions"
-            },
-            "properties": [
-              {
-                "id": "custom.drawStyle",
-                "value": "bars"
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 40
-              },
-              {
-                "id": "custom.axisPlacement",
-                "value": "right"
-              },
-              {
-                "id": "unit",
-                "value": "none"
-              }
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "id": 12,
-      "title": "Friction by cohort",
-      "type": "table",
-      "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "cardo-clickhouse"
-      },
-      "description": "Over the whole range. A cohort is named only on days when at least the minimum group size of people (five unless raised) worked in it; other days count under \"other\" (ADR-0029). People cannot be added across days, so this shows the busiest day.",
-      "gridPos": {
-        "h": 7,
-        "w": 24,
-        "x": 0,
-        "y": 54
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "cardo-clickhouse"
-          },
-          "refId": "A",
-          "editorType": "sql",
-          "queryType": "table",
-          "format": 1,
-          "rawSql": "SELECT cohort, peak_people AS peak_daily_people, sessions_total AS sessions, prompts_total AS prompts, proposals_total AS edit_proposals, round(rejections_total / nullIf(proposals_total, 0), 4) AS edit_rejection_rate, answered_total AS permission_answered, round(wait_s_total / nullIf(answered_total, 0), 1) AS permission_wait_s_mean, two_clocks_total AS permission_prompts_two_clocks, compactions_total AS compactions, round(compactions_total / nullIf(sessions_total, 0), 4) AS compactions_per_session FROM (SELECT cohort, max(active_people) AS peak_people, sum(sessions) AS sessions_total, sum(prompts) AS prompts_total, sum(edit_proposals) AS proposals_total, sum(edit_rejections) AS rejections_total, sum(permission_answered) AS answered_total, sum(permission_wait_s_total) AS wait_s_total, sum(permission_prompts_two_clocks) AS two_clocks_total, sum(compactions) AS compactions_total FROM cardo.gold_friction_daily WHERE $__timeFilter(day) GROUP BY cohort) ORDER BY sessions DESC"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "none"
-        },
-        "overrides": []
       },
       "options": {
-        "showHeader": true,
-        "cellHeight": "sm"
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
       }
     },
     {
-      "id": 13,
-      "title": "Context and model switches",
+      "id": 19,
+      "title": "Each team on the current version, against the fleet",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "cardo-clickhouse"
+      },
+      "description": "For the operator and the adoption owner. Per team, the share of its sessions that loaded the current version of the file, beside the whole fleet (the thick line, with its sessions as bars; each team's sessions are in the tooltip). Shows where a new version has not landed, not why. Teams are listed alphabetically and compared on reach, never ranked. A team is named only in weeks when at least five people worked in it (the minimum group size, which can be raised); the rest are counted as other. With more than one versioned file, each line names its file.",
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 50
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "queryType": "timeseries",
+          "format": 0,
+          "rawSql": "WITH toMonday(least(toDate($__toTime) + 1, today())) - 7 AS last_week SELECT time, if(files > 1, concat(team, ' · ', family), team) AS line, current_share, sessions FROM (SELECT time, team, family, current_share, sessions, uniqExact(family) OVER () AS files FROM (SELECT week AS time, cohort AS team, family, current_share, sessions FROM cardo.gold_instructions_by_team_weekly WHERE week >= toMonday(toDate($__fromTime)) AND week <= last_week UNION ALL SELECT time, 'Whole fleet' AS team, family, round(current_total / nullIf(sessions_total, 0), 4) AS current_share, sessions_total AS sessions FROM (SELECT week AS time, family, sum(sessions_current) AS current_total, sum(sessions) AS sessions_total FROM cardo.gold_instructions_by_team_weekly WHERE week >= toMonday(toDate($__fromTime)) AND week <= last_week GROUP BY week, family))) ORDER BY time, line"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 6,
+            "spanNulls": false
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^current_share"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "${__field.labels.line}"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^current_share.*Whole fleet"
+            },
+            "properties": [
+              {
+                "id": "custom.lineWidth",
+                "value": 4
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#5a5a5a"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^sessions"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "${__field.labels.line}: sessions"
+              },
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "viz": true,
+                  "legend": true,
+                  "tooltip": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^sessions.*Whole fleet"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "viz": false,
+                  "legend": false,
+                  "tooltip": false
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "bars"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 15
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "never"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8e8e8e"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "title": "Where work gets stuck",
       "type": "row",
       "collapsed": false,
       "panels": [],
@@ -544,161 +657,23 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 61
+        "y": 59
       }
     },
     {
-      "id": 14,
-      "title": "Context per prompt, with prompts",
+      "id": 20,
+      "title": "Failing calls repeated in a row",
       "type": "timeseries",
       "datasource": {
         "type": "grafana-clickhouse-datasource",
         "uid": "cardo-clickhouse"
       },
-      "description": "Per prompt, the largest context any of its main-thread requests sent: how large conversations grow. Median and 90th percentile by cohort; the bars are the prompts. Claude Code does not report the window's size, so these are tokens, not a percentage.",
+      "description": "For the operator and the champions. Per week and tool, how often a call failed three or more times in a row in a session, with no other call run in between: the model rerunning a failing test or command and reading the failure each time. The tool's calls, and the sessions it happened in, are in the tooltip. One tool standing out is a flaky test or a broken command, worth fixing once for everyone. Claude Code does not send the command, so this cannot show which test it was; which repository comes later. Only tools with at least one such run in the range are drawn. Never by team or person.",
       "gridPos": {
         "h": 9,
-        "w": 12,
-        "x": 0,
-        "y": 62
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "cardo-clickhouse"
-          },
-          "refId": "A",
-          "editorType": "sql",
-          "queryType": "timeseries",
-          "format": 0,
-          "rawSql": "SELECT day AS time, cohort, turn_peak_context_p50, turn_peak_context_p90, turns FROM cardo.gold_context_daily WHERE $__timeFilter(day) ORDER BY day"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "none",
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "showPoints": "auto",
-            "pointSize": 5,
-            "spanNulls": false
-          },
-          "color": {
-            "mode": "palette-classic"
-          },
-          "min": 0,
-          "displayName": "${__field.labels.cohort} ${__field.name}"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": ".*turns.*"
-            },
-            "properties": [
-              {
-                "id": "custom.drawStyle",
-                "value": "bars"
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 40
-              },
-              {
-                "id": "custom.axisPlacement",
-                "value": "right"
-              }
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "id": 15,
-      "title": "Context a session starts from, with sessions",
-      "type": "timeseries",
-      "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "cardo-clickhouse"
-      },
-      "description": "The median context of each session's first main-thread request: Claude Code's system prompt, tools and instructions files, plus the first prompt. Every session pays it before any work.",
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 62
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "cardo-clickhouse"
-          },
-          "refId": "A",
-          "editorType": "sql",
-          "queryType": "timeseries",
-          "format": 0,
-          "rawSql": "SELECT day AS time, cohort, session_start_context_p50, sessions_with_requests FROM cardo.gold_context_daily WHERE $__timeFilter(day) ORDER BY day"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "none",
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "showPoints": "auto",
-            "pointSize": 5,
-            "spanNulls": false
-          },
-          "color": {
-            "mode": "palette-classic"
-          },
-          "min": 0,
-          "displayName": "${__field.labels.cohort} ${__field.name}"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": ".*sessions_with_requests.*"
-            },
-            "properties": [
-              {
-                "id": "custom.drawStyle",
-                "value": "bars"
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 40
-              },
-              {
-                "id": "custom.axisPlacement",
-                "value": "right"
-              }
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "id": 16,
-      "title": "Model switches: what they cost, and what Claude Code estimated",
-      "type": "table",
-      "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "cardo-clickhouse"
-      },
-      "description": "The measured cost is the next main-thread request on the new model: the cache it wrote and its whole cost. Claude Code's estimate assumes the whole context is rewritten, and in the switch observed it was 3.2 times the measured cost (ADR-0027). The estimate is shown only beside the measurement.",
-      "gridPos": {
-        "h": 8,
         "w": 24,
         "x": 0,
-        "y": 71
+        "y": 60
       },
       "targets": [
         {
@@ -708,33 +683,181 @@
           },
           "refId": "A",
           "editorType": "sql",
-          "queryType": "table",
-          "format": 1,
-          "rawSql": "SELECT cohort, sum(model_switches) AS model_switches, sum(model_switches_measured) AS measured, sum(switch_cache_write_tokens) AS cache_write_tokens, round(sum(switch_next_request_cost_usd), 4) AS next_request_cost_usd, sum(model_switches_estimated) AS estimated, round(sum(switch_estimated_cache_write_usd), 4) AS estimated_cache_write_usd FROM cardo.gold_context_daily WHERE $__timeFilter(day) GROUP BY cohort ORDER BY model_switches DESC"
+          "queryType": "timeseries",
+          "format": 0,
+          "rawSql": "WITH toMonday(least(toDate($__toTime) + 1, today())) - 7 AS last_week SELECT time, tool, loops, calls, sessions_with_loops FROM (SELECT week AS time, tool_name AS tool, loops, calls, sessions_with_loops, sum(loops) OVER (PARTITION BY tool_name) AS range_loops FROM cardo.gold_tool_loops_weekly WHERE week >= toMonday(toDate($__fromTime)) AND week <= last_week) WHERE range_loops > 0 ORDER BY time, tool"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "none"
+          "unit": "none",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 6,
+            "spanNulls": false
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^loops"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "${__field.labels.tool}"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^calls"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "${__field.labels.tool}: calls"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "viz": true,
+                  "legend": true,
+                  "tooltip": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^sessions_with_loops"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "${__field.labels.tool}: sessions it happened in"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "viz": true,
+                  "legend": true,
+                  "tooltip": false
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 13,
+      "title": "Spend and setup: where the money goes, and what moved it",
+      "type": "row",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 69
+      }
+    },
+    {
+      "id": 21,
+      "title": "Weekly spend by model",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "cardo-clickhouse"
+      },
+      "description": "For the adoption owner. What Claude Code's requests cost each week, stacked by model. A step in spend that arrives with a new model is a change of default, not more work. A model fewer than five people used that week is counted as other models. The cost is Claude Code's own estimate for each request, not the invoice.",
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 70
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "queryType": "timeseries",
+          "format": 0,
+          "rawSql": "WITH toMonday(least(toDate($__toTime) + 1, today())) - 7 AS last_week SELECT week AS time, model, cost_usd FROM cardo.gold_model_spend_weekly WHERE week >= toMonday(toDate($__fromTime)) AND week <= last_week ORDER BY time, model"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 70,
+            "showPoints": "never",
+            "pointSize": 6,
+            "spanNulls": false,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0,
+          "displayName": "${__field.labels.model}"
         },
         "overrides": []
       },
       "options": {
-        "showHeader": true,
-        "cellHeight": "sm"
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
       }
     },
     {
-      "id": 17,
-      "title": "Daily spend by cohort",
+      "id": 22,
+      "title": "Weekly spend by team",
       "type": "timeseries",
       "datasource": {
         "type": "grafana-clickhouse-datasource",
         "uid": "cardo-clickhouse"
       },
-      "description": "Claude Code's own cost per API request, main thread, subagents and its helpers together.",
+      "description": "For the adoption owner. The same spend, stacked by team, listed alphabetically. Read it beside spend by model: a team whose spend steps up in the week a new model appears is the team that changed its default. A team is named only in weeks when at least five people worked in it (the minimum group size, which can be raised); the rest are counted as other. Spend is never divided by headcount: a large team spends more, and that is all it says.",
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 24,
         "x": 0,
         "y": 79
@@ -749,28 +872,466 @@
           "editorType": "sql",
           "queryType": "timeseries",
           "format": 0,
-          "rawSql": "SELECT day AS time, cohort, cost_usd FROM cardo.gold_context_daily WHERE $__timeFilter(day) ORDER BY day"
+          "rawSql": "WITH toMonday(least(toDate($__toTime) + 1, today())) - 7 AS last_week SELECT week AS time, cohort AS team, cost_usd FROM cardo.gold_spend_weekly WHERE week >= toMonday(toDate($__fromTime)) AND week <= last_week ORDER BY time, team"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "currencyUSD",
           "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "showPoints": "auto",
-            "pointSize": 5,
-            "spanNulls": false
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 70,
+            "showPoints": "never",
+            "pointSize": 6,
+            "spanNulls": false,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
           },
           "color": {
             "mode": "palette-classic"
           },
           "min": 0,
-          "displayName": "${__field.labels.cohort}"
+          "displayName": "${__field.labels.team}"
         },
         "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
       }
+    },
+    {
+      "id": 23,
+      "title": "Claude Code releases: how much of the context each reuses from cache",
+      "type": "table",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "cardo-clickhouse"
+      },
+      "description": "For the operator. Per Claude Code release, newest first, over the range: the share of the context its requests read from the cache, the cache written per request and the cost per request, with the requests they are measured over. A release that reads less from the cache than the ones around it writes the context again on every request, and costs more for the same work; the answer is to raise the minimum version. Cost per request also moves with the model, so read the cache columns first. A release fewer than five people used that week is counted as other releases.",
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 88
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "WITH toMonday(least(toDate($__toTime) + 1, today())) - 7 AS last_week SELECT app_version AS release, toString(first_total) AS first_seen, toString(last_total) AS last_seen, people_total AS busiest_week_people, requests_total AS requests, round(read_total / nullIf(input_total + read_total + write_total, 0), 4) AS cache_read_share, round(write_total / nullIf(requests_total, 0)) AS cache_write_per_request, round(cost_total / nullIf(requests_total, 0), 4) AS cost_per_request FROM (SELECT app_version, min(week) AS first_total, max(week) AS last_total, max(people) AS people_total, sum(requests) AS requests_total, sum(input_tokens) AS input_total, sum(cache_read_tokens) AS read_total, sum(cache_write_tokens) AS write_total, sum(cost_usd) AS cost_total FROM cardo.gold_release_cache_weekly WHERE week >= toMonday(toDate($__fromTime)) AND week <= last_week GROUP BY app_version) ORDER BY release = 'other releases', arrayMap(x -> toUInt32(x), extractAll(release, '[0-9]+')) DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cache_read_share"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cache_write_per_request"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cost_per_request"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "release": "Release",
+              "first_seen": "First week",
+              "last_seen": "Last week",
+              "busiest_week_people": "People, busiest week",
+              "requests": "Requests",
+              "cache_read_share": "Context read from cache",
+              "cache_write_per_request": "Cache written per request",
+              "cost_per_request": "Cost per request"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "title": "Context every session starts with",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "cardo-clickhouse"
+      },
+      "description": "For the operator. The context of each session's first request, the median and 90th percentile across the fleet per week, with the sessions (the bars): Claude Code's system prompt, the connectors' tools and the instructions files, plus the first prompt. Every request of the session carries it again, so a step up is something a rollout added to every session. The markers are the first week each of the organization's artifacts was used: a marker beside a change is a lead, not proof of its cause. An artifact already in use when the data begins has no marker. Tokens, not dollars: what a token costs depends on the model and on the cache.",
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 97
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "WITH toMonday(least(toDate($__toTime) + 1, today())) - 7 AS last_week SELECT week AS time, session_start_context_p50, session_start_context_p90, sessions_with_requests FROM cardo.gold_setup_context_weekly WHERE week >= toMonday(toDate($__fromTime)) AND week <= last_week ORDER BY time"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 6,
+            "spanNulls": false
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "session_start_context_p50"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Median"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "session_start_context_p90"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "90th percentile"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "sessions_with_requests"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Sessions"
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "bars"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 25
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "never"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 14,
+      "title": "Context per prompt",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "cardo-clickhouse"
+      },
+      "description": "For the operator, while it is explored: whether what the organization rolls out changes how large conversations grow. Per prompt, the largest context any of its main-thread requests sent; the weekly median by team, with the 90th percentile and the prompts it is measured over in the tooltip. Claude Code does not report the window's size, so these are tokens, not a percentage. A team is named only in weeks when at least five people worked in it (the minimum group size, which can be raised); the rest are counted as other.",
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 106
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "queryType": "timeseries",
+          "format": 0,
+          "rawSql": "WITH toMonday(least(toDate($__toTime) + 1, today())) - 7 AS last_week SELECT week AS time, cohort AS team, turn_peak_context_p50, turn_peak_context_p90, turns FROM cardo.gold_context_weekly WHERE turns > 0 AND week >= toMonday(toDate($__fromTime)) AND week <= last_week ORDER BY time, team"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 6,
+            "spanNulls": false
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^turn_peak_context_p50"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "${__field.labels.team}"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^turn_peak_context_p90"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "${__field.labels.team}: 90th percentile"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "viz": true,
+                  "legend": true,
+                  "tooltip": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^turns"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "${__field.labels.team}: prompts"
+              },
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "viz": true,
+                  "legend": true,
+                  "tooltip": false
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 16,
+      "title": "Model switches",
+      "type": "table",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "cardo-clickhouse"
+      },
+      "description": "For the operator, while it is explored. Model switches by team over the range, what they cost and what Claude Code estimated. The measured cost is the next main-thread request on the new model: the cache it wrote and its whole cost. Claude Code's estimate assumes the whole context is written again; in the switch observed it was 3.2 times the measured cost, so it is shown only beside the measurement. Teams are listed alphabetically. A team is named only in weeks when at least five people worked in it (the minimum group size, which can be raised); the rest are counted as other.",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 115
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "WITH toMonday(least(toDate($__toTime) + 1, today())) - 7 AS last_week SELECT cohort AS team, sum(model_switches) AS switches, sum(model_switches_measured) AS measured, sum(switch_cache_write_tokens) AS cache_write_tokens, round(sum(switch_next_request_cost_usd), 4) AS next_request_cost_usd, sum(model_switches_estimated) AS estimated, round(sum(switch_estimated_cache_write_usd), 4) AS estimated_cache_write_usd FROM cardo.gold_context_weekly WHERE week >= toMonday(toDate($__fromTime)) AND week <= last_week GROUP BY team ORDER BY team"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cache_write_tokens"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "next_request_cost_usd"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "estimated_cache_write_usd"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "team": "Team",
+              "switches": "Switches",
+              "measured": "Measured",
+              "cache_write_tokens": "Cache written by the next request",
+              "next_request_cost_usd": "Next request's cost",
+              "estimated": "Estimated",
+              "estimated_cache_write_usd": "Claude Code's estimate"
+            }
+          }
+        }
+      ]
     }
   ]
 }
