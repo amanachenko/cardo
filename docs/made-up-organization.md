@@ -55,6 +55,9 @@ bash scripts/made-up.sh down    # remove the stack, with its data and its answer
     different organization of the same size, `-weeks 4` for a shorter history.
   - The same seed, size and start give the same organization every time. The history ends with
     last week, so a load on another day moves the dates, not the stories.
+  - Except on a Sunday, by UTC. That day, the first day of a twelve-week history is already 90
+    days old, past the stack's expiry for raw rows, so it is deleted as it arrives, and `load` ends
+    by saying it stored fewer rows than it sent. Load on another day, or pass `-weeks 11`.
 - **`check`** checks the views and the dashboards, and prints each story, where it should show, and
   the gaps: the list to read the dashboards against. See [what check checks](#what-check-checks).
 - **`probe`** sends one hook event and one OTel record dated 30 days ago, and checks that both kept
@@ -122,25 +125,26 @@ Each story is a pattern planted on purpose and aimed at a view. These are the re
 
 | Week | Planted | Where it shows |
 |---|---|---|
-| 2 | `/deploy-check`, a command one engineer wrote, starts in one team. It crosses five people in week 5 and reaches four teams by week 12. | Enablement, "Built by engineers, used by several": "other" until week 5, then named |
-| 4 | The organization ships `example-standards-v3.md`, about a fifth more context for every session that loads it. The mobile and web teams keep loading v2. | "Versions in use" and "Sessions on a stale version": v2 stays in use. "Context a session starts from": larger in the teams on v3 |
-| 6 | `/review`, the organization's own command, is rolled out to every team but web and security. Sessions that use it are no different from those that do not. | "Weekly reach of the organization's artifacts": `/review` rises |
-| 6 | A Jira connector is set up for everyone, and about three people call it each week. | Its reach stays at a few people, while "Context a session starts from" shows every session carrying its tools |
+| 2 | `/deploy-check`, a command one engineer wrote, starts in one team. It crosses five people in week 5 and reaches four teams by week 12. | Enablement, "Brought in by engineers, used by several": "other" until week 5, then named, in four teams last week, with more people than four weeks before |
+| 4 | The organization ships `example-engineering-standards-v3.md`, about a fifth more context for every session that loads it. The mobile and web teams keep loading v2. | "Versions in use": v3 current, v2 older. "Sessions on an older version": none until week 3, then mobile's and web's sessions. "Each team on the current version, against the fleet": mobile at none from week 4, and web from week 5, its first week with five people working. "Context every session starts with": a step up in week 4 |
+| 6 | `/review`, the organization's own command, is rolled out to every team but web and security. Sessions that use it are no different from those that do not. | "Weekly reach of the organization's artifacts": `/review` rises, and a marker on every time chart says it was first used that week |
+| 6 | A Jira connector is set up for everyone, and about three people call it each week. | Its reach stays at a few people, while "Context every session starts with" steps up, because every session carries its tools |
 | 6 | The `api-guidelines` skill is set up for everyone, and the model rarely uses it. | Its reach: a few people a week |
-| 7 | One person in payments runs `/review` from a script, dozens of times a working day. | "The organization's artifacts in use": `/review`'s sessions and uses jump, and its peak weekly people do not |
-| 8 | The platform team makes the most expensive model its default, and its spend for the same work rises about three times. | "Daily spend by cohort": platform's spend rises. Not why: see the gaps |
-| 10 and 11 | Claude Code releases with a caching bug raise cost per request. A release early in week 12 fixes it, and people upgrade at their own pace. | No view |
-| 10 | `perf-budget`, a skill of the organization's, is rolled out to payments and data in the week the bug arrives. It changes nothing. | No view |
+| 7 | One person in payments runs `/review` from a script, dozens of times a working day. | "Weekly reach of the organization's artifacts" counts people, not sessions, so `/review`'s reach does not jump |
+| 8 | The platform team makes the most expensive model its default, and its spend for the same work rises about three times. | "Weekly spend by team": platform's spend rises. "Weekly spend by model": `claude-fable-5-1` appears the same week, which says why |
+| 10 and 11 | Claude Code releases with a caching bug raise cost per request. A release early in week 12 fixes it, and people upgrade at their own pace. | "Claude Code releases: how much of the context each reuses from cache": the releases with the bug read less of their context from the cache than the rest |
+| 10 | `perf-budget`, a skill of the organization's, is rolled out to payments and data in the week the bug arrives. It changes nothing. | A marker for its first week sits beside the rise in spend, and nothing says the bug arrived the same week: see the gaps |
 
 Throughout the twelve weeks:
 - **Ways of working,** as above, and **a few people spending much of the money.** No view shows one
   person's spend to anyone else, by design.
 - **Compactions differ by way of working:** dozens in a long autonomous run, almost none in a quick
-  question. "Compactions per session, with sessions" shows the fleet's daily average.
-- **People in the default permission mode answer prompts; people in auto mode answer none.**
-  "Permission waits, with the prompts answered" shows it.
+  question. No panel shows them now: see the gaps.
+- **People in the default permission mode answer prompts; people in auto mode answer none.** No
+  panel shows them now: see the gaps.
 - **The mobile team's test command fails now and then,** and sessions run it three to seven times
-  in a row until it passes.
+  in a row until it passes. "Failing calls repeated in a row" shows Bash's loops every week, far
+  above every other tool's.
 - **Two people leave a long loop running overnight,** a few nights a week.
 - **Sessions that use `/deploy-check` cost about 30% less per accepted edit** than the same people's
   other sessions. Sessions that use `/review` cost the same as those that do not.
@@ -153,42 +157,49 @@ Throughout the twelve weeks:
 A story no view can show is written down as a gap in Cardo, not left out. These are candidates for
 what to build, not a plan.
 
-- **Which teams use an artifact.** `/deploy-check`'s spread from one team to four cannot be seen,
-  and spread across teams is the vote for what teams chose
-  ([ADR-0040](adr/0040-spread-is-a-vote-only-for-what-teams-chose.md)).
-- **Failing tool calls, or a command run again and again.** The flaky test command is invisible.
-  `silver_tool_call` records whether each call succeeded, and no gold view reads it.
-- **How compactions spread across sessions.** One average hides that a few long sessions make most
-  of them.
-- **Spend by model.** "Daily spend by cohort" shows that platform's spend rose, not that a model
-  change did it.
-- **Cost per request by Claude Code version.** The caching bug raises spend everywhere, with nothing
-  to say why.
+- **Which repository a loop is in.** "Failing calls repeated in a row" says which tool, not which
+  command or repository. Claude Code does not send the command, and the repository waits until real
+  sessions have confirmed how it arrives
+  ([the repository decision, ADR-0035](adr/0035-repository-identity-classified.md)). By design the
+  chart never says which team.
+- **How compactions spread across sessions.** The dashboard's review dropped the fleet's daily
+  average, which hid that a few long sessions make most of them. `gold_friction_daily` still counts
+  them.
+- **Permission waits.** The review dropped the chart: in a fleet that works in auto mode almost
+  nobody waits, so it reported a success that did not occur
+  ([what "works" means, ADR-0031](adr/0031-what-works-means.md)). `gold_friction_daily` still
+  counts them.
 - **Sessions that run while nobody is there,** and what they cost.
 - **Sessions that used an artifact set beside those that did not.** Neither `/deploy-check`'s
   difference nor `/review`'s absence of one can be seen.
-- **A before set against an after.** Nothing warns that perf-budget and the caching bug arrived in
-  the same week, so a reader credits the skill with the bug.
+- **A warning that two things changed in the same week.** A marker says perf-budget was first used
+  in the week spend rises. Only the releases table, read separately, shows the caching bug, so a
+  reader credits the skill with the bug.
 - **One person's spend over a budget.** The view of cost over a published budget
   ([ADR-0033](adr/0033-per-person-cost-for-budget-owners.md)) is not built. The fleet dashboard's
   spend per engineer reads the Admin API's cost data, which this stack does not have yet.
 
 ## What check checks
 
-- **Each gold view against the answer key:** `gold_context_daily`, `gold_friction_daily`,
-  `gold_artifact_usage` and `gold_instructions_versions`, row by row. The check applies the
-  five-person minimum to the key's own counts, so it knows which names a view should show as
-  "other" and when.
+- **Each gold view against the answer key, row by row.** The daily views, `gold_context_daily` and
+  `gold_friction_daily`. The artifact views, `gold_artifact_usage` and `gold_instructions_versions`.
+  The weekly views: spend by team and by model, context by team, instructions by team, the starting
+  context, cache use by Claude Code release, and failing calls repeated in a row by tool. The check
+  applies the five-person minimum to the key's own counts, so it knows which names a view should
+  show as "other" and when. For example, a team is named in a week only if five of its people
+  worked that week.
+- **The caching bug, as the releases table should show it.** In every week, each named release
+  with the bug reads less of its context from the cache than each named release without it.
 - **Nothing under five people is named,** said once more in plain terms. For example, the security
-  team appears in no daily view, and `db-migrate` in no artifact view.
+  team appears in no daily or weekly view, and `db-migrate` in no artifact view.
 - **Every query each dashboard sends, through the made-up Grafana,** six at a time as a browser
   sends them. It runs each over the dashboard's own last 30 days and over the whole history. A
   query that fails, or takes longer than 10 seconds, fails the check.
 
-**Today the dashboard part fails at every size.** The views part passes.
-- **At 60 people,** the enablement dashboard takes about 85 seconds to draw. Three of its 13 panels
-  reach Grafana's 60-second limit and draw nothing.
-- **At 40 people,** it takes about 52 seconds.
+**Today the dashboard part fails.** The views part passes.
+- **At 60 people,** the enablement dashboard takes about 70 seconds to draw. 13 of its 15 queries
+  take longer than 10 seconds, and the slowest about 50.
+- **At 40 people,** before its review rebuilt the dashboard, it took about 52 seconds.
 - **Why:** it is
   [the views recomputing everything on every read](../risks.md#14-the-collector-path-views-recompute-everything-on-every-read)
   (risk 14). Every

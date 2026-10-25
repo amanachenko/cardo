@@ -90,8 +90,8 @@ func storyFigures(o *Org, k *Key, sums map[string]float64) []KeyStory {
 				if w < 1 {
 					continue
 				}
-				v2, _ := artifact(w, "instructions", "example-standards-v2.md")
-				v3, _ := artifact(w, "instructions", "example-standards-v3.md")
+				v2, _ := artifact(w, "instructions", "example-engineering-standards-v2.md")
+				v3, _ := artifact(w, "instructions", "example-engineering-standards-v3.md")
 				fig(fmt.Sprintf("week %d: people loading v2", w), v2)
 				fig(fmt.Sprintf("week %d: people loading v3", w), v3)
 			}
@@ -130,6 +130,7 @@ func storyFigures(o *Org, k *Key, sums map[string]float64) []KeyStory {
 				break
 			}
 			fig("loops", sums["flaky|loops"])
+			fig("of them, with three or more failed runs in a row, which the loops view counts", sums["flaky|long-loops"])
 			fig("failed runs", sums["flaky|failed"])
 			fig("requests the reruns added", sums["flaky|requests"])
 			fig("what those requests cost ($)", sums["flaky|cost"])

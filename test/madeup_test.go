@@ -1,6 +1,7 @@
 package test
 
 import (
+	"encoding/json"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -255,6 +256,44 @@ func TestMadeUpGeneratorSendsOnlyToTheMadeUpStack(t *testing.T) {
 		!strings.Contains(overlay, `"header.`+madeup.TimeHeader+`"`) {
 		t.Errorf("the generator sends each hook event's time in %s, and the made-up collector must "+
 			"read that header", madeup.TimeHeader)
+	}
+}
+
+// A story says where it shows by the enablement dashboard's panel titles, in quotes, and each one
+// is a panel the dashboard has. A panel renamed or dropped takes its stories' text with it, or
+// the list check prints names nobody can find.
+func TestMadeUpStoriesNameTheEnablementPanels(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join(repoRoot(t), "dashboards", "cardo-enablement.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	type panel struct {
+		Title  string
+		Panels []json.RawMessage
+	}
+	titles := map[string]bool{}
+	var walk func(raw json.RawMessage)
+	walk = func(raw json.RawMessage) {
+		var p panel
+		if err := json.Unmarshal(raw, &p); err != nil {
+			t.Fatal(err)
+		}
+		titles[p.Title] = true
+		for _, c := range p.Panels {
+			walk(c)
+		}
+	}
+	walk(b)
+
+	quoted := regexp.MustCompile(`"([^"]+)"`)
+	for name, p := range madeup.Presets {
+		for _, s := range madeup.Catalog(p) {
+			for _, m := range quoted.FindAllStringSubmatch(s.Shows+" "+s.Gap, -1) {
+				if m[1] != "other" && !titles[m[1]] {
+					t.Errorf("%s preset, the %s story: the enablement dashboard has no panel %q", name, s.Name, m[1])
+				}
+			}
+		}
 	}
 }
 

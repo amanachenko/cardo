@@ -25,6 +25,8 @@ import (
 //   - An artifact is counted in the week of its own use, as gold_artifact_usage counts it. A use
 //     is one load of an instructions file, one subagent started, and one prompt that used a
 //     command, skill or MCP server, however many times within the prompt.
+//   - The weekly views' breakdowns by team, model, release and tool put a session, and
+//     everything in it, in the week it started.
 type Key struct {
 	Note         string      `json:"note"`
 	Preset       string      `json:"preset"`
@@ -116,15 +118,71 @@ type KeyDay struct {
 }
 
 type KeyWeek struct {
-	Week         string        `json:"week"`
-	ActivePeople int           `json:"active_people"`
-	Sessions     int           `json:"sessions"`
-	CostUSD      float64       `json:"cost_usd"`
-	Artifacts    []KeyArtifact `json:"artifacts"`
+	Week         string  `json:"week"`
+	ActivePeople int     `json:"active_people"`
+	Sessions     int     `json:"sessions"`
+	CostUSD      float64 `json:"cost_usd"`
+	// Sessions with a main-thread request, and the context of each one's first, at the median
+	// and the 90th percentile as quantileExact takes them: gold_setup_context_weekly's columns.
+	SessionsWithRequests int           `json:"sessions_with_requests"`
+	StartContextP50      int           `json:"session_start_context_p50"`
+	StartContextP90      int           `json:"session_start_context_p90"`
+	Artifacts            []KeyArtifact `json:"artifacts"`
 	// Other is, for each kind, what the home-grown names fewer than MinGroupSize people used
 	// that week add up to, counted as the view counts its "other" row: a person or a session
 	// once, however many of those names they used.
-	Other []KeyArtifact `json:"other,omitempty"`
+	Other    []KeyArtifact    `json:"other,omitempty"`
+	Teams    []KeyTeamWeek    `json:"teams"`
+	Models   []KeyModelWeek   `json:"models"`
+	Releases []KeyReleaseWeek `json:"releases"`
+	Tools    []KeyToolWeek    `json:"tools"`
+}
+
+// KeyTeamWeek is one team in one week, in the columns gold_spend_weekly, gold_context_weekly and
+// gold_instructions_by_team_weekly publish.
+type KeyTeamWeek struct {
+	Team     string  `json:"team"`
+	People   int     `json:"people"`
+	Sessions int     `json:"sessions"`
+	Requests int     `json:"api_requests"`
+	CostUSD  float64 `json:"cost_usd"`
+	// The sessions that loaded each of the organization's named instructions files. A session
+	// loads one version of a file, so a file's sessions are its versions' sessions added up.
+	Instructions []KeyLoad `json:"instructions,omitempty"`
+}
+
+type KeyLoad struct {
+	Name     string `json:"name"`
+	Sessions int    `json:"sessions"`
+}
+
+// KeyModelWeek is one model in one week, as gold_model_spend_weekly counts it.
+type KeyModelWeek struct {
+	Model    string  `json:"model"`
+	People   int     `json:"people"`
+	Requests int     `json:"api_requests"`
+	CostUSD  float64 `json:"cost_usd"`
+}
+
+// KeyReleaseWeek is one Claude Code release in one week, as gold_release_cache_weekly counts it,
+// and whether it has the caching bug.
+type KeyReleaseWeek struct {
+	Version  string `json:"version"`
+	Buggy    bool   `json:"caching_bug"`
+	People   int    `json:"people"`
+	Sessions int    `json:"sessions"`
+	Requests int    `json:"api_requests"`
+}
+
+// KeyToolWeek is one tool in one week, as gold_tool_loops_weekly counts it: the calls that ran,
+// and the loops among them, failedInARow or more failed calls of the tool one after another.
+type KeyToolWeek struct {
+	Tool              string `json:"tool"`
+	People            int    `json:"people"`
+	Calls             int    `json:"calls"`
+	Loops             int    `json:"loops"`
+	FailedInLoops     int    `json:"failed_in_loops"`
+	SessionsWithLoops int    `json:"sessions_with_loops"`
 }
 
 type KeyArtifact struct {
@@ -136,6 +194,8 @@ type KeyArtifact struct {
 	People   int    `json:"people"`
 	Sessions int    `json:"sessions"`
 	Uses     int    `json:"uses"`
+	// How many teams the people using it are in, however small.
+	Teams int `json:"teams"`
 }
 
 type KeyTotals struct {
@@ -186,8 +246,22 @@ type dayCount struct {
 }
 
 type weekCount struct {
-	sessions int
-	cost     float64
+	sessions, requests int
+	cost               float64
+	instructions       map[string]int // sessions, by file name
+	models             map[string]*spendCount
+	releases           map[string]*releaseCount
+	tools              map[string]*toolWeekCount
+}
+
+type releaseCount struct {
+	buggy              bool
+	sessions, requests int
+}
+
+type toolWeekCount struct {
+	toolCount
+	sessionsWithLoops int
 }
 
 type artifactKey struct {
@@ -246,11 +320,51 @@ func (t *tally) add(s *sessionTally, p *Person) {
 
 	w := t.weeks[week]
 	if w == nil {
-		w = &weekCount{}
+		w = &weekCount{instructions: map[string]int{}, models: map[string]*spendCount{},
+			releases: map[string]*releaseCount{}, tools: map[string]*toolWeekCount{}}
 		t.weeks[week] = w
 	}
 	w.sessions++
+	w.requests += s.requests
 	w.cost += s.cost
+	loaded := map[string]bool{}
+	for _, u := range s.uses {
+		if u.kind == "instructions" && u.name != "" && !loaded[u.name] {
+			loaded[u.name] = true
+			w.instructions[u.name]++
+		}
+	}
+	for model, c := range s.models {
+		m := w.models[model]
+		if m == nil {
+			m = &spendCount{}
+			w.models[model] = m
+		}
+		m.requests += c.requests
+		m.cost += c.cost
+	}
+	if s.requests > 0 {
+		r := w.releases[s.release]
+		if r == nil {
+			r = &releaseCount{buggy: s.buggy}
+			w.releases[s.release] = r
+		}
+		r.sessions++
+		r.requests += s.requests
+	}
+	for tool, c := range s.tools {
+		tc := w.tools[tool]
+		if tc == nil {
+			tc = &toolWeekCount{}
+			w.tools[tool] = tc
+		}
+		tc.calls += c.calls
+		tc.loops += c.loops
+		tc.failedInLoops += c.failedInLoops
+		if c.loops > 0 {
+			tc.sessionsWithLoops++
+		}
+	}
 
 	for _, u := range s.uses {
 		k := artifactKey{monday(u.at).Format(time.DateOnly), u.kind, u.name, u.fileKind}
@@ -327,6 +441,7 @@ func (t *tally) addStories(s *sessionTally, p *Person) {
 		spent(key("overlap", s.week, group))
 	}
 	add("flaky|loops", float64(s.retryLoops))
+	add("flaky|long-loops", float64(s.longRetryLoops))
 	add("flaky|failed", float64(s.failedRuns))
 	add("flaky|requests", float64(s.retryRequests))
 	add("flaky|cost", s.retryCost)
@@ -365,6 +480,13 @@ func buildKey(o *Org, tallies []*tally) *Key {
 	weeks := map[string]*KeyWeek{}
 	weekPeople := map[string]int{}
 	arts := map[artifactKey]*KeyArtifact{}
+	artTeams := map[artifactKey]map[string]bool{}
+	type weekName struct{ week, name string }
+	teamWeeks := map[weekName]*KeyTeamWeek{}
+	loads := map[weekName]map[string]int{}
+	models := map[weekName]*KeyModelWeek{}
+	releases := map[weekName]*KeyReleaseWeek{}
+	tools := map[weekName]*KeyToolWeek{}
 	sums := map[string]float64{}
 	for i, p := range o.People {
 		t := tallies[i]
@@ -422,28 +544,82 @@ func buildKey(o *Org, tallies []*tally) *Key {
 			weekPeople[wk]++
 			w.Sessions += c.sessions
 			w.CostUSD += c.cost
+
+			tn := weekName{wk, p.Team.Name}
+			tw := teamWeeks[tn]
+			if tw == nil {
+				tw = &KeyTeamWeek{Team: p.Team.Name}
+				teamWeeks[tn] = tw
+				loads[tn] = map[string]int{}
+			}
+			tw.People++
+			tw.Sessions += c.sessions
+			tw.Requests += c.requests
+			tw.CostUSD += c.cost
+			for name, n := range c.instructions {
+				loads[tn][name] += n
+			}
+			for model, mc := range c.models {
+				m := models[weekName{wk, model}]
+				if m == nil {
+					m = &KeyModelWeek{Model: model}
+					models[weekName{wk, model}] = m
+				}
+				m.People++
+				m.Requests += mc.requests
+				m.CostUSD += mc.cost
+			}
+			for version, rc := range c.releases {
+				r := releases[weekName{wk, version}]
+				if r == nil {
+					r = &KeyReleaseWeek{Version: version, Buggy: rc.buggy}
+					releases[weekName{wk, version}] = r
+				}
+				r.People++
+				r.Sessions += rc.sessions
+				r.Requests += rc.requests
+			}
+			for tool, tc := range c.tools {
+				x := tools[weekName{wk, tool}]
+				if x == nil {
+					x = &KeyToolWeek{Tool: tool}
+					tools[weekName{wk, tool}] = x
+				}
+				x.People++
+				x.Calls += tc.calls
+				x.Loops += tc.loops
+				x.FailedInLoops += tc.failedInLoops
+				x.SessionsWithLoops += tc.sessionsWithLoops
+			}
 		}
 		for ak, c := range t.uses {
 			a := arts[ak]
 			if a == nil {
 				a = &KeyArtifact{Kind: ak.kind, Name: ak.name, FileKind: ak.fileKind, Org: c.org, Builtin: c.builtin}
 				arts[ak] = a
+				artTeams[ak] = map[string]bool{}
 			}
 			a.People++
 			a.Sessions += len(c.sessions)
 			a.Uses += c.uses
+			artTeams[ak][p.Team.Name] = true
 		}
 	}
 	k.Totals.CostUSD = round6(k.Totals.CostUSD)
 
+	weekContexts := map[string][]int{}
 	for dt, d := range days {
 		d.CostUSD = round6(d.CostUSD)
 		d.StartContextP50 = quantileExact(contexts[dt], 0.5)
 		k.Days = append(k.Days, *d)
+		day, _ := time.Parse(time.DateOnly, dt.day)
+		wk := monday(day).Format(time.DateOnly)
+		weekContexts[wk] = append(weekContexts[wk], contexts[dt]...)
 	}
 	slices.SortFunc(k.Days, func(a, b KeyDay) int { return cmp.Or(cmp.Compare(a.Day, b.Day), cmp.Compare(a.Team, b.Team)) })
 
 	for ak, a := range arts {
+		a.Teams = len(artTeams[ak])
 		w := weeks[ak.week]
 		if w == nil {
 			// An artifact used just after midnight on a Monday, in a session that started on the
@@ -453,15 +629,39 @@ func buildKey(o *Org, tallies []*tally) *Key {
 		}
 		w.Artifacts = append(w.Artifacts, *a)
 	}
-	for wk, other := range hiddenNames(tallies, arts) {
+	for wk, other := range hiddenNames(o, tallies, arts) {
 		w := weeks[wk]
 		for _, kind := range sortedKeys(other) {
 			w.Other = append(w.Other, *other[kind])
 		}
 	}
+	for tn, tw := range teamWeeks {
+		tw.CostUSD = round6(tw.CostUSD)
+		for _, name := range sortedKeys(loads[tn]) {
+			tw.Instructions = append(tw.Instructions, KeyLoad{name, loads[tn][name]})
+		}
+		weeks[tn.week].Teams = append(weeks[tn.week].Teams, *tw)
+	}
+	for wn, m := range models {
+		m.CostUSD = round6(m.CostUSD)
+		weeks[wn.week].Models = append(weeks[wn.week].Models, *m)
+	}
+	for wn, r := range releases {
+		weeks[wn.week].Releases = append(weeks[wn.week].Releases, *r)
+	}
+	for wn, x := range tools {
+		weeks[wn.week].Tools = append(weeks[wn.week].Tools, *x)
+	}
 	for wk, w := range weeks {
 		w.ActivePeople = weekPeople[wk]
 		w.CostUSD = round6(w.CostUSD)
+		w.SessionsWithRequests = len(weekContexts[wk])
+		w.StartContextP50 = quantileExact(weekContexts[wk], 0.5)
+		w.StartContextP90 = quantileExact(weekContexts[wk], 0.9)
+		slices.SortFunc(w.Teams, func(a, b KeyTeamWeek) int { return cmp.Compare(a.Team, b.Team) })
+		slices.SortFunc(w.Models, func(a, b KeyModelWeek) int { return cmp.Compare(a.Model, b.Model) })
+		slices.SortFunc(w.Releases, func(a, b KeyReleaseWeek) int { return cmp.Compare(a.Version, b.Version) })
+		slices.SortFunc(w.Tools, func(a, b KeyToolWeek) int { return cmp.Compare(a.Tool, b.Tool) })
 		slices.SortFunc(w.Artifacts, func(a, b KeyArtifact) int {
 			return cmp.Or(cmp.Compare(a.Kind, b.Kind), cmp.Compare(b.People, a.People),
 				cmp.Compare(a.Name, b.Name), cmp.Compare(a.FileKind, b.FileKind))
@@ -476,7 +676,7 @@ func buildKey(o *Org, tallies []*tally) *Key {
 // hiddenNames adds up, per week and kind, the home-grown names fewer than MinGroupSize people
 // used that week, as the view's "other" row counts them. The view decides by name alone, so
 // one name's people are counted across its file kinds.
-func hiddenNames(tallies []*tally, arts map[artifactKey]*KeyArtifact) map[string]map[string]*KeyArtifact {
+func hiddenNames(o *Org, tallies []*tally, arts map[artifactKey]*KeyArtifact) map[string]map[string]*KeyArtifact {
 	type weekName struct{ week, kind, name string }
 	people := map[weekName]int{}
 	for ak, a := range arts {
@@ -486,7 +686,8 @@ func hiddenNames(tallies []*tally, arts map[artifactKey]*KeyArtifact) map[string
 		return !c.org && !c.builtin && ak.name != "" && people[weekName{ak.week, ak.kind, ak.name}] < MinGroupSize
 	}
 	out := map[string]map[string]*KeyArtifact{}
-	for _, t := range tallies {
+	teams := map[*KeyArtifact]map[string]bool{}
+	for i, t := range tallies {
 		type weekKind struct{ week, kind string }
 		sessions := map[weekKind]map[string]bool{}
 		uses := map[weekKind]int{}
@@ -511,10 +712,13 @@ func hiddenNames(tallies []*tally, arts map[artifactKey]*KeyArtifact) map[string
 			if a == nil {
 				a = &KeyArtifact{Kind: wk.kind, Name: "other"}
 				out[wk.week][wk.kind] = a
+				teams[a] = map[string]bool{}
 			}
 			a.People++
 			a.Sessions += len(ids)
 			a.Uses += uses[wk]
+			teams[a][o.People[i].Team.Name] = true
+			a.Teams = len(teams[a])
 		}
 	}
 	return out

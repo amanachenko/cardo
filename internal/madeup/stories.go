@@ -28,8 +28,8 @@ type Stories struct {
 	// DeployCheck is how /deploy-check, a command one engineer wrote, spreads: each week, how many
 	// more people in which team start using it.
 	DeployCheck []Spread
-	// The week the organization ships example-standards-v3.md, which every session in its
-	// repositories loads; the teams in StayOnV2 keep loading v2.
+	// The week the organization ships example-engineering-standards-v3.md, which every session in
+	// its repositories loads; the teams in StayOnV2 keep loading v2.
 	InstructionsV3 int
 	StayOnV2       []string
 	// The week /review, the organization's own command, is rolled out to every team but NoReview.
@@ -76,8 +76,8 @@ const (
 	// The chance a session in a team /review was rolled out to uses it. Sessions that use it are
 	// no different from those that do not.
 	reviewChance = 0.2
-	// What example-standards-v3.md adds to every session that loads it, beyond v2's 5,000
-	// tokens: about a fifth more context at the start of a session.
+	// What example-engineering-standards-v3.md adds to every session that loads it, beyond v2's
+	// 5,000 tokens: about a fifth more context at the start of a session.
 	instructionsV3Tokens = 6000
 	// The Jira connector's tools, in every session's context once it is set up.
 	connectorTokens = 2500
@@ -145,19 +145,20 @@ func catalog(p Preset, weeks int) []Story {
 				"It crosses five people in week %d and reaches %s by week %d. Each person using it uses it "+
 				"every week they work.", teams(spread.firstTeams), spread.first, spread.named,
 				teams(spread.lastTeams), weeks),
-			Shows: fmt.Sprintf("Enablement, \"Built by engineers, used by several\": \"other\" until week %d, "+
-				"then named, with its peak weekly people.", spread.named),
-			Gap: fmt.Sprintf("No view says which teams use an artifact, so its spread from %s to %s cannot "+
-				"be seen, and spread across teams is the vote for what teams chose (ADR-0040).",
-				teams(spread.firstTeams), count(spread.lastTeams)),
+			Shows: fmt.Sprintf("Enablement, \"Brought in by engineers, used by several\": \"other\" until "+
+				"week %d, then named, in %s last week, with more people than four weeks before. Spread "+
+				"across teams is the vote for what teams chose (ADR-0040).", spread.named, teams(spread.lastTeams)),
 		},
 		{
 			Name: "instructions-v3",
-			Planted: fmt.Sprintf("The organization ships example-standards-v3.md in week %d, about a fifth "+
+			Planted: fmt.Sprintf("The organization ships example-engineering-standards-v3.md in week %d, about a fifth "+
 				"more context for every session that loads it. %s loading v2.", st.InstructionsV3, stay),
-			Shows: fmt.Sprintf("Enablement, \"Versions in use\" and \"Sessions on a stale version\": v2 stays "+
-				"in use. \"Context a session starts from\": larger from week %d in the teams on v3.",
-				st.InstructionsV3),
+			Shows: fmt.Sprintf("Enablement, \"Versions in use\": v3 current and v2 older. \"Sessions on an "+
+				"older version\": none until week %d, then the sessions of the %s. \"Each team on the "+
+				"current version, against the fleet\": the %s at none from week %d, each from the first "+
+				"week five of its people worked. \"Context every session starts with\": a step up in week "+
+				"%d.", st.InstructionsV3-1, onV2(st.StayOnV2),
+				onV2(st.StayOnV2), st.InstructionsV3, st.InstructionsV3),
 		},
 		{
 			Name: "review-rollout",
@@ -165,15 +166,17 @@ func catalog(p Preset, weeks int) []Story {
 				"team but %s. Sessions that use it are no different from those that do not.",
 				st.Review, join(st.NoReview)),
 			Shows: fmt.Sprintf("Enablement, \"Weekly reach of the organization's artifacts\": /review rises "+
-				"in week %d. Whether it helps is the cost-per-edit story.", st.Review),
+				"in week %d, where a marker on every time chart says it was first used. Whether it helps "+
+				"is the cost-per-edit story.", st.Review),
 		},
 		{
 			Name: "connector-rarely-called",
 			Planted: fmt.Sprintf("A Jira connector is set up for everyone in week %d. Its tools are in every "+
 				"session's context from then on, and about %s people call it each week.",
 				st.Connector, count(jiraCallersPerWeek)),
-			Shows: "Enablement, \"Weekly reach of the organization's artifacts\": jira's reach stays at a few " +
-				"people. \"Context a session starts from\": every session carries its tools.",
+			Shows: fmt.Sprintf("Enablement, \"Weekly reach of the organization's artifacts\": jira's reach "+
+				"stays at a few people. \"Context every session starts with\": a step up in week %d, "+
+				"because every session carries its tools.", st.Connector),
 		},
 		{
 			Name: "skill-rarely-triggers",
@@ -185,22 +188,27 @@ func catalog(p Preset, weeks int) []Story {
 			Name: "flaky-tests",
 			Planted: fmt.Sprintf("The %s team's test command fails now and then. Sessions run it 3 to 7 "+
 				"times in a row, the model reading each failure, until it passes.", st.FlakyTeam),
-			Gap: "No view shows failing tool calls, or a command run again and again: silver_tool_call " +
-				"has whether each call succeeded, and no gold view reads it.",
+			Shows: "Enablement, \"Failing calls repeated in a row\": Bash's loops, every week, far above " +
+				"every other tool's.",
+			Gap: "Which repository the loops are in: Claude Code does not send the command (INV-5), and the " +
+				"repository waits until real sessions have confirmed how it arrives (ADR-0035). By design " +
+				"the chart never says which team.",
 		},
 		{
 			Name: "compactions-by-style",
 			Planted: "Compactions per session differ widely by way of working: dozens in a long autonomous " +
 				"run, almost none in a session that asks one quick question.",
-			Shows: "Enablement, \"Compactions per session, with sessions\": the fleet's average, day by day.",
-			Gap: "One average hides that a few long sessions make most of the compactions. No view shows " +
-				"how compactions spread across sessions.",
+			Gap: "No panel shows compactions. The dashboard's review dropped the fleet's average, which hid " +
+				"that a few long sessions make most of them, and no view shows how they spread across " +
+				"sessions. gold_friction_daily still counts them.",
 		},
 		{
 			Name: "permission-waits",
 			Planted: "People in the default permission mode answer prompts for edits and commands; people in " +
 				"auto mode answer none.",
-			Shows: "Enablement, \"Permission waits, with the prompts answered\".",
+			Gap: "No panel shows permission waits. The dashboard's review dropped the chart: in a fleet " +
+				"that works in auto mode almost nobody waits, so the chart reports a success that did not " +
+				"occur (ADR-0031). gold_friction_daily still counts them.",
 		},
 		{
 			Name: "heavy-tail",
@@ -214,18 +222,16 @@ func catalog(p Preset, weeks int) []Story {
 			Name: "expensive-default",
 			Planted: fmt.Sprintf("The %s team makes the most expensive model its default in week %d, and "+
 				"its spend for the same work rises about three times.", st.ExpensiveTeam, st.ExpensiveModel),
-			Shows: fmt.Sprintf("Enablement, \"Daily spend by cohort\": the team's spend rises from week %d.",
-				st.ExpensiveModel),
-			Gap: "The collector's views have no spend by model, so the chart shows that the spend rose, not " +
-				"why. The fleet dashboard's \"Model mix by spend\" reads the cost data this stack does not " +
-				"have yet.",
+			Shows: fmt.Sprintf("Enablement, \"Weekly spend by team\": the %s team's spend rises from week %d. "+
+				"\"Weekly spend by model\": %s appears the same week, which says why.",
+				st.ExpensiveTeam, st.ExpensiveModel, expensiveModel),
 		},
 		{
 			Name: "caching-bug",
 			Planted: fmt.Sprintf("Claude Code releases in %s have a caching bug that raises cost per request. "+
 				"A release early in week %d fixes it, and people upgrade at their own pace.", bug, st.Bug[1]+1),
-			Gap: "No view shows cost per request by Claude Code version. \"Daily spend by cohort\" rises " +
-				"everywhere, with nothing to say why.",
+			Shows: fmt.Sprintf("Enablement, \"Claude Code releases: how much of the context each reuses from "+
+				"cache\": the releases from %s read less of their context from the cache than the rest.", bug),
 		},
 		{
 			Name: "overnight-loops",
@@ -244,23 +250,25 @@ func catalog(p Preset, weeks int) []Story {
 			Name: "privacy-floor",
 			Planted: fmt.Sprintf("A team of %s (%s), a command %s people use, and personal commands, "+
 				"subagents and connectors no more than two people use.", count(small.People), small.Name, count(db)),
-			Shows: "Every view: the team is always \"other\", and so are the names, every week " +
-				"(the five-person minimum, ADR-0029).",
+			Shows: "Every view: the team is always \"other\", and so are the names, every day and every " +
+				"week (the five-person minimum, ADR-0029).",
 		},
 		{
 			Name: "usage-gaming",
 			Planted: fmt.Sprintf("From week %d one person in the %s team runs /review from a script, dozens "+
 				"of times a working day, in sessions that do nothing else.", st.Gamer, st.GamerTeam),
-			Shows: fmt.Sprintf("Enablement, \"The organization's artifacts in use\": /review's sessions and "+
-				"uses jump in week %d, and its peak weekly people do not.", st.Gamer),
+			Shows: fmt.Sprintf("Enablement, \"Weekly reach of the organization's artifacts\" and \"The "+
+				"organization's artifacts in use\" count people, not sessions: /review's reach does not "+
+				"jump in week %d, when the script's sessions start.", st.Gamer),
 		},
 		{
 			Name: "two-changes-at-once",
 			Planted: fmt.Sprintf("perf-budget, a skill of the organization's, is rolled out to the %s teams "+
 				"in week %d, the week the caching bug arrives. It changes nothing, and those teams' cost "+
 				"per request rises.", join(st.PerfBudgetTeams), st.PerfBudget),
-			Gap: "No view sets a before against an after, so nothing warns that two things changed in the " +
-				"same week, and a reader credits the skill with the bug.",
+			Gap: "Nothing warns that two things changed in the same week. A marker says perf-budget was " +
+				"first used in the week spend rises, and only the releases table, read separately, shows the " +
+				"caching bug, so a reader credits the skill with the bug.",
 		},
 	}
 }
@@ -324,6 +332,14 @@ func teams(n int) string {
 		return "one team"
 	}
 	return count(n) + " teams"
+}
+
+// onV2 names the teams that stay on v2: "mobile team", "mobile and web teams".
+func onV2(teams []string) string {
+	if len(teams) == 1 {
+		return teams[0] + " team"
+	}
+	return join(teams) + " teams"
 }
 
 // join lists names as a sentence does: "a", "a and b", "a, b and c".
