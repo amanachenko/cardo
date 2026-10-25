@@ -192,6 +192,32 @@ friction may be a session that accomplished nothing. This is a product constrain
 preference ([ADR-0008](../adr/0008-outcome-variable.md)). Each event is reported on the day its
 session started.
 
+## trend — the rows that outlive their rows
+
+The only tables with no TTL ([ADR-0055](../adr/0055-trend-rows-outlive-the-rows.md)). They carry no
+pseudonym and no content: counts, sums and quantiles only. A row is written only when its own group
+had at least `min_group_size` people in its own period, so nothing here describes fewer than five
+people, and the published views check the count again at read time against the floor in force now.
+
+| Table | Grain | Published as | Answers |
+|---|---|---|---|
+| `trend_day` | day | `gold_trend_day` | how much the fleet did, and what it cost it |
+| `trend_day_cohort` | day, cohort | `gold_trend_day_cohort` | how friction moved for a team |
+| `trend_week_artifact` | week, kind, artifact, file_kind | `gold_trend_artifact_usage` | how adoption moved |
+
+`cardo trend` writes them, one period at a time, swapping each in with `REPLACE PARTITION`. The
+`trend_*_source` views compute them from silver — the same definitions the gold marts publish — and
+they apply the floor when they run, so none of them can be read to see what the floor hides.
+
+**There is no `other` row here, and that is the one way this surface differs from the live marts.**
+The live marts fold every small group into `other`, and its distinct-people count and its wait-time
+quantiles are computed over the union, which cannot be recomputed from per-group rows. A stored
+`other` could not be re-folded when the floor is raised, and a recomputed one would disagree with
+the live marts. Named groups only; a bucket that is wrong is worse than a bucket that is absent.
+
+`is_org` and `is_builtin` are decided in `gold_trend_artifact_usage`, from the stored name, so a
+corrected `CARDO_ORG_ARTIFACTS` relabels the past. The label is never written into the table.
+
 ## Retention
 
 Enforced by ClickHouse TTL on every bronze table ([ADR-0016](../adr/0016-retention.md),
@@ -203,7 +229,7 @@ exists today:
 | T0 | 1 year | no tier-0 data is collected yet |
 | T1 | 90 days by default; the organization may change it | `bronze_actor_day` and all three collector tables |
 | T2 | 30 days | no tier-2 data is collected yet |
-| Gold marts carrying no pseudonym | indefinite | **not yet true**: the gold marts, on both paths, are views, so they expire with bronze ([risks.md](../../risks.md) #10) |
+| Aggregates carrying no pseudonym | indefinite | true for the trend rows: `trend_day`, `trend_day_cohort` and `trend_week_artifact` have no TTL, and every row in them describes at least five people ([ADR-0055](../adr/0055-trend-rows-outlive-the-rows.md)). The gold marts themselves are still views and expire with bronze ([risks.md](../../risks.md) #10) |
 | `cardo.settings` | none | configuration, not telemetry: the organization's pattern and the minimum group size |
 
 ## Future join point

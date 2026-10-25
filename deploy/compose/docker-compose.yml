@@ -94,6 +94,27 @@ services:
       # value the collector gets below, so the views and the collector mean the same thing by it.
       CARDO_INSTRUCTIONS_NAMES: ${CARDO_INSTRUCTIONS_NAMES:-}
 
+  # The trend rollup (ADR-0055). The rows behind a trend expire at the retention window, so the
+  # trend is recomputed on a schedule while they are still there. It is not a materialized view:
+  # ClickHouse materialized views fire on INSERT, and this store writes by swapping partitions,
+  # which does not trigger them (risks.md #10). The loop sleeps instead of relying on a host cron,
+  # so there is nothing to maintain on anyone's machine -- the same reason the poller loops.
+  #
+  # No salt and no key: a trend row names nobody. It runs whenever the stack runs.
+  trend:
+    build:
+      context: ../..
+    image: cardo:dev
+    command: ["trend", "-every", "${CARDO_TREND_INTERVAL:-24h}"]
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      CARDO_CLICKHOUSE_URL: http://clickhouse:8123
+      CARDO_CLICKHOUSE_USER: ${CLICKHOUSE_USER:-cardo}
+      CARDO_CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+
   # The Admin API poller. Optional: it starts only with the "admin" profile, so a stack that has no
   # organization key never carries a container that cannot work. The window is two days on every
   # pass because Anthropic's daily aggregates arrive late; the loop sleeps instead of relying on a

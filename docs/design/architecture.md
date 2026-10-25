@@ -323,6 +323,7 @@ developer machine                     organization's infrastructure
 | ClickHouse store + migration runner | `internal/store/clickhouse/` | **built**, verified against ClickHouse 26.6 | [0009](../adr/0009-storage-agnostic-clickhouse-reference.md), [0019](../adr/0019-sql-tooling.md), [0022](../adr/0022-clickhouse-access.md) |
 | SQL layers (DuckDB) | `sql/duckdb/` | **built**, verified against a generated store | [0010](../adr/0010-layered-schema.md) |
 | SQL layers (ClickHouse) | `sql/clickhouse/` | **built**, verified against a live server | [0010](../adr/0010-layered-schema.md), [0016](../adr/0016-retention.md) |
+| Trend rollup | `sql/clickhouse/016_trend.sql`, `internal/store/clickhouse/trend.go`, `cardo trend` | **built**, verified against ClickHouse 26.6 — the rows that outlive the retention window, refreshed on a schedule in the reference stack | [0055](../adr/0055-trend-rows-outlive-the-rows.md), [0016](../adr/0016-retention.md) |
 | Fixture corpus + contract tests | `test/fixtures/` | **built**. Console: from documentation. Hooks: field names observed from 2.1.281 with synthetic values, plus the documented shapes | [0014](../adr/0014-version-drift.md) |
 | Invariant tests | `test/invariants_test.go`, `test/deploy_test.go`, `test/collector_test.go`, `test/bundle_test.go` | **built** — INV-1 through INV-7 | `invariants.md` |
 | Reference stack | `deploy/compose/` | **built** — ClickHouse + Grafana + collector, loopback-bound; an opt-in overlay serves the collector's two ports over the network through a TLS proxy (Caddy), never run with a team | [0009](../adr/0009-storage-agnostic-clickhouse-reference.md) |
@@ -475,12 +476,15 @@ view, which the old pattern had never read.
   `--base-url` accepts `127.0.0.1`, `::1` or `localhost` and refuses anything else
   ([ADR-0047](../adr/0047-loopback-admin-stand-in.md)). Tests override the endpoint through an
   unexported option.
-- **No materialized gold marts, and therefore no trends older than 90 days.** ADR-0053 retains
-  tier-1 rows for 90 days by default and intends derived aggregates to survive indefinitely. The
-  gold marts are views over bronze, so when bronze expires the aggregates computed from it expire with it,
-  silently, on a background merge. The fix is a cohort-only rollup table written by the poller;
-  it is not built ([risks.md](../../risks.md) #10). The collector-path marts have the same limit,
-  and no poller runs on that path to write a rollup.
+- **No materialized gold marts.** The gold marts are views over bronze, and when bronze expires the
+  aggregates computed from it expire with them, silently, on a background merge. What is built
+  instead is the trend rollup ([ADR-0055](../adr/0055-trend-rows-outlive-the-rows.md)): `cardo trend`
+  writes `trend_day`, `trend_day_cohort` and `trend_week_artifact`, which carry no pseudonym, have
+  no TTL, and let a trend outlive the rows behind it. Every row in them describes at least five
+  people, and they publish no `other` bucket, because a fold cannot be recomputed from per-group
+  rows. Materializing the marts themselves is deliberately not built: a materialized table is a
+  migration each time the marts change ([risks.md](../../risks.md) #14), and the Admin API path's
+  own rollup is still unwritten ([risks.md](../../risks.md) #10).
 - **No session-grain views from this source.** The analytics APIs report a daily aggregate per actor
   and can never answer session-level questions. `silver_actor_day` is its own grain and does not
   pretend to be the session model in [data-model.md](data-model.md)

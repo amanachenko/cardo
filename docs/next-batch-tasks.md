@@ -1,8 +1,10 @@
 # The next batch: tasks
 
-**Status:** proposal. No task here has been started. The specification each task implements is
-[`docs/next-batch-spec.md`](next-batch-spec.md); this file says what to do, in what order, and what
-"done" means.
+**Status:** in progress. T1, T2, T6, T9 and T11 are done, and T10 is partly done (its two code
+fixes are in; gaps 4 and 8 need a decision). T3, T5 and T7 need a decision before any code, and T8
+is blocked on a conflict between [ADR-0034](adr/0034-identity-in-pilots.md) and ADR-0046. The
+specification each task implements is [`docs/next-batch-spec.md`](next-batch-spec.md); this file
+says what to do, in what order, and what "done" means.
 
 **How to read a task.** Each one names the item it closes, the files it touches, the acceptance
 that proves it closed, and what must be decided before the code is written. A task that says
@@ -461,10 +463,18 @@ by its owner before it is sent.
 
 ## T11 — Aggregates that outlive their rows
 
-**Closes:** item 11.
+**Closes:** item 11. **Done on 2026-10-25.** Three trend tables with no TTL — `trend_day`,
+`trend_day_cohort` and `trend_week_artifact` — written by `cardo trend`, which the reference stack
+runs as a service, and refreshed one period at a time with `REPLACE PARTITION`. The shape is
+decided in [ADR-0055](adr/0055-trend-rows-outlive-the-rows.md): every row describes at least five
+people, no label is written into the table, and there is no `other` bucket because a fold cannot be
+recomputed from per-group rows. The deletion path is written down in
+[privacy.md](design/privacy.md).
 
-**Touches:** a new numbered migration in `sql/clickhouse/`, the poller in `internal/poll/`,
-`internal/store/clickhouse/`, `docs/design/data-model.md`, `risks.md` #10.
+**Touches:** a new numbered migration in `sql/clickhouse/`, `internal/store/clickhouse/`,
+`docs/design/data-model.md`, `risks.md` #10. **It did not go in `internal/poll/`**, as this task
+first suggested: the poller is the Admin API path and this is the collector path, so the rollup is
+a `cardo trend` command of its own, run as a service in the reference stack.
 
 **Do this:**
 

@@ -56,6 +56,7 @@ Data
   poll        Poll an analytics source into a local store
   mock-admin  Serve the Analytics API shape on loopback, for verification
   prune       Delete raw rows older than the retention window
+  trend       Recompute the trend rows that outlive their rows
   migrate     Apply the ClickHouse schema and exit
 
 Other
@@ -121,6 +122,7 @@ var synopsis = map[string][2]string{
 	"bundle":  {"cardo bundle [--dir]", "Write the managed-settings bundle for the machines you manage."},
 	"teams":   {"cardo teams --file <directory.csv> [--apply]", "Read a team directory and say what it would store."},
 	"poll":    {"cardo poll [flags]", "Poll an analytics source into a local store."},
+	"trend":   {"cardo trend [flags]", "Recompute the trend rows that outlive their rows."},
 	"migrate": {"cardo migrate [-v]", "Apply the ClickHouse schema and exit."},
 	"version": {"cardo version [--long|--short]", "Print the version; --long adds platform and toolchain, --short prints the bare version."},
 }
@@ -217,6 +219,8 @@ func run(args []string) error {
 		return runMockAdmin(args[1:])
 	case "prune":
 		return runPrune(args[1:])
+	case "trend":
+		return runTrend(args[1:])
 	case "migrate":
 		return runMigrate(args[1:])
 	case "notice":
@@ -240,6 +244,109 @@ func run(args []string) error {
 		fmt.Fprintf(os.Stderr, "cardo: unknown command %q\n\n", args[0])
 		fmt.Fprint(os.Stderr, usage)
 		return errUsage
+	}
+}
+
+// runTrend recomputes the trend rows that outlive their rows (ADR-0055).
+//
+// It runs on a schedule because the rows it reads expire. A run that is down for longer than the
+// retention window leaves a hole in the trend, and a hole is silent, which is the very failure
+// these rows exist to prevent -- so the reference stack runs this as a service.
+func runTrend(args []string) error {
+	fs := flag.NewFlagSet("trend", flag.ContinueOnError)
+	useSynopsis(fs, "trend")
+	var (
+		days    = fs.Int("days", 3, "number of days to recompute, ending at -to")
+		from    = fs.String("from", "", "first day to recompute, YYYY-MM-DD (overrides -days)")
+		to      = fs.String("to", "", "last day to recompute, YYYY-MM-DD (defaults to yesterday)")
+		every   = fs.Duration("every", 0, "run continuously with this interval (service mode); 0 runs once")
+		verbose = fs.Bool("v", false, "verbose logging")
+	)
+	if err := fs.Parse(args); err != nil {
+		return parsed(err)
+	}
+
+	level := slog.LevelInfo
+	if *verbose {
+		level = slog.LevelDebug
+	}
+	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
+
+	st, err := newStore("clickhouse", "", log)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+
+	// The trend tables are ClickHouse only: the collector path has one store (ADR-0028).
+	ch, ok := st.(*clickhouse.Store)
+	if !ok {
+		return errors.New("trend needs the ClickHouse store")
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	if err := st.Migrate(ctx); err != nil {
+		return fmt.Errorf("preparing store: %w", err)
+	}
+
+	if *every > 0 {
+		return trendLoop(ctx, ch, log, *every, *days, *from, *to)
+	}
+	done, err := trendRange(ctx, ch, log, time.Now(), *from, *to, *days)
+	if err != nil {
+		return err
+	}
+	if done == 0 {
+		return errors.New("no day was recomputed: the window is empty or every day in it has expired")
+	}
+	fmt.Printf("Recomputed the trend rows for %d day(s) in %s\n", done, destination(ch, ""))
+	fmt.Printf("Query them:\n" +
+		"  SELECT * FROM cardo.gold_trend_day ORDER BY day\n")
+	return nil
+}
+
+// trendRange recomputes every day in one window. A day refused because its rows have expired is
+// reported and does not stop the days around it: a backfill that reaches the window has still done
+// the days that were inside it.
+func trendRange(ctx context.Context, ch *clickhouse.Store, log *slog.Logger, now time.Time, from, to string, days int) (int, error) {
+	window, err := resolveWindow(now, from, to, days)
+	if err != nil {
+		return 0, err
+	}
+	var done int
+	for day := window.From; !day.After(window.To); day = day.AddDate(0, 0, 1) {
+		d := day.Format("2006-01-02")
+		if err := ch.Trend(ctx, d); err != nil {
+			log.Warn("skipped", "day", d, "err", err)
+			continue
+		}
+		done++
+		log.Info("recomputed", "day", d)
+	}
+	return done, nil
+}
+
+// trendLoop is service mode: recompute on an interval, the way the poller polls.
+func trendLoop(ctx context.Context, ch *clickhouse.Store, log *slog.Logger, every time.Duration, days int, from, to string) error {
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		done, err := trendRange(ctx, ch, log, time.Now(), from, to, days)
+		switch {
+		case err != nil:
+			log.Error("trend run failed", "err", err)
+		case done == 0:
+			log.Info("nothing to recompute")
+		default:
+			log.Info("trend rows are current", "days", done)
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-t.C:
+		}
 	}
 }
 

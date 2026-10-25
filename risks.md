@@ -299,6 +299,17 @@ fix there is either a scheduled `cardo` command that rolls up the previous day, 
 materialized views on the bronze tables, which do fire on the exporter's plain INSERTs. Neither is
 built, for the same reason as above: the marts' shape has seen two real sessions, not a fleet.
 
+**Update 2026-10-25: the collector path's gap is closed, and this item is now about the Admin API
+path only.** `cardo trend` writes the trend rows on a schedule in the reference stack
+([ADR-0055](docs/adr/0055-trend-rows-outlive-the-rows.md)), and a test proves that a trend older
+than the window is still there after the rows behind it are deleted. The shape objection that
+delayed this is answered rather than waited out: the trend rows are not materialized marts, they
+are one surface whose shape is decided once, and they carry no label whose floor decision could be
+frozen. What stays open here is the Admin API path's own rollup — its marts are the leadership
+ones, and its store is the file store with a DuckDB mirror
+([ADR-0028](docs/adr/0028-file-store-is-admin-api-only.md)), so a change to one target belongs in
+both. The falsifier below still stands.
+
 ### 11. The reference stack has only ever run on one machine
 
 **Threatens:** [ADR-0009](docs/adr/0009-storage-agnostic-clickhouse-reference.md).

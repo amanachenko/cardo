@@ -61,6 +61,7 @@ The hard rules that these decisions produce live in
 | [0050](0050-local-transcript-import.md) | Cardo never reads transcripts on its own; `cardo import` is the one exception | Accepted | 2026-10-18 |
 | [0053](0053-retention-default-and-organization-choice.md) | Retention is 90 days by default, and the organization may change it | Accepted | 2026-10-25 |
 | [0054](0054-both-actor-types-are-people.md) | Both actor types are people, so a service run is labelled by the run itself | Accepted | 2026-10-25 |
+| [0055](0055-trend-rows-outlive-the-rows.md) | Trend rows outlive the rows behind them, and only when they describe five people | Accepted | 2026-10-25 |
 
 ADR-0030 to ADR-0037 came out of one design review on 2026-09-25, which asked who Cardo is for and
 what each of them needs. Its evidence is
@@ -101,8 +102,10 @@ Recorded here so a future session knows these were considered and postponed, not
 - **Bedrock / Vertex / Foundry support** — out of scope for v1 (ADR-0018, upheld by ADR-0021).
 - **A file-store mode for the collector path** — until a team can run a collector but not
   ClickHouse (ADR-0028).
-- **Materialized collector-path views and rollups** — the views are plain views over 90-day bronze
-  (risks.md #10 and #14).
+- **Materialized collector-path views** — the silver and gold views stay plain views over 90-day
+  bronze, because a materialized table is a migration each time the marts change (risks.md #14).
+  The rollup that lets a trend outlive its rows is built
+  ([ADR-0055](0055-trend-rows-outlive-the-rows.md)); materializing the views themselves is not.
 - **The Claude Enterprise Analytics adapter** — built when an organization on Enterprise seats asks
   for it. The Console adapter went first because it could be tested without an organization
   (ADR-0021, ordered by ADR-0042).
