@@ -353,10 +353,19 @@ func pollLoop(ctx context.Context, runner *poll.Runner, st store.Store, log *slo
 		if runErr != nil {
 			log.Error("poll failed; will retry", "error", runErr)
 		}
-		// Zero means "keep everything", and that is a choice too: the pass takes the tables' TTL off
-		// so nothing expires on its own (ADR-0053).
-		if days := retentionFromEnv(); days >= 0 && runErr == nil {
-			if rep, err := retention.Prune(ctx, os.Getenv("CARDO_CLICKHOUSE_URL"), envOr("CARDO_CLICKHOUSE_USER", "default"), os.Getenv("CARDO_CLICKHOUSE_PASSWORD"), days, false); err != nil {
+		// The window in force is the one the operator chose in the console, which the console
+		// writes to the settings table. The environment is only the fallback for an installation
+		// whose console has never been opened. Zero means "keep everything", and that is a
+		// choice too: the pass takes the tables' TTL off so nothing expires on its own (ADR-0053).
+		endpoint := os.Getenv("CARDO_CLICKHOUSE_URL")
+		user := envOr("CARDO_CLICKHOUSE_USER", "default")
+		pass := os.Getenv("CARDO_CLICKHOUSE_PASSWORD")
+		days, err := retention.EffectiveWindow(ctx, endpoint, user, pass, retentionFromEnv())
+		if err != nil {
+			log.Warn("could not read the chosen retention window", "error", err)
+		}
+		if days >= 0 && runErr == nil {
+			if rep, err := retention.Prune(ctx, endpoint, user, pass, days, false); err != nil {
 				log.Warn("retention pass failed", "error", err)
 			} else {
 				log.Info("retention pass", "days", days, "deleted", rep)

@@ -168,7 +168,8 @@ The collector path runs end to end too. It has three parts:
 
 The dashboard shows whether what the organization shipped is used, who is on a stale version of
 its instructions files, what engineers built that several now use, and the friction and context
-costs around it. It names a home-grown artifact or a team only once five people are in it. CI runs
+costs around it. It names a home-grown artifact or a team only once enough people are in it (five by
+default; the organization may raise that). CI runs
 the real collector against a real ClickHouse on every push, and the views against seeded data.
 
 **The collector path has seen a real Claude Code; the Admin API path has not.** One engineer ran
@@ -241,11 +242,11 @@ telemetry: **[deploy/compose/README.md](deploy/compose/README.md)**.
 
 ### Retention deletes data
 
-Tier-1 rows are kept for **90 days** and then removed by a ClickHouse TTL
+Tier-1 rows are kept for **90 days by default** and then removed by a ClickHouse TTL
 ([ADR-0053](docs/adr/0053-retention-default-and-organization-choice.md)). With a stable salt,
 retention rather than hashing is what actually bounds exposure, so this is the privacy control and
-not a storage tidy-up. Note the current limit: the gold marts are views, so trends older than 90 days
-go with the rows behind them ([risks.md](risks.md) #10).
+not a storage tidy-up. Note the current limit: the gold marts are views, so trends older than the
+window go with the rows behind them ([risks.md](risks.md) #10).
 
 Ninety days is long enough to compare a few weeks before and after a tool is rolled out, and short
 enough that rows tied to a code name do not linger. The grouped totals, which carry no code name,

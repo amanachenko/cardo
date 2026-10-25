@@ -24,11 +24,16 @@ func runImport(args []string) error {
 	fs := flag.NewFlagSet("import", flag.ContinueOnError)
 	useSynopsis(fs, "import")
 	dir := fs.String("dir", filepath.Join(homeDir(), ".claude", "projects"), "transcript root")
+	stack := fs.String("stack", filepath.Join("deploy", "compose"), "stack directory that holds .env")
 	email := fs.String("email", gitEmail(), "your address; hashed, never stored")
 	write := fs.Bool("write", false, "write rows into ClickHouse (default is a preview)")
 	if err := fs.Parse(args); err != nil {
-		return err
+		return parsed(err)
 	}
+	// The salt and the ClickHouse password come from the stack's .env, so the command works from a
+	// plain shell instead of only from the installer, which sets them for it.
+	env := stackEnv(*stack)
+	useClickhouse(*stack)
 	if *email == "" || !strings.Contains(*email, "@") {
 		return fmt.Errorf("need an email for the pseudonym: -email you@example.com")
 	}
@@ -93,11 +98,11 @@ func runImport(args []string) error {
 		fmt.Println("PREVIEW ONLY — rerun with -write to store these sessions.")
 		return nil
 	}
-	salt := os.Getenv("CARDO_SALT")
+	salt := env["CARDO_SALT"]
 	if salt == "" {
 		return fmt.Errorf("CARDO_SALT is required to write (it is in deploy/compose/.env)")
 	}
-	version := saltVersion()
+	version := saltVersionOf(env)
 	id, err := pseudonym.ForEmail(salt, version, *email)
 	if err != nil {
 		return err
@@ -108,7 +113,12 @@ func runImport(args []string) error {
 // saltVersion names the pseudonymisation salt generation. It matches what the collector writes, so
 // imported history joins the sessions collected live instead of sitting beside them.
 func saltVersion() string {
-	if v := strings.TrimSpace(os.Getenv("CARDO_SALT_VERSION")); v != "" {
+	return saltVersionOf(stackEnv(stackDir("")))
+}
+
+// saltVersionOf reads the salt version from the given environment, defaulting to "v1".
+func saltVersionOf(env map[string]string) string {
+	if v := strings.TrimSpace(env["CARDO_SALT_VERSION"]); v != "" {
 		return v
 	}
 	return "v1"
@@ -128,11 +138,12 @@ func gitEmail() string {
 }
 
 func mustPseudonym(email string) string {
-	salt := os.Getenv("CARDO_SALT")
+	env := stackEnv(stackDir(""))
+	salt := env["CARDO_SALT"]
 	if salt == "" {
 		return "(no CARDO_SALT in env)"
 	}
-	id, err := pseudonym.ForEmail(salt, saltVersion(), email)
+	id, err := pseudonym.ForEmail(salt, saltVersionOf(env), email)
 	if err != nil {
 		return "(invalid email)"
 	}
@@ -140,16 +151,12 @@ func mustPseudonym(email string) string {
 }
 
 func chPost(ctx context.Context, sql string) error {
-	url := os.Getenv("CARDO_CLICKHOUSE_URL")
-	if url == "" {
-		url = "http" + "://" + "127.0.0.1:8124"
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(sql))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, chTarget.endpoint, strings.NewReader(sql))
 	if err != nil {
 		return err
 	}
-	req.Header.Set("X-ClickHouse-User", envOr("CARDO_CLICKHOUSE_USER", "default"))
-	req.Header.Set("X-ClickHouse-Key", os.Getenv("CARDO_CLICKHOUSE_PASSWORD"))
+	req.Header.Set("X-ClickHouse-User", chTarget.user)
+	req.Header.Set("X-ClickHouse-Key", chTarget.pass)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
@@ -168,16 +175,12 @@ func esc(s string) string {
 
 // chQuery runs a read-only query and returns its body.
 func chQuery(ctx context.Context, sql string) (string, error) {
-	url := os.Getenv("CARDO_CLICKHOUSE_URL")
-	if url == "" {
-		url = "http" + "://" + "127.0.0.1:8124"
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(sql))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, chTarget.endpoint, strings.NewReader(sql))
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("X-ClickHouse-User", envOr("CARDO_CLICKHOUSE_USER", "default"))
-	req.Header.Set("X-ClickHouse-Key", os.Getenv("CARDO_CLICKHOUSE_PASSWORD"))
+	req.Header.Set("X-ClickHouse-User", chTarget.user)
+	req.Header.Set("X-ClickHouse-Key", chTarget.pass)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "", err

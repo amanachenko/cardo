@@ -287,6 +287,18 @@ func (s *Server) settingsView(ctx context.Context) settingsView {
 	return v
 }
 
+// applyRetentionWindow moves the bronze tables' TTL to the window, so the value in force is the one
+// the console shows. It moves the TTL and deletes nothing: the TTL is what bounds exposure, and
+// ClickHouse drops the rows once it passes. The poller's own pass deletes them sooner.
+func (s *Server) applyRetentionWindow(ctx context.Context, days int) error {
+	env, err := s.chEnv()
+	if err != nil {
+		return err
+	}
+	return retention.ApplyWindow(ctx, s.opts.url("8124", ""), env["CLICKHOUSE_USER"], env["CLICKHOUSE_PASSWORD"], days)
+}
+
+// handleLatestSession answers the newest session, as the Overview's proof card shows it.
 func (s *Server) handleLatestSession(w http.ResponseWriter, r *http.Request) {
 	card, err := s.latestSession(r.Context())
 	if err != nil {
@@ -381,6 +393,13 @@ func (s *Server) handleSettingsPost(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := s.audit(ctx, "setting", "retention_days", 0, "", "", fmt.Sprint(n)); err != nil {
 			http.Error(w, "the setting was written but its audit line failed: "+err.Error(), http.StatusBadGateway)
+			return
+		}
+		// Move the TTL now, so the number the console shows is the one in force. Waiting for the
+		// next poll would leave the window in the setting and not in the store, and the operator
+		// would be told a promise the tables do not keep yet.
+		if err := s.applyRetentionWindow(ctx, n); err != nil {
+			http.Error(w, "the window was saved but the tables' TTL could not be moved: "+err.Error(), http.StatusBadGateway)
 			return
 		}
 	}

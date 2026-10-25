@@ -333,10 +333,15 @@ cardo prune                       # use CARDO_RETENTION_DAYS
 
 The same window is available in Settings. **90 days is the default**, and the organization may
 change it (ADR-0053); the console shows the effective value and says `(default)` when nothing has
-been chosen. `0` keeps everything and takes the TTL off, so nothing expires on its own either. The
-poller prunes after every run, and the bronze TTL is rewritten to the same window in **both**
-directions, so raising the window back does not leave a 30-day TTL behind. TTL is the privacy
-control, not a storage tidy-up (ADR-0016, ADR-0053).
+been chosen. Saving a window moves the tables' TTL at once, so the number on screen is the one in
+force rather than one that waits for the next poll. `0` keeps everything and takes the TTL off, so
+nothing expires on its own either. The poller prunes after every run, and the bronze TTL is
+rewritten to the same window in **both** directions, so raising the window back does not leave a
+30-day TTL behind. TTL is the privacy control, not a storage tidy-up (ADR-0016, ADR-0053).
+
+`cardo prune` and `cardo import` read the stack's `.env`, so they work from a plain shell. The
+window a prune uses is the one in force: the value the console saved, or `CARDO_RETENTION_DAYS` when
+the console has never been opened.
 
 ---
 

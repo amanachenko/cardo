@@ -9,7 +9,9 @@
 
 ## The short version
 
-- Cardo **never reads your session transcripts** — not for debugging, not once (INV-1).
+- Cardo **never reads your session transcripts on its own** — not for debugging, not once (INV-1).
+  The one exception is the import command you run yourself, which keeps counts and throws the text
+  away ([ADR-0050](../adr/0050-local-transcript-import.md)).
 - Cardo **never stores your email address**. It is hashed before anything is written down (INV-2).
 - Cardo **never stores your prompts, your code, or the paths of files you touched** (INV-5).
 - **Nobody except you can see your individual activity.** Everyone else sees team-level aggregates
@@ -53,7 +55,8 @@ yourself. **That is more than Claude Code's own telemetry sends by default**, an
 thing for themselves, that is how the organization learns what it should make official for
 everyone. Three rules come with it:
 
-- A name is shown in any view only once at least five people used it in the same week. A command
+- A name is shown in any view only once enough people used it in the same week (five by default; the
+  organization may raise that). A command
   that only you use never appears by name; it is counted as "other". Your organization can raise
   the five, never lower it ([ADR-0029](../adr/0029-minimum-group-size.md)).
 - No view counts anyone's own commands per person.

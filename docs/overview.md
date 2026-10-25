@@ -45,7 +45,7 @@ Items marked *(planned)* are designed but not yet built. See [What exists today]
 
 | The question | What Cardo shows |
 |---|---|
-| Which of the approaches our teams built should everyone use? | Team-grown skills, commands, subagents and MCP servers, and how many people use each. An approach is named once five people use it. How sessions using it compare on cost and on signs of the agent struggling *(planned)* |
+| Which of the approaches our teams built should everyone use? | Team-grown skills, commands, subagents and MCP servers, and how many people use each. An approach is named once enough people use it (five by default; the organization may raise that). How sessions using it compare on cost and on signs of the agent struggling *(planned)* |
 | Has what we shipped reached every team? Is everyone on the current version of our instructions? | What share of the organization uses each thing you shipped, and which machines still load an old version of your instructions files. Each team's uptake against the whole organization *(planned)* |
 | What are we getting for the spend? | Cost per accepted change and per commit or pull request, spend on rework, and cost per approach, as trends, always beside the volume they are computed from *(planned)* |
 | Where is adoption lagging? | Approaches that aren't spreading, and teams a rollout hasn't reached *(the team view is planned)* |
@@ -119,7 +119,7 @@ what the console shows, and each engineer sees their own position first.
   may change that window; the console shows which one is in force
   ([ADR-0053](adr/0053-retention-default-and-organization-choice.md)). Pseudonymous data is still
   personal data, and the documentation says so plainly. Retention is what bounds it.
-- **Small groups are never shown.** A team or a home-grown tool is named only once five people are
+- **Small groups are never shown.** A team or a home-grown tool is named only once enough people are
   in it.
 - **Numbers come with their volumes.** A rate is never shown without what it is a rate of, and no
   estimate is shown that cannot be defended.

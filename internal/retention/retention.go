@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -20,14 +21,18 @@ const DefaultDays = 90
 type Table struct {
 	Name string
 	Age  string // a SQL predicate over the table, e.g. "day < today() - 30"
-	TTL  string // the expression the table's TTL is built on, e.g. "day"
+	TTL  string // the expression the table's TTL is built on, e.g. "day"; empty when it carries none
 }
 
 // Tables is the fixed list retention owns.
+//
+// The staging table carries no TTL on purpose: its rows live for seconds, between the write and
+// the partition swap (sql/clickhouse/001_bronze.sql). Retention still ages out what a crashed
+// poll left behind, but it does not put a TTL on a table that is meant to have none.
 func Tables(days int) []Table {
 	return []Table{
 		{Name: "cardo.bronze_actor_day", Age: fmt.Sprintf("day < today() - %d", days), TTL: "day"},
-		{Name: "cardo.bronze_actor_day_staging", Age: fmt.Sprintf("day < today() - %d", days), TTL: "day"},
+		{Name: "cardo.bronze_actor_day_staging", Age: fmt.Sprintf("day < today() - %d", days)},
 		{Name: "cardo.bronze_otel_logs", Age: fmt.Sprintf("Timestamp < now() - INTERVAL %d DAY", days), TTL: "toDate(Timestamp)"},
 		{Name: "cardo.bronze_hook_events", Age: fmt.Sprintf("Timestamp < now() - INTERVAL %d DAY", days), TTL: "toDate(Timestamp)"},
 		{Name: "cardo.bronze_otel_metrics_sum", Age: fmt.Sprintf("TimeUnix < now() - INTERVAL %d DAY", days), TTL: "toDate(TimeUnix)"},
@@ -51,7 +56,7 @@ func Prune(ctx context.Context, endpoint, user, pass string, days int, dryRun bo
 		if days == 0 {
 			// Keep everything. Nothing is deleted, and the TTL comes off, so nothing expires on
 			// its own either. A dry run says the same thing without touching the table.
-			if !dryRun {
+			if !dryRun && t.TTL != "" {
 				if err := exec(ctx, endpoint, user, pass, fmt.Sprintf("ALTER TABLE %s REMOVE TTL", t.Name)); err != nil {
 					return out, fmt.Errorf("%s: %w", t.Name, err)
 				}
@@ -59,7 +64,7 @@ func Prune(ctx context.Context, endpoint, user, pass string, days int, dryRun bo
 			out[t.Name] = 0
 			continue
 		}
-		if !dryRun {
+		if !dryRun && t.TTL != "" {
 			// The table ships with a 90-day TTL; the operator's window wins, in both directions.
 			if err := exec(ctx, endpoint, user, pass, fmt.Sprintf("ALTER TABLE %s MODIFY TTL %s + toIntervalDay(%d)", t.Name, t.TTL, days)); err != nil {
 				return out, fmt.Errorf("%s: %w", t.Name, err)
@@ -78,6 +83,61 @@ func Prune(ctx context.Context, endpoint, user, pass string, days int, dryRun bo
 		}
 	}
 	return out, nil
+}
+
+// ApplyWindow moves the tables' TTL to the window and deletes nothing.
+//
+// The TTL is what enforces the window: ClickHouse drops a row once its TTL expression passes, so
+// moving the TTL is enough to make a shorter window take effect on its own. The deletion in Prune
+// only makes the rows go now rather than at the next merge.
+//
+// This is what the console calls when the operator saves a window, so the number it shows is the
+// one in force, rather than one that waits for the next poll to arrive.
+func ApplyWindow(ctx context.Context, endpoint, user, pass string, days int) error {
+	if days < 0 {
+		return fmt.Errorf("retention window must be zero or more days")
+	}
+	for _, t := range Tables(days) {
+		if t.TTL == "" {
+			continue
+		}
+		if days == 0 {
+			if err := exec(ctx, endpoint, user, pass, fmt.Sprintf("ALTER TABLE %s REMOVE TTL", t.Name)); err != nil {
+				return fmt.Errorf("%s: %w", t.Name, err)
+			}
+			continue
+		}
+		if err := exec(ctx, endpoint, user, pass, fmt.Sprintf("ALTER TABLE %s MODIFY TTL %s + toIntervalDay(%d)", t.Name, t.TTL, days)); err != nil {
+			return fmt.Errorf("%s: %w", t.Name, err)
+		}
+	}
+	return nil
+}
+
+// EffectiveWindow returns the window in force: the one the operator chose in the console, or the
+// fallback when nothing was chosen there.
+//
+// The console writes its choice to cardo.settings and shows that value, so the settings row is
+// what everything else has to agree with. The environment is only the fallback for an installation
+// whose console has never been opened.
+func EffectiveWindow(ctx context.Context, endpoint, user, pass string, fallback int) (int, error) {
+	if endpoint == "" {
+		return fallback, fmt.Errorf("ClickHouse endpoint is not set")
+	}
+	body, err := query(ctx, endpoint, user, pass,
+		"SELECT argMax(value, version) FROM cardo.settings WHERE key = 'retention_days' FORMAT TSV")
+	if err != nil {
+		return fallback, err
+	}
+	raw := strings.TrimSpace(body)
+	if raw == "" {
+		return fallback, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return fallback, fmt.Errorf("the stored retention window %q is not a number", raw)
+	}
+	return n, nil
 }
 
 func count(ctx context.Context, endpoint, user, pass, sql string) (int64, error) {

@@ -1,8 +1,9 @@
 # Admin console — design brief
 
-Status: **slices 1–3 built** (shell, Overview, Catalog, Teams, Settings). Mode: **Operate** (task completion, scanability,
-earned familiarity). Visual world: **inherited** from `docs/design/DESIGN.md` and `cardo-ui.css` — the
-console extends the board, it does not restyle the product.
+Status: **slices 1–3 built** (shell, Overview, Catalog, Teams, Settings), plus the retention window.
+Mode: **Operate** (task completion, scanability, earned familiarity). Visual world: **inherited**
+from `docs/design/DESIGN.md` and `cardo-ui.css` — the console extends the board, it does not
+restyle the product.
 
 ## 1. Job and audience
 
@@ -102,7 +103,7 @@ Table, one row per artifact at its current version:
 
 - Kind filter is a segmented control (all · skill · command · subagent · mcp · reference · bundle ·
   cohort); status filter (draft · approved · retired); search matches name and owner.
-- Reach comes from `gold_artifact_usage`, suppressed below five people as "—".
+- Reach comes from `gold_artifact_usage`, suppressed below the group's minimum as "—".
 - Sort: reach, updated, name. Default: needs-attention first (draft older than a day, retired-but-used).
 
 Row opens the detail pane:
@@ -204,7 +205,8 @@ All behind the existing token → HttpOnly cookie; all writes are POST; every re
   collector and the views agree. Ports, directory and version are read-only.
 - Install is unchanged and still the only writer of stack state.
 
-Not yet in the console: Catalog, Teams, recent changes, retention. They are slices 2–3 of this brief.
+Not yet in the console at slice 1: Catalog, Teams, recent changes, retention. They are slices 2–3
+of this brief, and the retention window came with them (ADR-0053).
 
 ## 11a. What slice 2 shipped (2026-10-18)
 
@@ -314,7 +316,9 @@ Acceptance per slice is a real number on screen from the live stack plus the fai
   publish, which has no undo and no audit.
 - Team file format: `email,team` with `team`-only rows allowed (recommended).
 - Whether the console shows the operator's own session first (nice for trust) — open.
-- Whether `retention` writes affect raw tables immediately or on the next poll — open.
+- Whether `retention` writes affect raw tables immediately or on the next poll — **answered**: the
+  console moves the TTL as soon as the operator saves the window, so the value it shows is the one in
+  force (ADR-0053).
 
 ## 12. Navigation decision (ADR-0044)
 

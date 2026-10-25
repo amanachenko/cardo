@@ -29,7 +29,9 @@ convenience; it is the value the privacy claim rests on.
    tier, which is what ADR-0016 decided and what the shipped tables' TTL already does.
 2. **The organization may change it**, through the setting the console already exposes. The value
    the console shows is the effective one, and it says "(default)" when nothing has been set, so an
-   operator never has to guess which window is in force.
+   operator never has to guess which window is in force. Saving a window moves the tables' TTL at
+   once, so the number on screen is the one the store keeps, rather than one that waits for the next
+   poll to arrive.
 3. **A longer period is a decision the engineers should hear about.** The rows that live longer
    are the ones tied to a code name, and a code name is pseudonymous, personal data. When the window
    is above the default, the console says so and names what the organization has to tell its

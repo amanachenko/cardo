@@ -30,8 +30,9 @@ against those two real sessions.
   - against the two real sessions, whose permission waits, model-switch costs and context sizes
     match the research notes.
 
-  A view names a home-grown artifact or a cohort only once five people are in it
-  ([ADR-0029](../adr/0029-minimum-group-size.md)). The views are ClickHouse only
+  A view names a home-grown artifact or a cohort only once enough people are in it (five by
+  default; the organization may raise that) ([ADR-0029](../adr/0029-minimum-group-size.md)). The
+  views are ClickHouse only
   ([ADR-0028](../adr/0028-file-store-is-admin-api-only.md)).
 
 **Decided on 2026-09-25 and not built.** A design review settled who Cardo is for and what each of
@@ -437,7 +438,8 @@ view, which the old pattern had never read.
 - **No DuckDB mode for the collector path.** The collector writes to ClickHouse only, and its views
   exist in the ClickHouse dialect only. ADR-0009's file store serves the Admin API path
   ([ADR-0028](../adr/0028-file-store-is-admin-api-only.md)).
-- **No transcript reader** (INV-1).
+- **No transcript reader on the collection path** (INV-1). The one exception is the import command
+  a person runs themselves (ADR-0050).
 - **No hosted service, no phone-home** (INV-7).
 - **No custom code on the hook ingest path** while OTTL holds
   ([ADR-0012](../adr/0012-ingest-implementation.md)).

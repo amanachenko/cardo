@@ -286,7 +286,8 @@ whose shape has not survived contact with real data is the wrong order.
 poller after each day's `Put` and therefore idempotent, with no TTL. It is not a materialized view:
 ClickHouse materialized views fire on INSERT, and the store swaps partitions with
 `REPLACE PARTITION`, which does not trigger them. Until that exists, **the practical retention of
-every Cardo trend is 90 days, not indefinite**, and `docs/design/architecture.md` says so.
+every Cardo trend is the window in force (90 days by default), not indefinite**, and
+`docs/design/architecture.md` says so.
 **Would falsify it:** a first organization for which 90 days of trend is enough, which would make the
 rollup premature rather than missing.
 
