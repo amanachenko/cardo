@@ -124,18 +124,20 @@ were exporting telemetry to a personal tool, that stops.
 Team-level views need to know which team a session belongs to. Nothing in Claude Code says so, so
 the bundle does: `OTEL_RESOURCE_ATTRIBUTES=cardo.cohort=<team>`. Ship one copy of the bundle per
 MDM group with the value changed. Use ASCII only: no spaces, commas or quotes. Views over cohorts
-enforce a minimum size of five people a day, so a cohort of two people is never shown as one
+enforce a minimum size of five people over the view's own period, a day in a daily view and a week
+in a weekly one, so a cohort of two people is never shown as one
 (INV-3, [ADR-0029](../../docs/adr/0029-minimum-group-size.md)). A cohort that small is counted as
-`other` that day.
+`other` for that day or week.
 
 ### Naming your organization's artifacts
 
 Set `CARDO_ORG_ARTIFACTS` on the collector to a regex that matches what you ship, for example
 `^acme-`. It does two things:
 
-- **It separates what you shipped from what engineers built for themselves.** The dashboards show
-  both: adoption of yours, and demand for theirs. When several engineers have built the same thing,
-  that is a candidate for you to ship.
+- **It separates what you shipped from what engineers brought in for themselves.** The
+  enablement dashboard shows both: the reach of yours, and what several engineers chose of theirs,
+  across how many teams. When several engineers have chosen the same thing, that is a candidate
+  for you to make official.
 - **It is the only way an instructions file's name is recorded.** Claude Code sends no content hash
   for instructions files, so staleness is seen through names
   ([ADR-0026](../../docs/adr/0026-stale-instructions-by-versioned-name.md)). Put a version in the

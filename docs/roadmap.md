@@ -32,8 +32,9 @@ research note:
   [ADR-0035](adr/0035-repository-identity-classified.md) would be revisited.
 - **Whether `PermissionDenied` ever arrives.** It does, on an auto-mode denial
   ([note](research/2026-10-06-first-permission-denied.md)).
-- **Whether `event.sequence` orders the tool results within a prompt.** A retry loop, the same
-  tool failing again and again in one prompt, is counted from it.
+- **Whether `event.sequence` orders the tool results within a prompt.** A retry loop is the same
+  tool failing again and again. The first count of them orders a session's calls by when Claude
+  Code decided to run each one, and the sequence would check that order.
 - **Whether `claude_code.lines_of_code.count` arrives by `type` for each session, as delta.**
 
 ## How a pilot judges Cardo
@@ -111,10 +112,12 @@ missing is an organization running Cardo safely, so this comes first.
 *Lead:* a contributor who knows from experience what an agent getting stuck looks like.
 
 - **The signs of struggle, first version** ([what "works" means](adr/0031-what-works-means.md)).
-  Older documents call this the efficiency family. It replaces the friction panels, and drops the
-  team breakdown from friction:
+  Older documents call this the efficiency family. It replaces the friction panels, which the
+  enablement dashboard's review took off on 2026-10-23, and shows none of it by team:
   - failed tool calls, split into shell commands and other tools;
-  - retry loops: the same tool failing again and again within one prompt;
+  - retry loops: the same tool failing again and again. A first version is built: three or more
+    failed calls of one tool in a row in a session, by tool
+    ([failing calls repeated in a row](design/dashboards.md#failing-calls-repeated-in-a-row));
   - denials in auto mode;
   - conversations squeezed because they got too long (compactions);
   - turns and cost per accepted edit;

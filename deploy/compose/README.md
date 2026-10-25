@@ -31,16 +31,20 @@ After pulling new code, run `docker compose up -d --build migrate`, because the 
 migrations.
 
 Grafana has two dashboards. **Cardo — fleet adoption** reads the Admin API data.
-**Cardo — enablement** reads the collector's data. It shows:
+**Cardo — enablement** reads the collector's data, week by week. It shows:
 
 - whether the organization's artifacts are used;
-- who is on which version of its instructions files;
-- what engineers built that several now use;
-- friction, context size and model-switch costs.
+- how many people load each version of its instructions files, and each team's share on the
+  current one;
+- what engineers brought in that several now use, and across how many teams;
+- which tool keeps failing several times in a row;
+- spend by model and by team, how much of the context each Claude Code release reads from the
+  cache, and the context every session starts with.
 
-It names a home-grown artifact or a cohort only once five people are in it (ADR-0029). Set
-`CARDO_ORG_ARTIFACTS` in `.env` so it can tell what your organization shipped. `CARDO_MIN_GROUP_SIZE`
-raises the five, and nothing lowers it.
+It names a home-grown artifact or a cohort only in a week five people are in it (the five-person
+minimum, ADR-0029). Set `CARDO_ORG_ARTIFACTS` in `.env` so it can tell what your organization
+shipped. `CARDO_MIN_GROUP_SIZE` raises the five, and nothing lowers it.
+[What each chart is for](../../docs/design/dashboards.md) says who each chart serves.
 
 **To send your own Claude Code sessions here**, see "Trying it on your own machine" in
 [`deploy/managed-settings/README.md`](../managed-settings/README.md). It is one `--settings` flag and

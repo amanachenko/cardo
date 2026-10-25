@@ -109,7 +109,8 @@ reports. Both are NULL or empty for a session that sent no OTel.
 | `silver_policy_decision` | one row per permission prompt | `claude_code.hook_execution_start` with `hook_name=PermissionRequest:<tool>`, as-of joined to the next `claude_code.tool_decision` with a person's `source` for the same session, prompt and tool. `wait_ms` is NULL for a prompt nobody answered. The hook row adds `permission_mode` and the asking subagent. A session with no `hook_execution_start` falls back to the hook row's time, with `clock = 'two_clocks'` |
 | `silver_context_event` | one row per compaction or model switch | Compaction: OTel `claude_code.compaction` (`tokens_before`, `tokens_after`), or the `PreCompact` hook alone for a session that sent no OTel compaction. Switch: the `PostModelSwitch` or `PreModelSwitch` hook's fields, timed by its `hook_execution_start`, and `next_request_*`, the next main-thread request on the new model, which is what the switch cost. Both models are compared with the date and `[1m]` removed, since the switch's `to_model` may be dated. Not for a switch made before the session's first main-thread request: that request is the session starting, and the hook's `context_tokens` is 0 ([note](../research/2026-10-06-model-switch-observed.md)). Only switches someone asked for: a `PostModelSwitch` from a fallback (`auto`) or a resume is left out. Defined in `009`, which redefines `008`'s view |
 | `silver_artifact_load` | one row per artifact use | `instructions`: each `InstructionsLoaded`. `skill`: `UserPromptExpansion` and `skill.name` on API requests, one row per prompt and name. `subagent`: each `SubagentStart`, never `SubagentStop`. `mcp`: tool calls on `mcp__<server>__*`, one row per prompt and server. `is_org` applies the organization's pattern; an instructions file with a stored name is always the organization's. `is_builtin` marks Claude Code's own subagents and commands |
-| `silver_session_cohort` | one row per session | The cohort each session is reported under: its label, or `other` below the minimum group size that day ([ADR-0029](../adr/0029-minimum-group-size.md)) |
+| `silver_session_cohort` | one row per session | The cohort each session is reported under in the daily views: its label, or `other` below the minimum group size that day ([ADR-0029](../adr/0029-minimum-group-size.md)) |
+| `silver_session_cohort_week` | one row per session | The same for the weekly views: the session's week, the Monday of the day it started, and its label, or `other` below the minimum group size that week. A session with no label is `unassigned`. Defined in `015` |
 
 **`PermissionDenied` is not the end of a permission wait.** It fires only when auto mode denies a
 call. The end of a wait a person answered is the `tool_decision` event
@@ -136,25 +137,40 @@ Vendor-specific richness lives in the attribute maps, not flattened away.
 
 ### Built (collector path)
 
-`sql/clickhouse/007_gold_collector.sql`. Each is cohort-level, and each applies the minimum group
-size ([ADR-0029](../adr/0029-minimum-group-size.md)).
+`sql/clickhouse/007_gold_collector.sql`, and `015_gold_enablement_review.sql`, which adds the
+weekly views the enablement dashboard reads and redefines the first two below. Each is
+cohort-level, and each applies the minimum group size
+([ADR-0029](../adr/0029-minimum-group-size.md)). Which panel reads which view, and why, is in
+[what each chart is for](dashboards.md).
 
 | Mart | Grain | Answers |
 |---|---|---|
-| `gold_artifact_usage` | week, kind, artifact | Is what the organization shipped being used, by what share of the fleet? What have engineers built that several of them use? |
-| `gold_instructions_versions` | week, file family, version | Which version of each of the organization's instructions files people load, and how many are on a stale one |
-| `gold_friction_daily` | day, cohort | The friction index's three components: edit rejection rate, permission waits and compactions per session, each beside its volume ([ADR-0008](../adr/0008-outcome-variable.md)) |
-| `gold_context_daily` | day, cohort | The context each session starts from, the context each prompt grows to, spend, and model switches' measured cost beside Claude Code's estimate |
+| `gold_artifact_usage` | week, kind, artifact | Is what the organization shipped being used, by what share of the fleet? What have engineers brought in that several of them use, across how many teams (`teams`, a count, never which), and since which week (`first_week`)? |
+| `gold_instructions_versions` | week, file family, version | Which version of each of the organization's instructions files people load, whether it was current that week, and the first week anyone loaded it |
+| `gold_instructions_by_team_weekly` | week, cohort, file family | The sessions that loaded the file, and how many of them loaded the version current that week (`current_share`). Teams' rows add up to the fleet |
+| `gold_spend_weekly` | week, cohort | Sessions, requests and cost. Never divided by headcount ([ADR-0030](../adr/0030-stakeholders-and-questions.md)) |
+| `gold_model_spend_weekly` | week, model | People, requests and cost for the whole fleet. A model under the minimum that week is `other models` |
+| `gold_release_cache_weekly` | week, Claude Code release | People, sessions, requests, the input, cache-read and cache-write tokens, cost, the share of context read from the cache (`cache_read_share`) and the cache written per request. A release under the minimum that week is `other releases` |
+| `gold_setup_context_weekly` | week | The context of each session's first request, median and 90th percentile, for the whole fleet, with the sessions it is measured over |
+| `gold_context_weekly` | week, cohort | `gold_context_daily`'s prompt and model-switch columns, by week |
+| `gold_tool_loops_weekly` | week, tool | Runs of three or more failed calls of one tool, one after another in a session with no other call that ran in between, ordered by when Claude Code decided to run them; the failed calls in them, the sessions they happened in, and every call of the tool that week. A connector's tool under the minimum that week is `other tools`; Claude Code's own tools are always named |
+| `gold_friction_daily` | day, cohort | The friction index's three components: edit rejection rate, permission waits and compactions per session, each beside its volume ([ADR-0008](../adr/0008-outcome-variable.md)). No panel reads it since the enablement dashboard's review |
+| `gold_context_daily` | day, cohort | The context each session starts from, the context each prompt grows to, spend, and model switches' measured cost beside Claude Code's estimate. No panel reads it since the review; the weekly views replace it |
 
-A cost-and-capacity mart with the model mix and effort distribution by cohort is not built.
-`gold_context_daily` has spend by cohort; the Admin API path has the model mix.
+A mart with the effort distribution by cohort is not built. Spend by cohort and the model mix are
+`gold_spend_weekly` and `gold_model_spend_weekly` on the collector path, and `gold_model_mix` on the
+Admin API path.
 
-**What a gold view may name ([ADR-0029](../adr/0029-minimum-group-size.md)).** Two kinds of label
+**What a gold view may name ([ADR-0029](../adr/0029-minimum-group-size.md)).** Three kinds of label
 are shown only once enough distinct people are in them. Below that, their rows are counted as
 `other`.
 
 - **A home-grown artifact name** needs that many people in the week.
-- **A cohort label** needs that many people with a session that day.
+- **A cohort label** needs that many people with a session in the view's own period: that day in
+  a daily view, that week in a weekly one. Counted per day, a team of eight was named on 39 of the
+  made-up organization's 84 days and on no weekend; counted per week, every week.
+- **A model, a Claude Code release or a connector's tool,** in the weekly views, needs that many
+  people in the week.
 
 The minimum is five, read from `settings_effective`. An operator may raise it and never lower it.
 Always shown, however few people use them:
@@ -169,9 +185,10 @@ view counts home-grown artifacts per person (INV-3).
 **Instructions files are identified by versioned name, not by a path or a hash.** Paths are never
 stored, and Claude Code 2.1.281 sends no content hash
 ([ADR-0026](../adr/0026-stale-instructions-by-versioned-name.md)). The organization names what it
-ships with a version (`acme-security-v3.md`). "Stale" means a version below the highest one anyone
-loaded while the data was retained. Files that are not the organization's are counted by kind and
-never named.
+ships with a version (`acme-security-v3.md`). The current version is the highest one anyone had
+loaded by the end of that week, and an older one is "stale". Until `015` it was the highest ever
+loaded, so every week before a new version shipped read as all stale. Files that are not the
+organization's are counted by kind and never named.
 
 **People cannot be added up.** `people` and `active_people` are distinct counts for their row's
 week or day. A dashboard showing a longer range shows the busiest week or day, never a sum.
@@ -180,7 +197,7 @@ Sessions, uses and prompts can be summed.
 **Every rate is published beside its volume.** Without one it rewards timidity: a session with no
 friction may be a session that accomplished nothing. This is a product constraint, not a styling
 preference ([ADR-0008](../adr/0008-outcome-variable.md)). Each event is reported on the day its
-session started.
+session started, and in a weekly view in that day's week.
 
 ## Retention
 

@@ -402,11 +402,15 @@ never turns up, an ADR scoping the file store to the Admin API path is the hones
 The silver and gold views over the collector's data are plain views. `silver_session` groups every
 OTel log row, metric row and hook row by session; five of the other six silver views join back to
 it; and each gold view joins several silver views to `silver_session_cohort`, which reads
-`silver_session` again. A dashboard with thirteen panels therefore scans the bronze log table many
-times per refresh.
+`silver_session` again. The enablement dashboard's fifteen queries therefore scan the bronze log
+table many times per refresh.
 
-On two real sessions that is milliseconds. At a thousand engineers and 90 days it is on the order
-of tens of millions of log rows per scan, and nobody has measured it.
+On two real sessions that is milliseconds. On the made-up organization, 60 people and twelve weeks,
+5.5 million log rows, it takes about 70 seconds, and one panel reads about 100 million rows
+([what check checks](docs/made-up-organization.md#what-check-checks)). With silver stored as tables
+by hand on the same stack, the same dashboard drew in 1.1 seconds. A thousand engineers over 90
+days, at the made-up organization's placeholder rates, would send about 18 times as many rows, and
+nobody has measured the views at that size.
 
 **Mitigation:** when a real deployment is slow, materialize silver: a daily table per view, written
 by a scheduled job or a ClickHouse refreshable materialized view, with the gold views unchanged on

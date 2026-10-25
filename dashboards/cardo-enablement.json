@@ -1,7 +1,7 @@
 {
   "uid": "cardo-enablement",
   "title": "Cardo — enablement",
-  "description": "What the organization rolled out for Claude Code and who uses it, what engineers brought in that several now use, which version of the shared instructions people load, where work gets stuck, and where the money goes. From the hook pack and native OTel; every panel reads a gold view. Figures are weekly, Monday to Sunday, and a week shows once it is over. A team, or a name the organization did not roll out, is shown only in weeks when at least five people are in it (the minimum group size, which can be raised); below that it is counted as other. There is no per-person row anywhere.",
+  "description": "What the organization rolled out for Claude Code and who uses it, what engineers brought in that several now use, which version of the shared instructions people load, where work gets stuck, and where the money goes. From the hook pack and native OTel; every panel reads a gold view. Figures are weekly, Monday to Sunday, and a week shows once it is over. A team, or a name the organization did not roll out, is shown only in weeks when at least five people are in it (the minimum group size, which can be raised); below that it is counted as other. There is no per-person row anywhere. Who each chart is for, what it helps decide and what it cannot show: docs/design/dashboards.md in Cardo's repository.",
   "tags": [
     "cardo"
   ],

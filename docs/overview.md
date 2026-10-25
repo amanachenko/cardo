@@ -128,7 +128,7 @@ what the console shows, and each engineer sees their own position first.
 | | Status |
 |---|---|
 | Collection: the settings file, hooks, and a collector that hashes identity and drops content | **Built**, and checked against real Claude Code sessions |
-| Artifact usage, instructions versions, context and model-switch cost, and a dashboard | **Built**, and checked against those sessions |
+| Artifact usage, instructions versions, spend by model, team and Claude Code release, failing calls repeated in a row, and a dashboard ([what each chart is for](design/dashboards.md)) | **Built**, checked against those sessions, and reviewed on a made-up organization |
 | Reading Anthropic's usage data | **Built**; not yet run against a live organization |
 | Coach pages, efficiency comparisons, repository classification, teams from your directory, the board report | **Planned** |
 | Evidence report, coverage | **Planned** |
