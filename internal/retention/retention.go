@@ -12,6 +12,10 @@ import (
 	"time"
 )
 
+// DefaultDays is the fleet-core window when the organization has not chosen one (ADR-0053). It is
+// what the shipped tables' TTL already does, and what the console shows as "90 (default)".
+const DefaultDays = 90
+
 // Table is one bronze table and the predicate that ages it.
 type Table struct {
 	Name string
@@ -34,13 +38,28 @@ func Tables(days int) []Table {
 type Report map[string]int64
 
 // Prune deletes rows older than days. With dryRun it only counts.
+//
+// Zero means "keep everything": no row is deleted, and the tables' TTL is removed, so nothing
+// expires on its own either. That has to be said explicitly, because a TTL left in place would
+// keep deleting at the shipped window whatever the operator chose.
 func Prune(ctx context.Context, endpoint, user, pass string, days int, dryRun bool) (Report, error) {
-	if days <= 0 {
-		return nil, fmt.Errorf("retention window must be at least one day")
+	if days < 0 {
+		return nil, fmt.Errorf("retention window must be zero or more days")
 	}
 	out := Report{}
 	for _, t := range Tables(days) {
-		if !dryRun && t.TTL != "" {
+		if days == 0 {
+			// Keep everything. Nothing is deleted, and the TTL comes off, so nothing expires on
+			// its own either. A dry run says the same thing without touching the table.
+			if !dryRun {
+				if err := exec(ctx, endpoint, user, pass, fmt.Sprintf("ALTER TABLE %s REMOVE TTL", t.Name)); err != nil {
+					return out, fmt.Errorf("%s: %w", t.Name, err)
+				}
+			}
+			out[t.Name] = 0
+			continue
+		}
+		if !dryRun {
 			// The table ships with a 90-day TTL; the operator's window wins, in both directions.
 			if err := exec(ctx, endpoint, user, pass, fmt.Sprintf("ALTER TABLE %s MODIFY TTL %s + toIntervalDay(%d)", t.Name, t.TTL, days)); err != nil {
 				return out, fmt.Errorf("%s: %w", t.Name, err)

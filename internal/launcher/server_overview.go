@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/amanachenko/cardo/internal/retention"
 )
 
 // overviewView is the single answer the landing screen needs: what runs, what is fresh, what to do.
@@ -220,15 +222,35 @@ func (s *Server) latestSession(ctx context.Context) (*sessionCard, error) {
 
 // settingsView is what the Settings surface may read and write.
 type settingsView struct {
-	MinGroupSize  int       `json:"minGroupSize"`
-	PilotMode     bool      `json:"pilotMode"`
-	OrgArtifacts  string    `json:"orgArtifacts"`
-	RetentionDays int       `json:"retentionDays"`
-	Ports         []int     `json:"ports"`
-	Dir           string    `json:"dir"`
-	Poller        adminView `json:"poller"`
-	Version       string    `json:"version"`
-	Error         string    `json:"error,omitempty"`
+	MinGroupSize  int    `json:"minGroupSize"`
+	PilotMode     bool   `json:"pilotMode"`
+	OrgArtifacts  string `json:"orgArtifacts"`
+	RetentionDays int    `json:"retentionDays"`
+	// RetentionDefault is true when the organization has chosen no window, so the effective one is
+	// the default (ADR-0053). The console says so rather than showing a number with no history.
+	RetentionDefault bool      `json:"retentionDefault"`
+	RetentionNote    string    `json:"retentionNote"`
+	Ports            []int     `json:"ports"`
+	Dir              string    `json:"dir"`
+	Poller           adminView `json:"poller"`
+	Version          string    `json:"version"`
+	Error            string    `json:"error,omitempty"`
+}
+
+// retentionNote explains the window in one sentence, and says what a longer one means. It is shown
+// next to the value, because the number is a privacy promise and not a housekeeping setting.
+func retentionNote(days int, isDefault bool) string {
+	note := "90 days is long enough to compare a few weeks before and after a tool is rolled out, and short enough that rows tied to a code name don't linger. The grouped totals, which carry no code name, are kept anyway, so long-term trends don't need longer raw data."
+	switch {
+	case isDefault:
+		return fmt.Sprintf("%d (default). %s", retention.DefaultDays, note)
+	case days == 0:
+		return "0: nothing is deleted and the tables' TTL is taken off, so nothing expires on its own either. This is a choice to keep the rows, and it is the one that keeps personal data longest."
+	case days > retention.DefaultDays:
+		return fmt.Sprintf("%d days, above the default of %d. Rows tied to a code name are kept longer than the default; tell engineers.", days, retention.DefaultDays)
+	default:
+		return fmt.Sprintf("%d days. %s", days, note)
+	}
 }
 
 func (s *Server) settingsView(ctx context.Context) settingsView {
@@ -251,8 +273,17 @@ func (s *Server) settingsView(ctx context.Context) settingsView {
 		v.PilotMode = strings.TrimSpace(body) == "1"
 	}
 	if body, err := s.ch(ctx, "SELECT argMax(value, version) FROM cardo.settings WHERE key = 'retention_days' FORMAT TSV"); err == nil {
-		v.RetentionDays, _ = strconv.Atoi(strings.TrimSpace(body))
+		raw := strings.TrimSpace(body)
+		if raw == "" {
+			// Nothing was chosen: the default window is in force (ADR-0053).
+			v.RetentionDays = retention.DefaultDays
+			v.RetentionDefault = true
+		} else if n, err := strconv.Atoi(raw); err == nil {
+			v.RetentionDays = n
+			v.RetentionDefault = false
+		}
 	}
+	v.RetentionNote = retentionNote(v.RetentionDays, v.RetentionDefault)
 	return v
 }
 

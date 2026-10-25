@@ -1,6 +1,6 @@
 # ADR-0036 — Service runs are labelled, and are never counted as people
 
-**Status:** Accepted — **built** (collector label, people-count filters, GitHub Actions block)
+**Status:** Accepted — **not built**
 **Date:** 2026-09-25
 **Evidence:** `2026-09-23-admin-analytics-apis.md` (`api_actor` versus `user_actor`);
 `2026-09-23-hooks-otel-collector-surfaces.md` (hooks under `claude -p`; which events fire
@@ -13,18 +13,16 @@ applications built on the Agent SDK. Every Cardo row belongs to a pseudonym, whi
 person. Take a nightly job that runs `claude -p "fix the flaky tests"`. It goes wrong one of two
 ways:
 
-- **Run with an API key:** the Admin API reports it as `api_actor`, carrying `api_key_name`. That is
-  still a person authenticating with a key, so there is no way to tell a CI job from an engineer
-  using a key: it lands as one actor named by its key. This path cannot mark service runs; only the
-  collector label can.
+- **Run with an API key:** there is no email, so there is no pseudonym, and the views count it as
+  nobody. Its cost is in the fleet total but in no team, and its skill uses count as uses but add no
+  people.
 - **Run with someone's login:** every run lands on that person. They appear as one engineer with
   400 sessions a day, straight onto the over-budget list
   ([ADR-0033](0033-per-person-cost-for-budget-owners.md)).
 
-The Analytics API documents exactly two actor types, `user_actor` (email) and `api_actor` (key
-name), and both are people. So the service label has to come from the run itself
-(`cardo.actor=service`), not from the actor type. CI runners are not managed by MDM, so their
-settings come from the workflow's own configuration.
+Anthropic's usage data already tells the two apart: `api_actor`, named by its key, versus
+`user_actor`. CI runners are not managed by MDM, so their settings come from the workflow's own
+configuration.
 
 ## Decision
 
@@ -67,14 +65,3 @@ settings come from the workflow's own configuration.
   busiest engineer.
 - **A separate pipeline for agents.** Premature. The same telemetry, carrying a label, is enough
   until agent-run views are wanted.
-
-## What shipped
-
-- `silver_session` carries `actor_kind` (`person` or `service`) and `workflow`, read from the
-  `cardo.actor` and `cardo.workflow` resource attributes; hook-only and metric-only sessions default to
-  `person`.
-- `gold_fleet_adoption` counts both documented actor types as people with `countDistinctIf(pseudonym, pseudonym != '')`; `gold_artifact_usage` excludes sessions whose `actor_kind` is
-  `service` from both its fleet and per-name people counts.
-- `deploy/ci/github-actions.card.yaml` is the ready-made block: telemetry on, `cardo.actor=service`,
-  `cardo.workflow=${{ github.workflow }}`, and the instruction to run with an API key, never a
-  person's login.

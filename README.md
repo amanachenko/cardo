@@ -111,8 +111,8 @@ Cardo is for, where it is heading, and how we choose what to build next:
   you run it yourself, keeps lengths and token counts, and never stores the text (ADR-0050)
 - stores your email address (INV-2)
 - stores prompts, code, or the paths of files you touched (INV-5)
-- sends anything about your organization outside its network (INV-7). The one outbound read is the
-  public OpenRouter price list, unauthenticated and daily (ADR-0049)
+- sends anything about your organization outside its network (INV-7). The binary contacts no host at
+  all: prices come from a table inside it
 
 **Collected without asking** (short by design; the list is the boundary, and adding to it requires a
 recorded decision): session start and end, model and effort, tokens and cost, tool *classes*, skill
@@ -242,10 +242,19 @@ telemetry: **[deploy/compose/README.md](deploy/compose/README.md)**.
 ### Retention deletes data
 
 Tier-1 rows are kept for **90 days** and then removed by a ClickHouse TTL
-([ADR-0016](docs/adr/0016-retention.md)). With a stable salt, retention rather than hashing is what
-actually bounds exposure, so this is the privacy control and not a storage tidy-up. Note the
-current limit: the gold marts are views, so trends older than 90 days go with the rows behind them
-([risks.md](risks.md) #10).
+([ADR-0053](docs/adr/0053-retention-default-and-organization-choice.md)). With a stable salt,
+retention rather than hashing is what actually bounds exposure, so this is the privacy control and
+not a storage tidy-up. Note the current limit: the gold marts are views, so trends older than 90 days
+go with the rows behind them ([risks.md](risks.md) #10).
+
+Ninety days is long enough to compare a few weeks before and after a tool is rolled out, and short
+enough that rows tied to a code name do not linger. The grouped totals, which carry no code name,
+are kept anyway, so long-term trends do not need longer raw data.
+
+**Your organization may change the window.** Settings → Retention window, or
+`CARDO_RETENTION_DAYS`. A shorter window deletes sooner, which is what an organization with its own
+retention rule needs; a longer one keeps rows tied to a code name alive for longer, and the
+console says so, because your engineers have to be told.
 
 ---
 
@@ -294,8 +303,10 @@ MCP security scanning. Full survey:
 
 ## Retention
 
-Raw rows are deleted on a window you set once. `0` keeps everything; anything else is applied by the
-poller after every run, and `cardo prune` does the same by hand:
+Raw rows are deleted on a window set once. **90 days is the default**, and your organization may
+change it; the console shows which one is in force. `0` keeps everything, and takes the tables' TTL
+off so nothing expires on its own either; anything else is applied by the poller after every run,
+and `cardo prune` does the same by hand:
 
 ```sh
 cardo prune -days 30 --dry-run   # count, delete nothing
@@ -304,6 +315,12 @@ cardo prune -days 30             # delete raw rows older than 30 days
 
 The window also changes the ClickHouse TTL on the bronze tables, so it works in both directions
 (the tables ship with 90 days). Silver and gold are views; they shorten with the raw rows.
+
+Ninety days is long enough to compare a few weeks before and after a tool is rolled out, and short
+enough that rows tied to a code name do not linger. The grouped totals carry no code name and are
+kept anyway, so long-term trends do not need longer raw data. A window above the default keeps rows
+tied to a code name alive for longer, and the console says so — your engineers have to be told
+([ADR-0053](docs/adr/0053-retention-default-and-organization-choice.md)).
 
 ## Verify the Admin API path without a key
 

@@ -172,12 +172,13 @@ deletion request.
   team afterwards.
 
 **Because the salt is stable in v0.1, retention is the actual privacy control** — not the hashing
-([ADR-0016](../adr/0016-retention.md)):
+([ADR-0016](../adr/0016-retention.md), and the window itself
+[ADR-0053](../adr/0053-retention-default-and-organization-choice.md)):
 
 | Tier | Retention |
 |---|---|
 | Security (T0) | 1 year |
-| Fleet (T1) | 90 days |
+| Fleet (T1) | 90 days by default; your organization may change it |
 | Personal (T2) | 30 days |
 | Aggregates with no pseudonym | indefinite |
 

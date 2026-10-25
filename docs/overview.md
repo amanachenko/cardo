@@ -105,8 +105,8 @@ what the console shows, and each engineer sees their own position first.
 
 - **It measures approaches, not people.** "Is the skill we shipped used, and does it help?" is a
   fact about the skill. A ranking of engineers is a number people learn to game.
-- **It runs in your network.** No usage phone-home, no hosted version, no benchmark upload. The only
-  outbound read is the public price list that turns token counts into a cost estimate (ADR-0049).
+- **It runs in your network.** No usage phone-home, no hosted version, no benchmark upload. The binary
+  contacts no host at all: prices come from a table inside it.
 - **Collection reads no content.** Prompts, code and file paths never reach a table (INV-1, INV-5).
   `cardo import` is the one manual exception: run by the person, metadata only, text discarded
   (ADR-0050).
@@ -114,7 +114,9 @@ what the console shows, and each engineer sees their own position first.
   on Claude Code's own telemetry and a set of hooks. Claude Code waits for each hook's answer: a few
   milliseconds normally, and at most one second if the collector is out of reach. No hook can block
   anything, and the file changes nothing else about how Claude Code behaves.
-- **Identity is hashed before storage,** and data is kept for 90 days. Pseudonymous data is still
+- **Identity is hashed before storage,** and data is kept for 90 days by default. Your organization
+  may change that window; the console shows which one is in force
+  ([ADR-0053](adr/0053-retention-default-and-organization-choice.md)). Pseudonymous data is still
   personal data, and the documentation says so plainly. Retention is what bounds it.
 - **Small groups are never shown.** A team or a home-grown tool is named only once five people are
   in it.

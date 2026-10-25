@@ -1,8 +1,8 @@
 # Operating the console, the coach, and imported history
 
-This is the operator's guide to the surfaces added on 2026-10-18: the five-page console, the coach,
-the transcript importer and the watcher service. It says what each piece does, how to run it, what it
-stores, and where it stops being trustworthy. It supersedes the working handoff of the same date.
+This is the operator's guide to the surfaces added on 2026-10-18: the five-page console, the coach
+and the transcript importer. It says what each piece does, how to run it, what it stores, and where
+it stops being trustworthy. It supersedes the working handoff of the same date.
 
 Everything below was exercised on macOS 15.7.7 with Docker Desktop against the reference stack on
 loopback (ClickHouse `8124`, Grafana `3001`, collector `4319`/`8089`, console `8484`). Sections that
@@ -23,9 +23,8 @@ were **not** exercised are marked as such.
   before, and what is the one fix worth making. It exists as a CLI, a console page and a signed
   per-person link (ADR-0048).
 - **History import** turns existing `~/.claude/projects/**/*.jsonl` transcripts into the same bronze
-  rows live telemetry writes, priced at OpenRouter list prices.
-- **The watcher** keeps that import current every 60 seconds through a user service, so nobody has
-  to remember to run it.
+  rows live telemetry writes, priced at Anthropic's published list prices. It is a one-time command
+  the person runs: nothing is left running afterwards (ADR-0050).
 - **Integrity fixes**: `audit()` errors fail the write; catalog version allocation is serialised;
   the teams commit marker is written last; settings writes are audited; `silver_session` excludes
   `cardo-probe-%` sessions (migration 013); service runs are labelled by `cardo.actor` /
@@ -81,7 +80,7 @@ version. Fields:
 | Minimum group | Floor for naming a team or a home-grown artifact. Minimum 5 (ADR-0030). |
 | Org artifacts | Where the organization's approved artifacts live. |
 | Account type | `pilot_mode`: changes which installer steps are shown, not the stack composition. |
-| Retention window | Days of raw rows to keep; `0` keeps everything. Changes the bronze TTL as well. |
+| Retention window | Days of raw rows to keep. 90 is the default and the organization may change it; `0` keeps everything and takes the TTL off. Changes the bronze TTL as well. |
 
 Settings → Installation → *Open install and repair* is the old installer. It still owns the required
 steps, including the new `history` step (§6.3).
@@ -112,7 +111,7 @@ Re-uploading the same file is safe; it produces a new generation and prunes the 
 ### 3.5 Coach
 
 The console page is the operator preview: type an email, get the same report the person would get,
-plus a "copy link" action. Hero figures, a weekly sparkline, at most three suggestions. The page
+plus a "copy link" action. Hero figures, a weekly sparkline, and at most one suggestion. The page
 reads one pseudonym at a time and has no cross-person view.
 
 CLI details, the link format and the privacy rules are in §5.
@@ -139,17 +138,23 @@ The report compares the chosen window with the window immediately before it and 
 - tool calls and tool failures,
 - artifacts loaded.
 
-It ends with **at most three suggestions, each naming a fix**, and it says explicitly when it is
+It ends with **at most one suggestion, and it names only what the fleet has shown**
+([ADR-0041](https://github.com/amanachenko/cardo/blob/main/docs/adr/0041-the-coach-suggests-what-the-fleet-has-shown.md)):
+an artifact the organization's engineers adopted, above the organization's minimum group size, with
+the number of people who use it — "11 people here use `/review`, and you haven't tried it yet."
+There is no catalog of patterns and tools and no fixed tip. The page says explicitly when it is
 comparing a person with their own previous window. There is no rank, no percentile, no composite
 score, and no other person's rows are read.
+
+A pseudonym is checked for its shape before it reaches a query: 64 lowercase hex characters, which is
+what a salted SHA-256 looks like. A value that is not one is refused rather than escaped.
 
 ### 4.2 What the numbers mean
 
 - **Sessions** are distinct session ids with at least one prompt; three of the owner's transcripts
   had none and therefore produce no turn.
-- **Cost** is OpenRouter list price, not an invoice (§8, gap 1).
-- **Peak context** is the largest `input + cache read + cache create` seen in one request; it is the
-  signal behind the "split the task earlier" suggestion.
+- **Cost** is Anthropic's published list price, not an invoice (§8, gap 1).
+- **Peak context** is the largest `input + cache read + cache create` seen in one request.
 - **Tool calls** are only available for live-telemetry sessions. Imported transcripts carry no tool
   decisions or durations, so the imported path reports `0` (§8, gap 2).
 
@@ -214,7 +219,7 @@ any) and the pseudonym. On the author's machine:
 ```
 TRANSCRIPTS  415 files · 84 sessions · 2505 prompts
 TOKENS       in 508543237 · out 12351649 · cache read 17253738503
-COST         $211.63 at OpenRouter prices · 0 models unpriced
+COST         $211.63 at list price · 0 models unpriced
 SPAN         2026-09-08 → 2026-10-18
 ```
 
@@ -235,54 +240,40 @@ last prompt seen when the chain is broken.
 
 ### 5.3 Pricing
 
-`internal/pricing` pulls `https://openrouter.ai/api/v1/models` (public, no key) and caches it for a
-day next to the token (`~/Library/Caches/cardo/pricing.json` on macOS, `~/.cache/cardo/` on Linux).
-Bare model names resolve by unique vendor suffix, so `mimo-v2.6-pro` and `xiaomi/mimo-v2.6-pro` bill
-the same. Prompt, completion, cache read and cache write are billed separately.
+`internal/pricing` holds a table of Anthropic's published prices — input, output, cache read and cache
+write, per token. Nothing is fetched: the binary contacts no host (INV-7). A dated model id resolves
+to the same price as the bare one, so `claude-haiku-4-5-20251001` and `claude-haiku-4-5` bill the
+same.
 
-Unpriced models are reported, never silently zeroed. If a price is missing, edit `pricing.json` by
-hand or wait for the cache to expire.
+Unpriced models are reported, never silently zeroed: the preview prints them under `UNPRICED` and
+the written row carries no `cost_usd` at all, so the views read a missing value as zero rather than
+a false "this cost nothing".
+
+An organization whose contract differs from the list price can replace the table with a local file at
+`~/Library/Caches/cardo/pricing-override.json` (Linux: `~/.cache/cardo/pricing-override.json`).
 
 ---
 
-## 6. The watcher service
+## 6. The import, and what runs after it
 
-### 6.1 How it works
+Nothing runs after the import. There is no watcher, no service, and no file left behind on the
+machine: `cardo import -write` is a command, and when it finishes, the machine is exactly as it was
+before (ADR-0050).
 
-```sh
-cardo watch              # run in the foreground, scan every 60s
-cardo watch -every 5m
-cardo watch -install     # install a user service and exit
-cardo watch -uninstall
+The installer's `history` step (group **Data**) runs that command, and only that command. It is
+**opt-in**: it is not part of "install everything", and in the board it carries an unticked
+checkbox. A person who never ticks it is in exactly the position INV-1 describes.
+
+A session that already arrived through live telemetry is skipped, and the importer says how many it
+skipped:
+
+```
+SKIPPED      12 sessions already collected live
+WROTE        318 rows for 31 sessions
 ```
 
-It scans the transcript root on an interval, imports only new or extended sessions using
-`~/Library/Caches/cardo/import-state.json` (Linux: `~/.cache/cardo/import-state.json`), and writes
-whatever it finds. It never re-imports a session whose size and mtime have not changed.
-
-| Platform | Service |
-| --- | --- |
-| macOS | launchd agent `com.cardo.watch`, `RunAtLoad`, `KeepAlive`; log `~/Library/Logs/cardo-watch.log` |
-| Linux | systemd `--user` unit |
-| Windows | Not implemented. The command fails with instructions to use Task Scheduler. |
-
-### 6.2 Verify it is alive
-
-```sh
-launchctl list | awk '$3=="com.cardo.watch"'     # macOS: PID, exit status, label
-tail -5 ~/Library/Logs/cardo-watch.log           # WATCHING …, WROTE N rows for 1 sessions
-```
-
-A healthy log alternates `WATCHING` lines with occasional `WROTE` lines. If the PID is `-`, the
-agent exited; reinstall with `cardo watch -install`.
-
-On Linux: `systemctl --user status cardo-watch`.
-
-### 6.3 Installer step
-
-The installer's tenth required step, `history` (group **Data**), runs `import -write` and then
-`watch -install`. It is idempotent: running it twice leaves the same rows and reinstalls the same
-service.
+Counting such a session twice would double its cost, tokens and prompts, and would leave its rows
+with a random `cohort` in `silver_session`.
 
 ---
 
@@ -338,10 +329,12 @@ cardo prune -days 30              # delete older raw rows
 cardo prune                       # use CARDO_RETENTION_DAYS
 ```
 
-The same window is available in Settings (`0` = keep everything). The poller prunes after every run,
-and the bronze TTL is rewritten to the same window in **both** directions, so raising the window
-back does not leave a 30-day TTL behind. TTL is the privacy control, not a storage tidy-up
-(ADR-0016).
+The same window is available in Settings. **90 days is the default**, and the organization may
+change it (ADR-0053); the console shows the effective value and says `(default)` when nothing has
+been chosen. `0` keeps everything and takes the TTL off, so nothing expires on its own either. The
+poller prunes after every run, and the bronze TTL is rewritten to the same window in **both**
+directions, so raising the window back does not leave a 30-day TTL behind. TTL is the privacy
+control, not a storage tidy-up (ADR-0016, ADR-0053).
 
 ---
 
@@ -380,9 +373,9 @@ migrate step to forget.
 - The console is loopback-only and token-gated; the coach link is HMAC-signed and read-only.
 - The Admin API endpoint is pinned. A stand-in is allowed only on loopback (`127.0.0.1`, `::1`,
   `localhost`) so an admin key cannot be pointed at a host someone else runs (ADR-0047).
-- The only outbound reads are the Anthropic API and the public price list. `cardo import` fetches
-  `openrouter.ai/api/v1/models` once a day, with no key and no organization data in the request
-  (ADR-0049). Transcripts are read locally and never sent.
+- The binary contacts no host at all. Prices come from a table inside it, and the only other
+  address it knows is the Anthropic API it was pointed at. Transcripts are read locally and never
+  sent.
 - The key, the salt and the Grafana passwords live in `deploy/compose/.env` (0600).
 - There is no hosted option, no default salt and no unsalted mode (ADR-0013, ADR-0006).
 
@@ -408,16 +401,13 @@ Console → Coach → type the address → *Copy link*. Rotate the board token t
 ./bin/cardo check
 ```
 
-**Keep it current without thinking about it**
-
-```sh
-./bin/cardo watch -install
-launchctl list | awk '$3=="com.cardo.watch"'
-```
+Nothing runs afterwards. To bring in later sessions, run the same command again; sessions already
+collected live are skipped, so nothing is counted twice.
 
 **Change retention**
 
-Settings → Retention window, or `cardo prune -days N`. `0` keeps everything.
+Settings → Retention window, or `cardo prune -days N`. 90 days is the default; `0` keeps
+everything and takes the TTL off.
 
 **Remove synthetic demo data**
 
@@ -446,8 +436,7 @@ counting `silver_session` rows with `session_id LIKE 'demo-%'` (expect 0).
 | `FIELDS  cannot read back` + `invalid character '…'` | A ClickHouse query parsed as JSON without `FORMAT JSONEachRow`, so the TSV body was handed to `json.Unmarshal` | Append `FORMAT JSONEachRow` to every query whose body is parsed. Fixed in `internal/launcher/readback.go` on 2026-10-18 |
 | `FIELDS  … missing app_version, hook rows` | The newest session was an imported or demo one, which can never carry hooks | The check now excludes `cohort='imported'` and `demo-%`; run Claude Code once in an instrumented project to produce a real session |
 | `Tool calls 0` in the coach | Imported transcripts carry no tool calls | Expected; label the figure "live only" or add hook capture |
-| `unpriced models` in `cardo import` | Model missing from the OpenRouter catalogue or a typo in the transcript | Edit `pricing.json` or wait for the day cache to expire |
-| Watcher not writing | Agent exited, or the transcript root moved | `launchctl list`, read `~/Library/Logs/cardo-watch.log`, then `cardo watch -install` |
+| `unpriced models` in `cardo import` | The model is not in the published table, or the transcript has a typo | Add it to `~/Library/Caches/cardo/pricing-override.json`, or fix the model name in the transcript |
 | Console refuses the link | Token rotated, or the port changed (token files are per port) | Open `?t=<token>` from `~/Library/Caches/cardo/token-<port>` |
 | Coach link 401 | `k` missing, wrong pseudonym, or the board token rotated | Reissue from Console → Coach |
 | `ACTOR TYPES` FAIL naming a type | The API returned an undocumented actor kind | Read the name in the row; do not widen the allowlist without an ADR |
@@ -456,16 +445,15 @@ counting `silver_session` rows with `session_id LIKE 'demo-%'` (expect 0).
 
 ## 13. Known gaps and risks
 
-1. **Cost is OpenRouter list price, not the invoice.** Discounts, credits and batch pricing are not
-   modelled.
+1. **Cost is Anthropic's published list price, not the invoice.** Discounts, credits and batch pricing
+   are not modelled.
 2. **Imported history has no tool calls.** Transcripts contain no decisions or durations; only live
    telemetry does.
 3. Three of the 84 imported sessions have no prompts and therefore no turns (81 appear in
    `silver_turn`).
-4. **The watcher only sees this machine.** Cross-machine history needs export/import (roadmap #5,
+4. **The import sees one machine.** Cross-machine history needs export/import (roadmap, Step 3,
    absent).
-5. Windows service installation is not implemented; the step errors with instructions.
-6. **The Admin API has never been called with a live key.** Values are documentation-backed and
+5. **The Admin API has never been called with a live key.** Values are documentation-backed and
    guarded by `ACTOR TYPES`, but the first real poll is still the proof.
 7. `pilot_mode` changes which installer steps appear; it does not change stack composition.
 8. **Coach link revocation is all-or-nothing** (rotate the board token).
@@ -487,8 +475,7 @@ counting `silver_session` rows with `session_id LIKE 'demo-%'` (expect 0).
 | `silver_turn` for the owner | 81 sessions with prompts, 2505 prompts |
 | `cardo coach` (28 d) | 76 sessions, 2 335 prompts, $171.20 vs $7.39, peak context 374 910 vs 109 706 |
 | Per-person link | `/api/coach/open` → 200 with the right HMAC, 401 with a wrong one |
-| Watcher service | `launchctl list` → `com.cardo.watch` running; `WROTE … rows for 1 sessions` in the log |
-| Installer step | `POST /api/run {"step":"history"}` → state `ok`, service reinstalled |
+| Installer step | `POST /api/run {"step":"history"}` → state `ok` |
 | Mock Admin API | 6 records (4 `user_actor`, 2 `api_actor`); unknown type → `ACTOR TYPES` FAIL, exit 1 |
 | Retention | Dry run saw 1 old row; the real run deleted it; TTL moved 30 → 90 |
 | Probe filter | Inserted a `cardo-probe-…` row → `silver_session` stayed 0 |
@@ -509,7 +496,7 @@ To reproduce the read-only half at any time: `cardo check`, `cardo import` (prev
   `web/{index.html,app.js,cardo-ui.css}`.
 - **Data**: `sql/clickhouse/010_catalog.sql`, `011_teams.sql`, `012_service_runs.sql`,
   `013_probe_filter.sql`; `internal/{catalog,directory,coach,transcripts,pricing,retention,mockadmin}`.
-- **CLI**: `cmd/cardo/{main.go,up.go,import.go,watch.go,prune.go,pseudonym.go,coach.go,mockadmin.go}`.
+- **CLI**: `cmd/cardo/{main.go,up.go,import.go,prune.go,pseudonym.go,coach.go,mockadmin.go}`.
 - **Design record**: `docs/design/admin-console.md` (slices and corrections),
   `docs/design/quickstart-launcher.md`, `PRODUCT.md`, `docs/roadmap.md`.
 - **Tests**: `internal/launcher/*_test.go`, `internal/{coach,transcripts,pricing}`, `test/e2e_admin_test.go`,

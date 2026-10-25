@@ -21,12 +21,22 @@ shared link, which still holds a data-source connection behind it.
    preview; a per-person link is issued by the operator later, one token per pseudonym, revocable.
 2. **The page shows only that pseudonym's rows.** No fleet list, no other name, no ranking, no
    percentile, no single score. The comparison is always against the same person's previous window.
-3. **At most three suggestions**, each naming a fix. Rules are visible in `internal/coach`; peer
-   hints only appear when at least five other people used the artifact (ADR-0029).
-4. **The CLI is the same data**: `cardo coach <email>` prints the figures and suggestions, so the
+3. **At most one suggestion, and it names only what the fleet has shown**
+   ([ADR-0041](0041-the-coach-suggests-what-the-fleet-has-shown.md)): an artifact the organization's
+   own engineers adopted, above the organization's minimum group size, with the number of people who
+   use it. "11 people here use `/review`, and you haven't tried it yet." There is no catalog of
+   patterns and tools, and no fixed tip: "compact earlier" and "one in five tool calls failed" were
+   rules we wrote, not evidence the engineer's colleagues produced.
+4. **The group size is the organization's, not a constant.** The floor is read from
+   `cardo.settings_effective`, so it follows a raised minimum (ADR-0029). Service runs and Claude
+   Code's own built-ins are left out (ADR-0036, ADR-0041).
+5. **The CLI is the same data**: `cardo coach <email>` prints the figures and suggestions, so the
    page and the terminal cannot disagree.
-5. **A second Grafana is no longer required for the coach.** Roadmap item 8 becomes "per-person
+6. **A second Grafana is no longer required for the coach.** Roadmap item 8 becomes "per-person
    links issued by the console"; the leadership Grafana keeps its gold-only user (ADR-0022).
+7. **How engineers on a team reach their page is still open.** A per-person link works on the
+   machine that runs the console, so for now this is an own-laptop setup. Delivering a page by
+   message or through an app engineers sign in to is a later question, and it is not answered here.
 
 ## Consequences
 
@@ -34,3 +44,6 @@ shared link, which still holds a data-source connection behind it.
   per-link tokens before a pilot hands pages out.
 - Sharing a page no longer means sharing a Grafana login and a data source.
 - The coach's numbers are the same views as everywhere else, so a bug shows up in both places.
+- The coach says less. One suggestion, drawn from what colleagues adopted, replaces three sentences
+  of our own rules, so a week with nothing new to adopt leaves the page without advice rather than
+  with a generic tip.

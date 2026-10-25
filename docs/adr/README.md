@@ -58,8 +58,9 @@ The hard rules that these decisions produce live in
 | [0046](0046-hashed-team-directory.md) | The team directory is loaded as a hashed mapping, never as addresses | Accepted | 2026-10-18 |
 | [0047](0047-loopback-admin-stand-in.md) | A loopback stand-in for the Analytics API, for verification only | Accepted — built | 2026-10-18 |
 | [0048](0048-coach-in-the-console.md) | The coach is a page in the console, not a second Grafana | Accepted | 2026-10-18 |
-| [0049](0049-outbound-price-catalogue.md) | Cost prices come from the public OpenRouter catalogue | Accepted — built | 2026-10-18 |
-| [0050](0050-local-transcript-import.md) | Local transcript import is allowed; collection still never reads transcripts | **Proposed** — narrows INV-1 | 2026-10-18 |
+| [0050](0050-local-transcript-import.md) | Cardo never reads transcripts on its own; `cardo import` is the one exception | Accepted | 2026-10-18 |
+| [0053](0053-retention-default-and-organization-choice.md) | Retention is 90 days by default, and the organization may change it | Accepted | 2026-10-25 |
+| [0054](0054-both-actor-types-are-people.md) | Both actor types are people, so a service run is labelled by the run itself | Accepted | 2026-10-25 |
 
 ADR-0030 to ADR-0037 came out of one design review on 2026-09-25, which asked who Cardo is for and
 what each of them needs. Its evidence is

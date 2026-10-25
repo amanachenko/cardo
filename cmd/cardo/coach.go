@@ -70,8 +70,8 @@ func runCoach(args []string) error {
 		return err
 	}
 
-	r := coach.Report{Pseudonym: id.Value, From: from, To: to, PrevFrom: prevFrom, Now: now, Prev: prev, Artifacts: arts, Untried: untried}
-	r.Suggestions = coach.Suggest(now, prev, untried)
+	r := coach.Report{Pseudonym: id.Value, From: from, To: to, PrevFrom: prevFrom, Now: now, Prev: prev, Artifacts: arts, Untried: coach.Names(untried)}
+	r.Suggestions = coach.Suggest(untried)
 
 	if *asJSON {
 		b, err := json.MarshalIndent(r, "", "  ")

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/amanachenko/cardo/internal/retention"
@@ -16,13 +17,16 @@ import (
 func runPrune(args []string) error {
 	fs := flag.NewFlagSet("prune", flag.ContinueOnError)
 	useSynopsis(fs, "prune")
-	days := fs.Int("days", retentionFromEnv(), "delete raw rows older than this many days")
+	days := fs.Int("days", retentionFromEnv(), "delete raw rows older than this many days; 0 keeps everything")
 	dry := fs.Bool("dry-run", false, "count what would be deleted, delete nothing")
 	if err := fs.Parse(args); err != nil {
 		return parsed(err)
 	}
-	if *days <= 0 {
-		return fmt.Errorf("retention is off: set -days N or CARDO_RETENTION_DAYS, or change it in Settings")
+	if *days < 0 {
+		return fmt.Errorf("retention window must be zero or more days")
+	}
+	if *days == 0 {
+		fmt.Println("Keeping everything: no row is deleted, and the tables' TTL is taken off.")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -40,7 +44,17 @@ func runPrune(args []string) error {
 	return nil
 }
 
+// retentionFromEnv returns the window the operator chose. An unset variable means the default
+// window (ADR-0053), so a fresh installation already deletes on the published schedule rather
+// than keeping everything. Zero keeps everything, and says so.
 func retentionFromEnv() int {
-	n, _ := strconv.Atoi(os.Getenv("CARDO_RETENTION_DAYS"))
+	raw := strings.TrimSpace(os.Getenv("CARDO_RETENTION_DAYS"))
+	if raw == "" {
+		return retention.DefaultDays
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return retention.DefaultDays
+	}
 	return n
 }

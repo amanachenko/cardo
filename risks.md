@@ -544,16 +544,15 @@ the smallest group with five or more in it, such as a group of teams. The thresh
 lowered to make a small team visible. **Would show the mitigation failing:** an adoption owner
 asking for reach by team that the cohorts cannot give.
 
-### 23. Imported cost depends on a third-party price list
+### 23. Imported cost depends on a published price list
 
-**Threatens:** the coach's cost figure and ADR-0049.
+**Threatens:** the coach's cost figure.
 
-Prices for third-party models come from one public catalogue fetched once a day. A model renamed
-upstream, a price change between cache refreshes, or a catalogue outage makes the estimate drift;
-discounts and credits are invisible by construction. The number is a comparable list price, not money
-anyone spent.
+Prices come from a table of Anthropic's published list prices, held in the binary. A model renamed
+upstream, or a price change after the table was taken, makes the estimate drift; discounts and
+credits are invisible by construction. The number is a comparable list price, not money anyone spent.
 
 **Mitigation:** unpriced models are counted and printed rather than billed at zero, every surface
-labels the figure as list price, and `pricing.json` can be edited by hand. **Would show the mitigation
-failing:** a coach report whose cost cannot be reconciled with any invoice at all, or a model family
-that stays unpriced after two refreshes.
+labels the figure as list price, and the table can be replaced by a local file for an organization
+whose contract differs. **Would show the mitigation failing:** a coach report whose cost cannot be
+reconciled with any invoice at all, or a model family that stays unpriced.

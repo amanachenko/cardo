@@ -36,6 +36,7 @@ async function fetchT(url, opts, ms) {
   let revealed = null; // credentials shown once, never stored
   let lastPaneID = null; // motion runs on a step change, not on every state tick
   let timer = null;
+  const optInChecked = {}; // the person's own choices, kept only in this page
 
   try {
     path = localStorage.getItem('cardo.path') || 'solo';
@@ -74,10 +75,12 @@ async function fetchT(url, opts, ms) {
     }
     return out;
   }
-  const countedSteps = () => visibleSteps().filter(s => !s.Planned);
   // The install is the steps that can run here. The proof is the engineer's own session, and it is
-  // what turns "installed" into "verified".
+  // what turns "installed" into "verified". An opt-in step is the person's choice: it is shown,
+  // it never runs unless they ask, and it never holds the install open.
+  const countedSteps = () => visibleSteps().filter(s => !s.Planned && !s.OptIn);
   const requiredSteps = () => countedSteps().filter(s => !s.Optional && !s.Verify);
+  const optInSteps = () => visibleSteps().filter(s => s.OptIn);
   const verifySteps = () => countedSteps().filter(s => s.Verify);
   const isVerified = () => isComplete() && verifySteps().every(s => s.state === 'ok');
   const implementedIndex = id => countedSteps().findIndex(s => s.ID === id);
@@ -235,20 +238,21 @@ async function fetchT(url, opts, ms) {
     const limit = firstPendingIndex();
     let n = 0;
     visibleSteps().forEach(step => {
-      const counted = !step.Planned && !step.Optional && !step.Verify;
+      const counted = !step.Planned && !step.Optional && !step.Verify && !step.OptIn;
       if (counted) n++;
       const li = el('li');
       const b = el('button', 'wiz-step');
       // An optional step that has not passed yet is waiting for the engineer, not failing.
-      b.dataset.state = ((step.Optional || step.Verify) && (step.state === 'fail' || step.state === 'wait')) ? 'wait' : (step.state || 'wait');
+      b.dataset.state = ((step.Optional || step.Verify || step.OptIn) && (step.state === 'fail' || step.state === 'wait')) ? 'wait' : (step.state || 'wait');
       b.appendChild(el('span', 'n', counted ? String(n).padStart(2, '0') : '··'));
       b.appendChild(el('span', 't', step.Name));
 
       const mark = el('span', 's');
       if (step.state === 'ok') mark.appendChild(icon('check', 'sm'));
-      if (step.state === 'fail' && !step.Optional && !step.Verify) mark.appendChild(icon('alert', 'sm'));
+      if (step.state === 'fail' && !step.Optional && !step.Verify && !step.OptIn) mark.appendChild(icon('alert', 'sm'));
       if (step.Optional) b.appendChild(el('span', 'later', 'Diagnostic'));
       if (step.Verify) b.appendChild(el('span', 'later', 'Proof'));
+      if (step.OptIn) b.appendChild(el('span', 'later', 'Your choice'));
       if (step.Planned) b.appendChild(el('span', 'later', 'Later'));
       b.appendChild(mark);
 
@@ -261,6 +265,15 @@ async function fetchT(url, opts, ms) {
       } else if (step.Optional && !isComplete()) {
         b.disabled = true;
         b.title = 'Appears after the first real session';
+      } else if (step.OptIn) {
+        // Always reachable: it is the person's choice, and it never waits for another step.
+        b.addEventListener('click', () => {
+          current = step;
+          autoAll = false;
+          const wiz = $('#wiz');
+          if (wiz.getAttribute('data-rail') === 'open') wiz.setAttribute('data-rail', 'closed');
+          render();
+        });
       } else if (!step.Optional && !step.Verify && stepIndex(step.ID) > limit) {
         b.disabled = true;
         b.title = 'Complete the previous steps first';
@@ -338,6 +351,27 @@ async function fetchT(url, opts, ms) {
     }
 
     let input = null;
+    let optInBox = null;
+    if (current.OptIn) {
+      // The checkbox is unticked. Nothing runs until the person ticks it: this step reads files
+      // outside the stack, and "install everything" never takes it.
+      const sec = el('div', 'wiz-section');
+      sec.appendChild(el('h3', '', 'Your choice'));
+      const label = el('label', 'checkline');
+      optInBox = el('input');
+      optInBox.type = 'checkbox';
+      optInBox.checked = optInChecked[current.ID] === true;
+      optInBox.setAttribute('aria-label', 'Import my Claude Code history');
+      optInBox.addEventListener('change', () => {
+        optInChecked[current.ID] = optInBox.checked;
+        render();
+      });
+      label.appendChild(optInBox);
+      label.appendChild(document.createTextNode(' Import my Claude Code history'));
+      sec.appendChild(label);
+      sec.appendChild(el('p', '', 'A one-time import of the sessions already on this machine. Counts, tokens and timing only; the prompt text is measured and discarded. Nothing runs in the background afterwards.'));
+      pane.appendChild(sec);
+    }
     if (current.Input === 'project') {
       const sec = el('div', 'wiz-section');
       sec.appendChild(el('h3', '', 'Project directory'));
@@ -430,6 +464,7 @@ async function fetchT(url, opts, ms) {
     const readyLabel = current.Action === 'Check' ? 'Check and continue'
       : current.Action === 'Start' ? 'Start and continue'
       : current.Action === 'Generate and write' ? 'Generate secrets and continue'
+      : current.OptIn ? 'Import and continue'
       : 'Install and continue';
     const retryLabel = current.Verify ? 'Check again' : 'Retry';
     const primary = el('button', 'act primary',
@@ -437,6 +472,10 @@ async function fetchT(url, opts, ms) {
     primary.disabled = busy;
     primary.addEventListener('click', () => {
       if (current.state === 'ok') { advance(); return; }
+      if (current.OptIn && !optInChecked[current.ID]) {
+        setNotice('Tick the box to import your history, or leave it and continue');
+        return;
+      }
       if (current.Input === 'project' && !project) {
         setNotice('Enter the project directory, then continue');
         if (input) input.focus();
@@ -991,10 +1030,14 @@ async function loadSettings() {
   ret.value = String(s.retentionDays || 0);
   retRow.appendChild(ret);
   const retBtn = el('button', 'act ghost', 'Apply');
+  retBtn.textContent = 'Apply';
   retRow.appendChild(retBtn);
   priv.appendChild(retRow);
-  const retStatus = el('p', 'hint', '0 keeps everything. Anything else deletes raw rows older than that after every poll; silver and gold are views, so they shorten too.');
+  // The effective value, and why it is that one. A number with no history is a guess (ADR-0053).
+  const retStatus = el('p', 'hint', s.retentionNote || '');
   priv.appendChild(retStatus);
+  const retExtra = el('p', 'hint', '0 keeps everything. Anything else deletes raw rows older than that after every poll; silver and gold are views, so they shorten too.');
+  priv.appendChild(retExtra);
   retBtn.addEventListener('click', async () => {
     retStatus.textContent = 'Applying…';
     try {
@@ -1476,7 +1519,7 @@ function renderCoach(v, standalone) {
   }
   if (!v.report.suggestions.length) {
     const li = document.createElement('li');
-    li.textContent = 'No advice this window: the figures moved within their usual range.';
+    li.textContent = 'No suggestion this window: nothing your colleagues have adopted is missing from your own work.';
     sug.appendChild(li);
   }
   box.appendChild(sug);

@@ -1,6 +1,6 @@
 # ADR-0016 — Retention is the primary privacy control
 
-**Status:** Accepted
+**Status:** Superseded by ADR-0053
 **Date:** 2026-09-22
 **Evidence:** `2026-09-20-claude-code-telemetry-surfaces.md` (Claude Code's own `cleanupPeriodDays`
 defaults to 30); judgment for the tier values.

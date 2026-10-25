@@ -88,12 +88,11 @@ func TestWriteDotEnvIsPrivateAndKeepsUnrelatedKeys(t *testing.T) {
 	if err := WriteDotEnv(path, existing, s); err != nil {
 		t.Fatal(err)
 	}
-	info, err := os.Stat(path)
-	if err != nil {
+	if _, err := os.Stat(path); err != nil {
 		t.Fatal(err)
 	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
-		t.Errorf("mode = %o, want 600", perm)
+	if ok, why := restrictedToOwner(path); !ok {
+		t.Errorf("the file is not readable only by its owner: %s", why)
 	}
 
 	got, err := ReadDotEnv(path)
@@ -417,11 +416,10 @@ func TestEnvFileIsOwnerOnly(t *testing.T) {
 	if _, err := RunStep(context.Background(), opts, "secrets"); err != nil {
 		t.Fatal(err)
 	}
-	info, err := os.Stat(filepath.Join(dir, ".env"))
-	if err != nil {
+	if _, err := os.Stat(filepath.Join(dir, ".env")); err != nil {
 		t.Fatal(err)
 	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
-		t.Fatalf("mode = %o, want 600", perm)
+	if ok, why := restrictedToOwner(filepath.Join(dir, ".env")); !ok {
+		t.Fatalf("the file is not readable only by its owner: %s", why)
 	}
 }

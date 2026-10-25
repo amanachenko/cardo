@@ -227,6 +227,23 @@ matches the `session.id` on that session's OTel records, and those carry the pse
 processor fails closed (`error_mode: propagate`). A missing, short or non-hex salt refuses OTel
 batches with a log line saying why, rather than storing reversible pseudonyms.
 
+**Service runs are labelled, and are never counted as people**
+([ADR-0036](../adr/0036-service-runs-are-not-people.md),
+[ADR-0054](../adr/0054-both-actor-types-are-people.md)). What shipped:
+
+- `silver_session` carries `actor_kind` (`person` or `service`) and `workflow`, read from the
+  `cardo.actor` and `cardo.workflow` resource attributes; a hook-only or metric-only session
+  defaults to `person`.
+- The label comes from the run, not from the actor type: the Analytics API's two types,
+  `user_actor` and `api_actor`, are both people, so neither can decide this.
+- `gold_fleet_adoption` counts both documented actor types as people, with
+  `countDistinctIf(pseudonym, pseudonym != '')`; `gold_artifact_usage` excludes sessions whose
+  `actor_kind` is `service` from both its fleet and its per-name people counts. The coach does the
+  same ([ADR-0048](../adr/0048-coach-in-the-console.md)).
+- `deploy/ci/github-actions.card.yaml` is the ready-made block: telemetry on, `cardo.actor=service`,
+  `cardo.workflow=${{ github.workflow }}`, and the instruction to run with an API key, never a
+  person's login.
+
 **Repositories ([ADR-0035](../adr/0035-repository-identity-classified.md)).** The bundle asks
 Claude Code for the repository a session works in, and the collector reduces the URL before
 anything is stored. One that matches `CARDO_ORG_REPOS` is kept as `host/owner/name` in
@@ -429,11 +446,14 @@ view, which the old pattern had never read.
   low-entropy and guessable, so a weak salt yields pseudonyms that are trivially reversible by
   anyone holding them — a store that looks pseudonymous and is not is worse than one that does not
   run ([ADR-0006](../adr/0006-pseudonymization.md)).
-- **No `-base-url` flag.** The endpoint is fixed at `api.anthropic.com`, so the binary cannot be
-  pointed at an arbitrary collector (INV-7). Tests override it through an unexported option.
-- **No materialized gold marts, and therefore no trends older than 90 days.** ADR-0016 retains
-  tier-1 rows for 90 days and intends derived aggregates to survive indefinitely. The gold marts
-  are views over bronze, so when bronze expires the aggregates computed from it expire with it,
+- **The poller's endpoint is pinned** at `api.anthropic.com`, so the binary cannot be pointed at an
+  arbitrary collector (INV-7). The one exception is a loopback-only stand-in for verification:
+  `--base-url` accepts `127.0.0.1`, `::1` or `localhost` and refuses anything else
+  ([ADR-0047](../adr/0047-loopback-admin-stand-in.md)). Tests override the endpoint through an
+  unexported option.
+- **No materialized gold marts, and therefore no trends older than 90 days.** ADR-0053 retains
+  tier-1 rows for 90 days by default and intends derived aggregates to survive indefinitely. The
+  gold marts are views over bronze, so when bronze expires the aggregates computed from it expire with it,
   silently, on a background merge. The fix is a cohort-only rollup table written by the poller;
   it is not built ([risks.md](../../risks.md) #10). The collector-path marts have the same limit,
   and no poller runs on that path to write a rollup.

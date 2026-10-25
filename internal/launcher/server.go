@@ -297,6 +297,9 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 			if m.Planned {
 				continue // not built yet; the board says so instead of pretending
 			}
+			if m.OptIn {
+				continue // the person's choice: "install all" never takes it
+			}
 			ids = append(ids, m.ID)
 		}
 	}

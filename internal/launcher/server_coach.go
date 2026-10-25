@@ -16,12 +16,12 @@ import (
 
 // coachView is what the page needs: the report, the eight-week trend, and the window it covers.
 type coachView struct {
-	Pseudonym string       `json:"pseudonym"`
-	From      string       `json:"from"`
-	To        string       `json:"to"`
-	Report    coach.Report `json:"report"`
-	Weekly    []coach.Week `json:"weekly"`
-	Unidentified int      `json:"unidentified"`
+	Pseudonym    string       `json:"pseudonym"`
+	From         string       `json:"from"`
+	To           string       `json:"to"`
+	Report       coach.Report `json:"report"`
+	Weekly       []coach.Week `json:"weekly"`
+	Unidentified int          `json:"unidentified"`
 }
 
 // coachToken signs one pseudonym with the board token. It is deterministic, so a link can be issued
@@ -30,6 +30,24 @@ func coachToken(boardToken, pseudonym string) string {
 	m := hmac.New(sha256.New, []byte(boardToken))
 	m.Write([]byte("coach:" + pseudonym))
 	return hex.EncodeToString(m.Sum(nil))[:32]
+}
+
+// validPseudonym reports whether p is a pseudonym this server could have issued: 64 lowercase hex
+// characters, which is what a salted SHA-256 looks like.
+//
+// The value is interpolated into SQL, so it is checked before it reaches a query. A pseudonym that
+// is not one of ours is a mistake or an attempt, and either way it is refused rather than
+// escaped.
+func validPseudonym(p string) bool {
+	if len(p) != 64 {
+		return false
+	}
+	for _, r := range p {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Server) buildCoachView(ctx context.Context, pseudonymID string, days int) (coachView, error) {
@@ -62,9 +80,9 @@ func (s *Server) buildCoachView(ctx context.Context, pseudonymID string, days in
 	}
 	rep := coach.Report{
 		Pseudonym: pseudonymID, From: from, To: to, PrevFrom: prevFrom,
-		Now: nowW, Prev: prevW, Artifacts: arts, Untried: untried,
+		Now: nowW, Prev: prevW, Artifacts: arts, Untried: coach.Names(untried),
 	}
-	rep.Suggestions = coach.Suggest(nowW, prevW, untried)
+	rep.Suggestions = coach.Suggest(untried)
 	unidentified, _ := coach.Unidentified(ctx, s.opts.url("8124", ""), user, pass, from, to)
 	return coachView{Pseudonym: pseudonymID, From: from.Format("2006-01-02"), To: to.Format("2006-01-02"), Report: rep, Weekly: weekly, Unidentified: unidentified}, nil
 }
@@ -86,10 +104,17 @@ func (s *Server) handleCoach(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "pseudonym is required", http.StatusBadRequest)
 		return
 	}
+	if !validPseudonym(p) {
+		http.Error(w, "that is not a pseudonym", http.StatusBadRequest)
+		return
+	}
 	s.writeCoach(w, r, p)
 }
 
 // handleCoachOpen answers a per-person link: the token must match this pseudonym exactly.
+//
+// The key is checked first, so a wrong key always answers 401 and never says whether the
+// pseudonym exists. The shape is checked next, before the value reaches a query.
 func (s *Server) handleCoachOpen(w http.ResponseWriter, r *http.Request) {
 	p := strings.TrimSpace(r.URL.Query().Get("pseudonym"))
 	k := strings.TrimSpace(r.URL.Query().Get("k"))
@@ -100,6 +125,10 @@ func (s *Server) handleCoachOpen(w http.ResponseWriter, r *http.Request) {
 	want := coachToken(s.token, p)
 	if !hmac.Equal([]byte(k), []byte(want)) {
 		http.Error(w, "This link is no longer valid.", http.StatusUnauthorized)
+		return
+	}
+	if !validPseudonym(p) {
+		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
 	s.writeCoach(w, r, p)
@@ -131,6 +160,10 @@ func (s *Server) handleCoachLink(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.Pseudonym) == "" {
 		http.Error(w, "pseudonym is required", http.StatusBadRequest)
+		return
+	}
+	if !validPseudonym(strings.TrimSpace(body.Pseudonym)) {
+		http.Error(w, "that is not a pseudonym", http.StatusBadRequest)
 		return
 	}
 	u := "/coach/" + body.Pseudonym + "?k=" + coachToken(s.token, body.Pseudonym)

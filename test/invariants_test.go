@@ -91,7 +91,6 @@ func TestINV1_NoTranscriptAccess(t *testing.T) {
 	// a design decision, not a formality (ADR-0050).
 	localImport := map[string]bool{
 		"cmd/cardo/import.go": true,
-		"cmd/cardo/watch.go":  true,
 		// The installer's visible `history` step invokes the same command for the person running it.
 		"internal/launcher/step_history.go": true,
 	}
@@ -346,10 +345,6 @@ func TestINV7_NoUnexpectedOutboundHosts(t *testing.T) {
 		"https://api.anthropic.com": true,
 		// Module identity, never contacted at runtime.
 		"https://github.com": true,
-		// The public price catalogue: one unauthenticated GET per day, no org data sent (ADR-0049).
-		"https://openrouter.ai": true,
-		// The plist DOCTYPE identifier in the launchd unit: a string, never fetched.
-		"http://www.apple.com": true,
 	}
 
 	replacer := strings.NewReplacer(`"`, " ", "`", " ", ",", " ", ")", " ", "(", " ")

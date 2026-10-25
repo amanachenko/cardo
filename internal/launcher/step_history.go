@@ -8,8 +8,9 @@ import (
 	"strings"
 )
 
-// stepHistory imports existing Claude Code transcripts once and installs the watcher that keeps
-// doing it. It reads numbers only; no prompt text is stored. Both halves are idempotent.
+// stepHistory imports existing Claude Code transcripts once, on the person's own machine, when they
+// ask for it. It reads numbers only; no prompt text is stored. Nothing runs in the background: the
+// import is a command, not a service.
 func stepHistory(ctx context.Context, opts Options) (Result, error) {
 	bin, err := os.Executable()
 	if err != nil {
@@ -45,28 +46,25 @@ func stepHistory(ctx context.Context, opts Options) (Result, error) {
 			Fix:   "Run cardo import -write by hand to see the full report.",
 		}, err
 	}
-	written := ""
+	written, skipped := "", ""
 	for _, line := range strings.Split(string(out), "\n") {
 		if strings.HasPrefix(line, "WROTE") {
 			written = strings.TrimSpace(strings.TrimPrefix(line, "WROTE"))
 		}
-	}
-
-	svc := exec.CommandContext(ctx, bin, "watch", "-install", "-dir", dir, "-email", email)
-	svc.Env = env
-	sout, err := svc.CombinedOutput()
-	if err != nil {
-		return Result{
-			ID: "history", Name: "Your history",
-			Cause: strings.TrimSpace(string(sout)) + " " + err.Error(),
-			Fix:   "Install the watcher by hand: cardo watch -install",
-		}, err
+		if strings.HasPrefix(line, "SKIPPED") {
+			skipped = strings.TrimSpace(strings.TrimPrefix(line, "SKIPPED"))
+		}
 	}
 	res := Result{ID: "history", Name: "Your history", OK: true}
-	if written != "" {
-		res.Value = written + " · watcher installed"
-	} else {
-		res.Value = "watcher installed"
+	switch {
+	case written != "" && skipped != "":
+		res.Value = written + " · " + skipped
+	case written != "":
+		res.Value = written
+	case skipped != "":
+		res.Value = skipped
+	default:
+		res.Value = "imported"
 	}
 	return res, nil
 }

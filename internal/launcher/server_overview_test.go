@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/amanachenko/cardo/internal/retention"
 )
 
 // sessionStub answers the two queries the session card makes.
@@ -94,5 +96,37 @@ func TestSettingsWriteOrgArtifactsReachesEnv(t *testing.T) {
 	var view settingsView
 	if err := json.Unmarshal(rec.Body.Bytes(), &view); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// The effective window is 90 days when the organization has chosen none, and the console says so
+// (ADR-0053). A number with no history is a guess.
+func TestRetentionShowsTheDefaultWhenNothingWasChosen(t *testing.T) {
+	note := retentionNote(retention.DefaultDays, true)
+	if !strings.Contains(note, "90 (default)") {
+		t.Errorf("note = %q, want it to say 90 (default)", note)
+	}
+	if !strings.Contains(note, "before and after a tool is rolled out") {
+		t.Errorf("note = %q, want it to explain why 90 days", note)
+	}
+}
+
+// A window above the default keeps rows tied to a code name longer than the default says, and the
+// engineers have to be told.
+func TestRetentionAboveTheDefaultSaysToTellEngineers(t *testing.T) {
+	note := retentionNote(180, false)
+	if !strings.Contains(note, "tell engineers") {
+		t.Errorf("note = %q, want it to say the engineers have to be told", note)
+	}
+	if !strings.Contains(note, "above the default of 90") {
+		t.Errorf("note = %q, want it to name the default", note)
+	}
+}
+
+// Zero keeps everything, and says that plainly: it is the choice that keeps personal data longest.
+func TestRetentionZeroSaysWhatItMeans(t *testing.T) {
+	note := retentionNote(0, false)
+	if !strings.Contains(note, "TTL is taken off") {
+		t.Errorf("note = %q, want it to say the TTL is taken off", note)
 	}
 }

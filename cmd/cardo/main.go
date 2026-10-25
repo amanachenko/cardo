@@ -203,8 +203,6 @@ func run(args []string) error {
 		return runPseudonym(args[1:])
 	case "import":
 		return runImport(args[1:])
-	case "watch":
-		return runWatch(args[1:])
 	case "coach":
 		return runCoach(args[1:])
 	case "poll":
@@ -355,7 +353,9 @@ func pollLoop(ctx context.Context, runner *poll.Runner, st store.Store, log *slo
 		if runErr != nil {
 			log.Error("poll failed; will retry", "error", runErr)
 		}
-		if days := retentionFromEnv(); days > 0 && runErr == nil {
+		// Zero means "keep everything", and that is a choice too: the pass takes the tables' TTL off
+		// so nothing expires on its own (ADR-0053).
+		if days := retentionFromEnv(); days >= 0 && runErr == nil {
 			if rep, err := retention.Prune(ctx, os.Getenv("CARDO_CLICKHOUSE_URL"), envOr("CARDO_CLICKHOUSE_USER", "default"), os.Getenv("CARDO_CLICKHOUSE_PASSWORD"), days, false); err != nil {
 				log.Warn("retention pass failed", "error", err)
 			} else {

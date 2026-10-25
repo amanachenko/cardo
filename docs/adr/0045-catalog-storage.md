@@ -3,7 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-10-18
 **Depends on:** ADR-0024 (managed settings bundle), ADR-0040 (spread is a vote only for what teams
-chose), ADR-0043 (the board is the operator's surface).
+chose), ADR-0044 (the board is the operator's surface).
 
 ## Context
 
@@ -31,8 +31,12 @@ what the views label "org artifact" is what was actually rolled out.
   status, content_hash, path, note, created_at, approved_at`. Current version = `argMax(version)`.
 - `cardo.settings_changes` is the audit line for every write: action, object, version, before/after
   hash, note. It is what the console shows under "Recent changes" and what an auditor reads.
-- Status is `draft | approved | retired`. **Only an approved version is what the views may call an
-  organization artifact**; drafts exist for the operator and change nothing downstream.
+- Status is `draft | approved | retired`. **An approved version is what the operator may point the
+  views at**, and drafts exist for the operator and change nothing downstream. What the views
+  actually call an organization's artifact is decided separately, by the operator's pattern in
+  `CARDO_ORG_ARTIFACTS` (ADR-0029): the catalog records what was rolled out, and the views decide
+  what to label. The two are not yet wired together, so an approved catalog version does not by
+  itself make a name appear as the organization's.
 - Validation happens before anything is written: kind allow-list, slug `^[a-z0-9][a-z0-9-]{1,63}$`,
   256 KiB ceiling, per-kind structure (frontmatter, JSON shape, reference headings), and a secret
   scan that refuses obvious keys. A rejected upload writes no file and no row.

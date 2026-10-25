@@ -27,6 +27,7 @@ type Meta struct {
 	Pilot    bool
 	Planned  bool
 	Optional bool   // diagnostics: shown and runnable, never blocks completion
+	OptIn    bool   // the person's choice: off until asked for, and never part of "install all"
 	Verify   bool   // the proof: can only pass after real work, and gates the "verified" claim
 	Input    string // when set, the board asks for one value before the step can run
 }
@@ -141,11 +142,11 @@ var Steps = []Meta{
 		Action: "Install",
 	},
 	{
-		ID: "history", Group: "Data", Name: "Your history", Cmd: "cardo import -write && cardo watch -install",
-		Title: "One-time import",
+		ID: "history", Group: "Data", Name: "Your history", Cmd: "cardo import -write", OptIn: true,
+		Title: "One-time import, if you ask for it",
 		Body: []string{
-			"Imports the Claude Code sessions already on this machine, then installs a watcher that keeps importing new ones. Only counts, tokens and timing are stored; prompt text is measured and discarded.",
-			"The import is idempotent: running the step again replaces the same sessions instead of duplicating them.",
+			"Imports the Claude Code sessions already on this machine, once. Only counts, tokens and timing are stored; prompt text is measured and discarded. Nothing runs in the background afterwards: no watcher, no service, nothing left behind.",
+			"It is off until you tick it, because it reads files outside the stack. The import is idempotent: running it again replaces the same sessions instead of duplicating them, and sessions that already arrived through live telemetry are skipped, so nothing is counted twice.",
 		},
 		Action: "Import",
 	},

@@ -107,7 +107,7 @@ services:
         condition: service_completed_successfully
     environment:
       CARDO_ADMIN_KEY: ${CARDO_ADMIN_KEY:-}
-      CARDO_RETENTION_DAYS: ${CARDO_RETENTION_DAYS:-0}
+      CARDO_RETENTION_DAYS: ${CARDO_RETENTION_DAYS:-90}
       CARDO_SALT: ${CARDO_SALT}
       CARDO_SALT_VERSION: ${CARDO_SALT_VERSION:-v1}
       CARDO_CLICKHOUSE_URL: http://clickhouse:8123

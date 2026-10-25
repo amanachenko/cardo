@@ -32,6 +32,14 @@ type Artifact struct {
 	Loads int    `json:"loads"`
 }
 
+// PeerArtifact is something the fleet has shown and this person has not used yet, with the number
+// of people who use it. The count is part of the suggestion: "11 people here use /review" is
+// evidence, and a bare name is not (ADR-0041).
+type PeerArtifact struct {
+	Name   string `json:"name"`
+	People int    `json:"people"`
+}
+
 // Report is what the coach shows. Suggestions are sentences with a fix, never a grade.
 type Report struct {
 	Pseudonym   string     `json:"pseudonym"`
@@ -44,7 +52,19 @@ type Report struct {
 	Suggestions []string   `json:"suggestions"`
 }
 
+// Names returns the artifact names, for the report's flat list.
+func Names(arts []PeerArtifact) []string {
+	out := make([]string, 0, len(arts))
+	for _, a := range arts {
+		out = append(out, a.Name)
+	}
+	return out
+}
+
 // Query reads the figures for one pseudonym. from/to are inclusive days.
+//
+// Service runs are left out: ADR-0036 keeps them out of anything about people, and the coach is
+// about one person (ADR-0032).
 func Query(ctx context.Context, endpoint, user, pass, pseudonym string, from, to time.Time) (Window, []Artifact, error) {
 	var w Window
 	q := func(sql string) (string, error) {
@@ -68,7 +88,8 @@ func Query(ctx context.Context, endpoint, user, pass, pseudonym string, from, to
 
 	sql := fmt.Sprintf(`SELECT uniqExact(session_id), count(), round(sum(cost_usd), 4), sum(output_tokens),
 		toInt64(round(ifNotFinite(quantile(0.5)(peak_context_tokens), 0))) FROM cardo.silver_turn
-		WHERE pseudonym = '%s' AND day BETWEEN toDate('%s') AND toDate('%s') FORMAT TSV`,
+		WHERE pseudonym = '%s' AND day BETWEEN toDate('%s') AND toDate('%s')
+			AND session_id IN (SELECT session_id FROM cardo.silver_session WHERE actor_kind != 'service') FORMAT TSV`,
 		pseudonym, from.Format("2006-01-02"), to.Format("2006-01-02"))
 	row, err := q(sql)
 	if err != nil {
@@ -81,7 +102,8 @@ func Query(ctx context.Context, endpoint, user, pass, pseudonym string, from, to
 	w.CostUSD = cost
 
 	sql = fmt.Sprintf(`SELECT countIf(ran = 1 AND succeeded = 0), countIf(ran = 1), countIf(is_edit = 1)
-		FROM cardo.silver_tool_call WHERE pseudonym = '%s' AND day BETWEEN toDate('%s') AND toDate('%s') FORMAT TSV`,
+		FROM cardo.silver_tool_call WHERE pseudonym = '%s' AND day BETWEEN toDate('%s') AND toDate('%s')
+			AND session_id IN (SELECT session_id FROM cardo.silver_session WHERE actor_kind != 'service') FORMAT TSV`,
 		pseudonym, from.Format("2006-01-02"), to.Format("2006-01-02"))
 	row, err = q(sql)
 	if err != nil {
@@ -110,50 +132,42 @@ func Query(ctx context.Context, endpoint, user, pass, pseudonym string, from, to
 	return w, arts, nil
 }
 
-// Suggest turns a comparison into at most three sentences, each with a fix. It is pure so the rules
-// can be tested without a database.
-func Suggest(now, prev Window, untried []string) []string {
-	var out []string
-	if now.ToolCalls > 0 {
-		rate := float64(now.FailedTools) / float64(now.ToolCalls)
-		if rate >= 0.2 && now.FailedTools >= 5 {
-			out = append(out, fmt.Sprintf("About one in five tool calls failed (%d of %d). Most failures are arguments or paths the tool refused; retrying the same call rarely helps.", now.FailedTools, now.ToolCalls))
-		}
+// Suggest returns at most one suggestion, and it names only something the fleet has shown
+// (ADR-0041). There is no catalog of patterns and tools, and no fixed tip: "compact earlier" and
+// "one in five tool calls failed" were rules written by us, and the agreed rule is that the coach
+// speaks about what colleagues have adopted.
+//
+// The suggestion carries the number of people who use it, because that count is the evidence.
+func Suggest(untried []PeerArtifact) []string {
+	if len(untried) == 0 {
+		return nil
 	}
-	if prev.PeakContext > 0 && now.PeakContext > prev.PeakContext*5/4 {
-		out = append(out, fmt.Sprintf("Your peak context grew from %d to %d tokens. Compact or split the task earlier; long sessions cost more per accepted edit.", prev.PeakContext, now.PeakContext))
-	}
-	if prev.Edits > 0 && now.Edits > 0 && now.CostUSD > 0 && prev.CostUSD > 0 {
-		before := prev.CostUSD / float64(prev.Edits)
-		after := now.CostUSD / float64(now.Edits)
-		if after > before*1.3 {
-			out = append(out, fmt.Sprintf("Cost per accepted edit rose from $%.2f to $%.2f. Check whether the extra turns were exploration or repeated context.", before, after))
-		}
-	}
-	for _, name := range untried {
-		out = append(out, fmt.Sprintf("Peers use %s and you have not tried it yet. Its page shows what they do with it.", name))
-		if len(out) == 3 {
-			break
-		}
-	}
-	if len(out) > 3 {
-		out = out[:3]
-	}
-	return out
+	a := untried[0]
+	return []string{fmt.Sprintf("%d people here use %s, and you haven't tried it yet.", a.People, a.Name)}
 }
 
-// Untried lists artifacts at least five peers used that this pseudonym did not. The floor is the
-// same as everywhere else: five people, never fewer.
-func Untried(ctx context.Context, endpoint, user, pass, pseudonym string, from, to time.Time) ([]string, error) {
+// Untried lists artifacts the fleet has shown and this pseudonym has not used, with the number of
+// people who use each.
+//
+// The floor is the organization's minimum group size, read from cardo.settings_effective, not a
+// literal: an organization may raise it (ADR-0029), and the coach follows it.
+//
+// Service runs are left out, and so are Claude Code's own built-ins: neither identifies a person,
+// and neither is something an engineer can be told to adopt (ADR-0036, ADR-0041).
+func Untried(ctx context.Context, endpoint, user, pass, pseudonym string, from, to time.Time) ([]PeerArtifact, error) {
 	sql := fmt.Sprintf(`WITH fleet AS (
-			SELECT name FROM cardo.silver_artifact_load
+			SELECT name, uniqExact(pseudonym) AS people FROM cardo.silver_artifact_load
 			WHERE day BETWEEN toDate('%s') AND toDate('%s') AND pseudonym IS NOT NULL
-			GROUP BY name HAVING uniqExact(pseudonym) >= 5
+				AND is_builtin = 0
+				AND session_id IN (SELECT session_id FROM cardo.silver_session WHERE actor_kind != 'service')
+			GROUP BY name
+			HAVING people >= (SELECT min_group_size FROM cardo.settings_effective)
 		), mine AS (
 			SELECT DISTINCT name FROM cardo.silver_artifact_load
 			WHERE pseudonym = '%s' AND day BETWEEN toDate('%s') AND toDate('%s')
 		)
-		SELECT name FROM fleet WHERE name NOT IN (SELECT name FROM mine) ORDER BY name LIMIT 3 FORMAT TSV`,
+		SELECT name, people FROM fleet WHERE name NOT IN (SELECT name FROM mine)
+		ORDER BY people DESC, name ASC LIMIT 3 FORMAT TSV`,
 		from.Format("2006-01-02"), to.Format("2006-01-02"),
 		pseudonym, from.Format("2006-01-02"), to.Format("2006-01-02"))
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(sql))
@@ -171,13 +185,18 @@ func Untried(ctx context.Context, endpoint, user, pass, pseudonym string, from, 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("%s: %s", resp.Status, strings.TrimSpace(string(body)))
 	}
-	var names []string
+	var out []PeerArtifact
 	for _, line := range strings.Split(strings.TrimSpace(string(body)), "\n") {
-		if line != "" {
-			names = append(names, line)
+		if strings.TrimSpace(line) == "" {
+			continue
 		}
+		var a PeerArtifact
+		if _, err := fmt.Sscanf(line, "%s	%d", &a.Name, &a.People); err != nil {
+			continue
+		}
+		out = append(out, a)
 	}
-	return names, nil
+	return out, nil
 }
 
 // Unidentified counts sessions in the window that have no pseudonym. They exist, but no view can
