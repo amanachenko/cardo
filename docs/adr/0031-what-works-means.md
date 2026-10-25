@@ -1,6 +1,6 @@
 # ADR-0031 — What "works" means: spread, then efficiency, then delivery
 
-**Status:** Accepted
+**Status:** Superseded by ADR-0056
 **Date:** 2026-09-25
 **Edited:** 2026-10-09, in place, to word it for any organization. The decision is unchanged.
 **Evidence:** `2026-09-25-stakeholder-field-notes.md` (auto mode; no commit identifier on any
