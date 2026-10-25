@@ -175,7 +175,8 @@ what a salted SHA-256 looks like. A value that is not one is refused rather than
 - **Cost** is Anthropic's published list price, not an invoice (§13, gap 1).
 - **Peak context** is the largest `input + cache read + cache create` seen in one request.
 - **Tool calls** are only available for live-telemetry sessions. Imported transcripts carry no tool
-  decisions or durations, so the imported path reports `0` (§13, gap 2).
+  decisions or durations, so a window that holds imported history and nothing else says **not
+  observed** rather than `0 failed` — the figures were never looked for (§13, gap 2).
 
 ### 4.3 Pseudonyms
 
@@ -474,7 +475,8 @@ counting `silver_session` rows with `session_id LIKE 'demo-%'` (expect 0).
 1. **Cost is Anthropic's published list price, not the invoice.** Discounts, credits and batch pricing
    are not modelled.
 2. **Imported history has no tool calls.** Transcripts contain no decisions or durations; only live
-   telemetry does.
+   telemetry does. The coach now says "not observed" for such a window rather than `0 failed`, so a
+   zero is never reported where nothing was looked at.
 3. Three of the 84 imported sessions have no prompts and therefore no turns (81 appear in
    `silver_turn`).
 4. **The import sees one machine.** Cross-machine history needs export/import (roadmap, Step 3,
