@@ -75,6 +75,11 @@ up:
 
 Nothing is taken today.
 
+**The next batch, in detail.** The items below say what each one is in a sentence. What each one
+needs, what proves it open, and what closing it looks like are in
+**[docs/next-batch-spec.md](next-batch-spec.md)**, and the work is split into pull requests in
+**[docs/next-batch-tasks.md](next-batch-tasks.md)**.
+
 ### Step 1: run it safely
 
 Two decisions are already possible with what is built: chasing the machines still on an old version

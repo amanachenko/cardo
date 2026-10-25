@@ -99,7 +99,10 @@ list of what it will never do is in [where Cardo is going](docs/vision.md#never)
 
 The overview for leadership, security and engineers: **[docs/overview.md](docs/overview.md)**. What
 Cardo is for, where it is heading, and how we choose what to build next:
-**[docs/vision.md](docs/vision.md)**. The order of work: **[docs/roadmap.md](docs/roadmap.md)**.
+**[docs/vision.md](docs/vision.md)**. The order of work: **[docs/roadmap.md](docs/roadmap.md)**. The
+next batch of work, specified and split into tasks:
+**[docs/next-batch-spec.md](docs/next-batch-spec.md)** and
+**[docs/next-batch-tasks.md](docs/next-batch-tasks.md)**.
 
 ---
 
