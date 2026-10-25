@@ -50,7 +50,7 @@ The board is a console, not only an installer: **Overview** (is everything fresh
 **Catalog** (versioned enablement artifacts with a diff before approval), **Teams** (a hashed directory,
 coverage, floors) and **Settings** (path, poller, floor, org artifacts). The installer itself lives in
 Settings → Installation → *Open install and repair*, and on the Overview next-action when a check fails.
-How each surface works, and how to run the coach, the transcript importer and the watcher:
+How each surface works, and how to run the coach and the one-time transcript importer:
 **[docs/console-coach-history.md](docs/console-coach-history.md)**.
 
 `cardo up` runs the same installation without the board, `cardo check` re-runs the checks read-only,
@@ -361,11 +361,13 @@ Apache-2.0, copyright The Cardo Authors ([NOTICE](NOTICE)). No CLA. See
 
 `cardo coach you@example.com` prints your own figures for the last 28 days against the 28 before
 them: sessions, prompts, cost, peak context, failed tool calls, and the artifacts you loaded. It
-ends with at most three suggestions, each naming a fix. There is no rank, no percentile and no
+ends with at most one suggestion, drawn only from what colleagues have shown, and it names the
+number of people behind it. There is no rank, no percentile and no
 single score, and no other person's rows are read. The console serves the same page at `#/coach`
 (operator preview) and issues a per-person link you can hand out; the link carries one pseudonym and
-nothing else. `-days` changes the window, `-json` prints the
-report for a page or a test. Importing your existing transcripts, keeping them current with the
-watcher, and the link's security model are covered in
+nothing else, and it opens only on the machine that runs the console. `-days` changes the window,
+`-json` prints the
+report for a page or a test. Importing your existing transcripts with a one-time command, and the
+link's security model, are covered in
 [docs/console-coach-history.md](docs/console-coach-history.md).
 

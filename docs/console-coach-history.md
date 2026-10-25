@@ -50,7 +50,7 @@ The board is loopback-only. The token is cached per port with mode 0600:
 
 Open `http://127.0.0.1:8484/?t=<token>`. The token becomes an HTTP-only cookie, so the address bar
 can be cleaned afterwards. Rotating the token (delete the file and restart) invalidates every
-console session **and every coach link** — see §5.3.
+console session **and every coach link** — see §4.4.
 
 `cardo ui` flags: `-dir` (stack directory, default `deploy/compose`), `-port` (default `8484`),
 `-no-open` (print the URL instead of opening a browser).
@@ -83,7 +83,7 @@ version. Fields:
 | Retention window | Days of raw rows to keep. 90 is the default and the organization may change it; `0` keeps everything and takes the TTL off. Changes the bronze TTL as well. |
 
 Settings → Installation → *Open install and repair* is the old installer. It still owns the required
-steps, including the new `history` step (§6.3).
+steps, including the new `history` step (§6).
 
 ### 3.3 Catalog
 
@@ -114,7 +114,7 @@ The console page is the operator preview: type an email, get the same report the
 plus a "copy link" action. Hero figures, a weekly sparkline, and at most one suggestion. The page
 reads one pseudonym at a time and has no cross-person view.
 
-CLI details, the link format and the privacy rules are in §5.
+CLI details, the link format and the privacy rules are in §4.
 
 ---
 
@@ -153,10 +153,10 @@ what a salted SHA-256 looks like. A value that is not one is refused rather than
 
 - **Sessions** are distinct session ids with at least one prompt; three of the owner's transcripts
   had none and therefore produce no turn.
-- **Cost** is Anthropic's published list price, not an invoice (§8, gap 1).
+- **Cost** is Anthropic's published list price, not an invoice (§13, gap 1).
 - **Peak context** is the largest `input + cache read + cache create` seen in one request.
 - **Tool calls** are only available for live-telemetry sessions. Imported transcripts carry no tool
-  decisions or durations, so the imported path reports `0` (§8, gap 2).
+  decisions or durations, so the imported path reports `0` (§13, gap 2).
 
 ### 4.3 Pseudonyms
 
@@ -179,6 +179,8 @@ k = HMAC-SHA256(boardToken, "coach:" + pseudonym), first 32 hex characters
 
 Properties worth knowing before handing one out:
 
+- **This is an own-laptop setup only.** A link opens on the machine that runs the console. How
+  engineers on a team reach their page is still open (ADR-0048).
 - Nothing is stored: the link is a pure function of the board token and the pseudonym.
 - The link opens **only that person's report**. It cannot reach the console, other people, or any
   API.
@@ -455,9 +457,9 @@ counting `silver_session` rows with `session_id LIKE 'demo-%'` (expect 0).
    absent).
 5. **The Admin API has never been called with a live key.** Values are documentation-backed and
    guarded by `ACTOR TYPES`, but the first real poll is still the proof.
-7. `pilot_mode` changes which installer steps appear; it does not change stack composition.
-8. **Coach link revocation is all-or-nothing** (rotate the board token).
-9. The team path still needs `cardo connect --project` per repository; user-level instrumentation is
+6. `pilot_mode` changes which installer steps appear; it does not change stack composition.
+7. **Coach link revocation is all-or-nothing** (rotate the board token).
+8. The team path still needs `cardo connect --project` per repository; user-level instrumentation is
    the planned fix and needs explicit consent because it edits `~/.claude/settings.json` for every
    project.
 
@@ -490,7 +492,10 @@ To reproduce the read-only half at any time: `cardo check`, `cardo import` (prev
 
 - **ADRs**: `docs/adr/0044-console-surface.md`, `0045-catalog-storage.md`,
   `0046-hashed-team-directory.md`, `0047-loopback-admin-stand-in.md`,
-  `0048-coach-in-the-console.md`; `0036-service-runs-are-not-people.md` corrected and marked built.
+  `0048-coach-in-the-console.md`, `0050-local-transcript-import.md`,
+  `0053-retention-default-and-organization-choice.md`,
+  `0054-both-actor-types-are-people.md`. `0036-service-runs-are-not-people.md` is unchanged; the
+  reasoning that changed is in ADR-0054, and what shipped is in `docs/design/architecture.md`.
 - **Console**: `internal/launcher/server.go`, `server_overview.go`, `server_catalog.go`,
   `server_teams.go`, `server_coach.go`, `step_history.go`, `readback.go`,
   `web/{index.html,app.js,cardo-ui.css}`.

@@ -157,8 +157,9 @@ missing is an organization running Cardo safely, so this comes first.
   *Waits for* the code-name command. **Built:** `cardo coach <email>` prints the figures, and the
   console serves the same data as a page at `#/coach` (operator preview) and
   `/coach/<pseudonym>?k=…` (per-person link), with an eight-week trend
-  ([ADR-0048](adr/0048-coach-in-the-console.md)). The per-person link works only on the machine
-  that runs the console: how engineers on a team reach their page is still open.
+  ([ADR-0048](adr/0048-coach-in-the-console.md)). The per-person link is an **own-laptop setup
+  only**: it opens on the machine that runs the console, and how engineers on a team reach their
+  page is still open.
 - **Its own dashboard server** ([the coach by shared link](adr/0032-engineer-coach-by-shared-link.md)).
   A second Grafana for the private pages, apart from the leaders' one. *Waits for* dashboard logins
   that cannot read anyone's personal rows. **Built differently:** the coach is a page in the

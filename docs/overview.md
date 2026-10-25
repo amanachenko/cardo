@@ -67,16 +67,17 @@ what the console shows, and each engineer sees their own position first.
 
 ### Engineers
 
-- **A private coach page** *(planned)*. It shows your own figures, and suggestions drawn from
-  what people around you have adopted. For example:
-  - "your conversations were squeezed for length twice as often this month as last month";
+- **A private coach page**. It shows your own figures, and at most one suggestion, drawn from what
+  people around you have adopted. For example:
   - "11 people here use `/review`, and you haven't tried it yet".
 
   You are compared only with your own past. There is no score and no ranking.
 - **Nobody else sees your page.** During a pilot, the person running the pilot can open it;
   volunteers are told this.
 - **Your manager sees nothing about you** that Anthropic's console doesn't already show them.
-- **Never collected:** your session transcripts, prompts, code, file paths or command arguments.
+- **Never collected:** your prompts, code, file paths or command arguments. Session transcripts are
+  never read by anything that runs on its own; the one exception is the import command you run
+  yourself, which keeps counts and throws the text away (ADR-0050).
   Your email address is replaced by a pseudonym before anything is stored.
 - **The entire installation is a readable settings file.** There is no agent on your machine, and
   the settings file is published so you can check it.
@@ -142,7 +143,7 @@ what the console shows, and each engineer sees their own position first.
 | Reading Anthropic's usage data | **Built**; not yet run against a live organization |
 | Service runs (CI, agents) are labelled and kept out of people counts | **Built**: `actor_kind`/`workflow`, filters in the gold views, GitHub Actions block |
 | An operator console: overview, versioned artifact catalog, team directory, settings | **Built**: four surfaces; approval and rollback; hashed directory with a floor |
-| Coach pages, efficiency comparisons, repository classification, teams from your directory, the board report | **Planned** |
+| Coach pages, efficiency comparisons, repository classification, teams from your directory, the board report | **Built** for the coach page (`cardo coach`, the console page and a per-person link, own-laptop setup only); the rest **Planned** |
 | Evidence report, coverage, SIEM events | **Planned** |
 | Named cost view, pull-request outcomes, other AI tools | **When an organization asks** |
 
