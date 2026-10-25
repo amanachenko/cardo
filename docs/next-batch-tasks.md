@@ -30,7 +30,7 @@ pull request first, so two people do not build the same thing.
 | T7 | The catalog and the views, joined | item 6 | needs a decision | medium |
 | T8 | Policy evidence | item 7 | partly blocked | large |
 | T9 | Team coverage, in the views | item 8 | yes | medium | done 2026-10-25 |
-| T10 | The gaps in the guide | item 10 | yes | small |
+| T10 | The gaps in the guide | item 10 | yes | small | partly done 2026-10-25 |
 | T11 | Aggregates that outlive their rows | item 11 | yes | large |
 
 T9 can move up: it is independent of everything except the group floor, which is already built.
@@ -396,23 +396,26 @@ a live server), `internal/launcher/teams_test.go`, `docs/design/data-model.md`.
 
 ## T10 — The gaps in the guide
 
-**Closes:** item 10.
+**Closes:** item 10. **Partly done on 2026-10-25**: the two code fixes are in; gaps 4 and 8 are
+still open, and each needs a decision.
 
-**Touches:** `internal/coach/coach.go`, `internal/launcher/web/app.js`,
-`docs/console-coach-history.md` §13.
+**What the work turned out to be.** The `Blocked` field had no home to go to. The coach page renders
+Sessions, Prompts, Cost and Peak context, and no page ever showed it — so there was nothing to
+compute it for, and the field was deleted rather than invented into existence. The failure count
+needed the opposite: it was already shown, and it was showing a number where there was nothing to
+look at. Imported rows carry `cohort='imported'` from the moment they are written, so the window
+knows whether it holds live telemetry at all.
+
+**Touches:** `internal/coach/coach.go` (the field and the observation), `cmd/cardo/coach.go` (what
+the CLI prints), `internal/coach/observed_test.go`, `docs/console-coach-history.md` §4.2 and §13.
 
 **Do this:**
 
-- **Fix the `Blocked` field.** It is declared (`internal/coach/coach.go:23`) and nothing in the
-  repository ever writes it, and the coach page does not show it — the page renders Sessions,
-  Prompts, Cost and Peak context (`internal/launcher/web/app.js:1488`). Either compute the signal
-  and give it a home on the page, or delete the field. Do not leave a field that looks like a
-  measurement and is not one.
-- **Say "not observed" instead of "zero failures" for imported sessions.** `FailedTools` counts
-  `countIf(ran = 1 AND succeeded = 0)` (`internal/coach/coach.go:104`), and the import path carries
-  no tool decisions — so an imported session's failure count would be zero, which reads as "no
-  failures" rather than "not looked at". The guide's gap 2 says this for tool calls; the same caveat
-  belongs on the failure count, and the field needs a home on the page before it is shown.
+- ~~**Fix the `Blocked` field.**~~ **Done:** deleted. It was declared on the window and no query
+  ever wrote it, and no page ever showed it — a number that looks like a measurement and is not one.
+- ~~**Say "not observed" instead of "zero failures" for imported sessions.**~~ **Done:** the window
+  carries `ToolsObserved`, and the coach prints "not observed" for a window with no live sessions.
+  An imported transcript carries no tool decisions, so the figures were never looked for.
 - **Gap 4 — the import sees one machine.** Export, import and removal, with their own record: the
   file its owner can read before sending, with no repository names and no organization id, and the
   import replacing by session because the raw tables have no key, so a second import does not double

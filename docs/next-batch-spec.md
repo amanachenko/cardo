@@ -35,7 +35,7 @@ The items are grouped by what unblocks the most work first, not by the order the
 | 7 | Policy evidence | code | no | — | open |
 | 8 | Team coverage, in the views | code | no | — | built 2026-10-25 |
 | 9 | The board report | code | no | 3, and an organization | open |
-| 10 | The gaps in the guide | code + documents | no | — | open |
+| 10 | The gaps in the guide | code + documents | no | — | partly built 2026-10-25 |
 | 11 | Aggregates that outlive their rows | code | no | — | open |
 
 **The largest is 3.** It is the only one whose output is a set of numbers people will argue about,
@@ -476,20 +476,19 @@ more are facts the guide has not noticed.
 | 7. Coach link revocation is all-or-nothing | a fact | closed as a fact; rotating the token revokes every link |
 | 8. The team path needs `cardo connect --project` per repository | work | open — user-level instrumentation, which needs consent because it edits `~/.claude/settings.json` for every project |
 
-Plus two the guide does not list but the code has:
+Plus two the guide does not list but the code had:
 
-- **`Blocked` is declared and never filled.** The coach's `Window` struct has the field
-  (`internal/coach/coach.go:23`) and nothing in the repository ever writes it — the two queries read
-  turns and tool calls, and `git grep Blocked` finds the field, the board's installer text
-  (`internal/launcher/web/app.js:437`, which is about a blocked install step, not about this field)
-  and a design mock. The coach page shows Sessions, Prompts, Cost and Peak context
-  (`internal/launcher/web/app.js:1488`), so the field is invisible today. Either the signal is
-  computed and shown, or the field goes.
-- **`FailedTools` counts a tool that ran and failed** — `countIf(ran = 1 AND succeeded = 0)`
-  (`internal/coach/coach.go:104`) — but the coach page does not render it either, and the import
-  path carries no tool decisions, so an imported session's failure count would be zero. That reads
-  as "no failures" rather than "not observed". The guide's gap 2 says this for tool calls; the same
-  caveat belongs on the failure count, and the field needs a home on the page before it is shown.
+- **`Blocked` was declared and never filled.** The coach's `Window` struct had the field and nothing
+  in the repository ever wrote it — the two queries read turns and tool calls, and `git grep Blocked`
+  found the field, the board's installer text (`internal/launcher/web/app.js:437`, which is about a
+  blocked install step, not about this field) and a design mock. The coach page shows Sessions,
+  Prompts, Cost and Peak context, so the field was invisible today. **Built on 2026-10-25:** deleted.
+  It had no home to go to, and inventing a measurement nobody asked for is not the fix.
+- **`FailedTools` counted a tool that ran and failed** — `countIf(ran = 1 AND succeeded = 0)` — but
+  the import path carries no tool decisions, so an imported session's failure count was zero. That
+  read as "no failures" rather than "not observed". **Built on 2026-10-25:** the window carries
+  `ToolsObserved`, and the coach says "not observed" for a window with no live telemetry. Imported
+  rows are marked `cohort='imported'` when they are written, which is what tells the two apart.
 
 **What closing it looks like.** Gap 4 gets its own record and its own implementation — export, import
 and removal, with the file its owner can read before sending, and the import replacing by session
