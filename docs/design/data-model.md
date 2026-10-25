@@ -145,6 +145,12 @@ size ([ADR-0029](../adr/0029-minimum-group-size.md)).
 | `gold_instructions_versions` | week, file family, version | Which version of each of the organization's instructions files people load, and how many are on a stale one |
 | `gold_friction_daily` | day, cohort | The friction index's three components: edit rejection rate, permission waits and compactions per session, each beside its volume ([ADR-0008](../adr/0008-outcome-variable.md)) |
 | `gold_context_daily` | day, cohort | The context each session starts from, the context each prompt grows to, spend, and model switches' measured cost beside Claude Code's estimate |
+| `gold_team_reach` | week, team, artifact | How far each artifact reached inside each team, against the whole organization ([ADR-0030](../adr/0030-stakeholders-and-questions.md)). Reach, never a ranking: the organization is the denominator for every team alike |
+
+A team below the minimum group size is not rendered at all, and its rows are not counted as
+`other` — "1 person" is a person ([ADR-0046](../adr/0046-hashed-team-directory.md)). The join
+that puts a session in its team lives in the silver layer, `silver_team_artifact_use`, because a
+gold view may count a pseudonym but never compare one (INV-3).
 
 A cost-and-capacity mart with the model mix and effort distribution by cohort is not built.
 `gold_context_daily` has spend by cohort; the Admin API path has the model mix.

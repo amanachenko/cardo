@@ -29,7 +29,7 @@ pull request first, so two people do not build the same thing.
 | T6 | Repository identity, stored and read | item 5 | yes | medium |
 | T7 | The catalog and the views, joined | item 6 | needs a decision | medium |
 | T8 | Policy evidence | item 7 | partly blocked | large |
-| T9 | Team coverage, in the views | item 8 | yes | medium |
+| T9 | Team coverage, in the views | item 8 | yes | medium | done 2026-10-25 |
 | T10 | The gaps in the guide | item 10 | yes | small |
 | T11 | Aggregates that outlive their rows | item 11 | yes | large |
 
@@ -349,10 +349,23 @@ as the whole. The SIEM half comes later, once the report exists.
 
 ## T9 — Team coverage, in the views
 
-**Closes:** item 8.
+**Closes:** item 8. **Done on 2026-10-25**, except the dates question, which is a decision and is
+still open.
 
-**Touches:** a new numbered migration in `sql/clickhouse/`, `cmd/cardo/main.go` (a new command),
-`internal/store/clickhouse/views_test.go`, `docs/design/data-model.md`.
+**What the work turned out to be.** Two things the task did not foresee.
+
+- **The join cannot live in the gold view.** Putting a session in its team needs the pseudonym on
+  both sides, and INV-3 forbids a gold view from comparing one — a per-person row is a ranking with
+  one rename to go. The join therefore lives in the silver layer, `silver_team_artifact_use`, and
+  the gold view counts and publishes. The view a dashboard reads still carries no pseudonym.
+- **The console and the CLI were writing the mapping through two different implementations.** The
+  console had its own; the command had none. Both now go through `launcher.WriteTeams`, so the two
+  cannot differ in what they store.
+
+**Touches:** a new numbered migration in `sql/clickhouse/` (`014_team_reach.sql`),
+`internal/launcher/teams.go` (the shared write), `internal/launcher/server_teams.go` (now uses it),
+`cmd/cardo/teams.go` (the command), `internal/store/clickhouse/team_reach_test.go` (the view against
+a live server), `internal/launcher/teams_test.go`, `docs/design/data-model.md`.
 
 **Do this:**
 
@@ -361,10 +374,13 @@ as the whole. The SIEM half comes later, once the report exists.
   table.
 - A `cardo teams` command: it reads the directory, hashes it, reports the coverage and the group
   floor, and writes nothing unless asked. The roadmap says this check remains.
-- Decide the directory's format, including whether join and leave dates are stored.
-  [ADR-0034](adr/0034-identity-in-pilots.md) asks for the dates; `settings_teams` has no date column
-  today (`sql/clickhouse/011_teams.sql:18`). This decision is part of T7's kind of work — a
-  record, not a guess.
+- **Still open — a decision, not code:** whether join and leave dates are stored.
+  [ADR-0034](adr/0034-identity-in-pilots.md) asks for the dates, so that last quarter's numbers
+  stay on last quarter's team; [ADR-0046](adr/0046-hashed-team-directory.md) settled the file as
+  `email,team` without them, and `settings_teams` has no date column today
+  (`sql/clickhouse/011_teams.sql:18`). Two accepted records disagree, so this needs a record of its
+  own. **The view reads the current directory**, which means a person's history is attributed to the
+  team they are in now.
 
 **Acceptance:**
 
@@ -373,8 +389,8 @@ as the whole. The SIEM half comes later, once the report exists.
 - `cardo teams` prints the coverage and the group floor and writes nothing.
 - Nothing in the view ranks the teams.
 
-**Watch for:** a team smaller than the group's minimum is `other`. The floor can be raised, never
-lowered.
+**Watch for:** a team smaller than the group's minimum is not rendered at all — not even as
+`other`, because "1 person" is a person. The floor can be raised, never lowered.
 
 ---
 

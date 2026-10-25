@@ -33,7 +33,7 @@ The items are grouped by what unblocks the most work first, not by the order the
 | 5 | Repository identity, read | code | no | — | open |
 | 6 | The catalog and the views, joined | code | yes | — | open |
 | 7 | Policy evidence | code | no | — | open |
-| 8 | Team coverage, in the views | code | no | — | open |
+| 8 | Team coverage, in the views | code | no | — | built 2026-10-25 |
 | 9 | The board report | code | no | 3, and an organization | open |
 | 10 | The gaps in the guide | code + documents | no | — | open |
 | 11 | Aggregates that outlive their rows | code | no | — | open |
@@ -394,12 +394,22 @@ that a rollout which missed two teams shows up. `docs/roadmap.md` marks the team
 "the console accepts `email,team`, hashes it on load (ADR-0046), and shows coverage and the group
 floor" — and notes that "a `cardo teams` CLI check remains".
 
-**What the code says.** The console loads the directory and computes coverage
+**What the code said.** The console loads the directory and computes coverage
 (`internal/launcher/server_teams.go:96`: `v.CoveragePct = float64(v.Mapped) / float64(v.Sessions7d) * 100`),
 and `sql/clickhouse/011_teams.sql` holds `settings_teams` with `team`, `pseudonym`, `salt_version`
-and `batch`. There is **no gold view for teams**, and `git grep "cardo teams"` finds the phrase only
-in the roadmap's sentence saying it remains. `gold_fleet_adoption` exists and is about artifacts, not
-teams.
+and `batch`. There was **no gold view for teams**, and `git grep "cardo teams"` found the phrase only
+in the roadmap's sentence saying it remains. `gold_fleet_adoption` existed and was about artifacts,
+not teams.
+
+**Built on 2026-10-25.** `gold_team_reach` reads the team's reach against the whole organization,
+and `cardo teams --file <directory.csv>` does the console's job from a shell, dry run first. Two
+things the build had to settle:
+
+- **The join cannot live in the gold view.** Putting a session in its team needs the pseudonym on
+  both sides, and INV-3 forbids a gold view from comparing one. The join lives in the silver layer,
+  `silver_team_artifact_use`, and the gold view counts and publishes.
+- **The console and the CLI were writing the mapping through two different implementations.** Both
+  now go through `launcher.WriteTeams`.
 
 **What closing it looks like.**
 
@@ -407,14 +417,19 @@ teams.
   ([ADR-0030](adr/0030-stakeholders-and-questions.md)).
 - A `cardo teams` command that reads the directory, hashes it, reports the coverage and the group
   floor, and writes nothing without being asked.
-- The join and leave dates ADR-0034 asks for, if they are to be stored at all: the directory format
-  is a decision, and `settings_teams` has no date column today.
+- **Still open:** the join and leave dates ADR-0034 asks for. ADR-0046 settled the file as
+  `email,team` without them, and `settings_teams` has no date column. Two accepted records
+  disagree, so this needs a record of its own. The view reads the current directory, so a person's
+  history is attributed to the team they are in now.
 
 **The check that would prove it closed:** load a directory with two teams and read the team's reach
-from a view, against the fleet's.
+from a view, against the fleet's. **Proved on 2026-10-25** against the reference stack: a team of
+five is rendered with its share of the fleet, a team of one is not rendered at all, and the view
+follows the newest directory batch.
 
-**Watch for.** A team smaller than the group's minimum is `other`, not a team with a small number.
-And teams are compared on reach, never ranked — nothing here divides by headcount.
+**Watch for.** A team smaller than the group's minimum is not rendered at all — not even as
+`other`, because "1 person" is a person. And teams are compared on reach, never ranked — nothing
+here divides by headcount.
 
 ---
 

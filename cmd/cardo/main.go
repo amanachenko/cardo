@@ -41,6 +41,7 @@ Install
   connect     Write .claude/settings.json into one project (--project <dir>)
   secret      Generate the salt and the passwords into .env with mode 0600
   bundle      Write the managed-settings bundle for the machines you manage
+  teams       Read a team directory and say what it would store (--file <directory.csv>)
   notice      Write the engineer notice: salt custody, settings, and what the data is not for
 
 Check
@@ -118,6 +119,7 @@ var synopsis = map[string][2]string{
 	"gold":    {"cardo gold [--dir]", "Create the gold-only ClickHouse user and prove the refusal."},
 	"notice":  {"cardo notice [--format md] [--out <file>]", "Write the engineer notice from the current .env."},
 	"bundle":  {"cardo bundle [--dir]", "Write the managed-settings bundle for the machines you manage."},
+	"teams":   {"cardo teams --file <directory.csv> [--apply]", "Read a team directory and say what it would store."},
 	"poll":    {"cardo poll [flags]", "Poll an analytics source into a local store."},
 	"migrate": {"cardo migrate [-v]", "Apply the ClickHouse schema and exit."},
 	"version": {"cardo version [--long|--short]", "Print the version; --long adds platform and toolchain, --short prints the bare version."},
@@ -221,6 +223,8 @@ func run(args []string) error {
 		return runNotice(args[1:])
 	case "bundle":
 		return runBundle(args[1:])
+	case "teams":
+		return runTeams(args[1:])
 	case "version":
 		return runVersion(args[1:])
 	case "-h", "--help":
