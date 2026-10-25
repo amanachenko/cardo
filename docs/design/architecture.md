@@ -42,8 +42,8 @@ them needs ([ADR-0030](../adr/0030-stakeholders-and-questions.md) to
 - an efficiency family replaces the friction index: its first version reads only what is already
   collected, with metrics pinned to delta, and its views are not built;
 - a coach page for each engineer;
-- repository identity, classified at the collector: collection is built (below), and no view
-  reads it yet;
+- repository identity, classified at the collector: collection is built (below), and the
+  repository and instructions views read it;
 - teams from a directory file;
 - service runs labelled apart from people;
 - policy evidence.
@@ -253,7 +253,29 @@ pattern makes every repository external. The URL is normalized first, so one pat
 form a git remote takes, and credentials in it are dropped with the scheme. The `vcs.*` attributes
 themselves are then deleted. A session outside any repository has neither key. The attributes have
 never been seen from a real Claude Code, so which records carry them, and in what URL form, is
-still to be confirmed. No view reads them yet.
+still to be confirmed.
+
+**Reading the repository ([ADR-0035](../adr/0035-repository-identity-classified.md)).** The
+classification is read by two views. `silver_session_repo` holds the repository of every session,
+joined from its OTel rows because a hook row carries none. `gold_repo_instructions` answers
+ADR-0035's own question: for each repository, whether sessions load project-level instructions,
+and how many loads, with the people beside them. The repository label is the organization's own
+name for its own repositories and the host alone for everything else; the full URL was never
+stored, so no view can show one.
+
+**Names of instruction files ([ADR-0035](../adr/0035-repository-identity-classified.md)).** Two
+names, and they mean different things. `instructions_name` is the organization's own artifact: a
+version in the name is how a stale copy shows up, so those names are kept whenever the file
+matches the organization's pattern ([ADR-0026](../adr/0026-stale-instructions-by-versioned-name.md)).
+`instructions_project_name` is a file of a repository — a team's own `CLAUDE.md`, its rules, its
+imports — and the collector keeps it only with `CARDO_INSTRUCTIONS_NAMES=project` and only at
+project scope, so a person's own files are never named. They are separate fields because a team's
+file is not the organization's artifact: one field for the two would put a team's file names into
+the artifact views, where they are shown whatever their count.
+
+Without the setting, the number of distinct files is absent rather than zero ([ADR-0008](../adr/0008-outcome-variable.md)'s
+rule: an absent number is honest, a zero is a lie), and `gold_repo_instruction_files` says nothing
+at all rather than listing a repository's files and omitting the rest.
 
 ## Target shape
 

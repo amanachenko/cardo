@@ -304,6 +304,26 @@ organization's repositories have instructions files — cannot be produced from 
 what the view shows and does not show; a test that sets the setting to a typo and asserts no name is
 kept.
 
+**Built on 2026-10-25.** The classification is read, and the setting exists.
+
+- `sql/clickhouse/015_repo_identity.sql` adds `silver_session_repo` (the repository of every
+  session, joined from its OTel rows), `silver_instruction_load` (each loaded file, with the scope
+  Claude Code sent), `gold_repo_instructions` (which repositories have instructions files, how many
+  loads, how many people) and `gold_repo_instruction_files` (the names, for the organization's own
+  repositories only, under the minimum group size). The full URL was never stored, so no view can
+  show one.
+- `CARDO_INSTRUCTIONS_NAMES=project` keeps the names of project-level instruction files. Any other
+  value, a typo included, keeps nothing beyond the organization's own artifacts. A person's own
+  files are never named, whatever the setting says.
+- The notice states which way the organization set it, because ADR-0035 says it does.
+- The number of distinct files is absent rather than zero without the setting: without the names it
+  cannot be counted, and a zero would say "no files" where the truth is "not looked at".
+
+**What is still open.** Decision 3 of ADR-0035 — the full external URL into the identified security
+stream — is not built; it waits for the identity decision for security exceptions
+([ADR-0037](adr/0037-policy-evidence.md)). The attribute itself has still never been seen from a
+real Claude Code, so which records carry it, and in what URL form, is still to be confirmed.
+
 **Watch for.** This is a change to what the collector stores, so the allowlist in
 `test/collector_test.go` and the mandatory event set are in scope
 ([INV-4](design/invariants.md)). If a new field has to be stored, that is a record, not a pull

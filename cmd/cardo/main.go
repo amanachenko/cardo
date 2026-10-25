@@ -438,8 +438,9 @@ func runMigrate(args []string) error {
 		return errors.New("migrate needs the ClickHouse store")
 	}
 	vs := clickhouse.ViewSettings{
-		OrgArtifacts: lookupEnv("CARDO_ORG_ARTIFACTS"),
-		MinGroupSize: lookupEnv("CARDO_MIN_GROUP_SIZE"),
+		OrgArtifacts:      lookupEnv("CARDO_ORG_ARTIFACTS"),
+		MinGroupSize:      lookupEnv("CARDO_MIN_GROUP_SIZE"),
+		InstructionsNames: lookupEnv("CARDO_INSTRUCTIONS_NAMES"),
 	}
 	if err := ch.ApplyViewSettings(ctx, vs); err != nil {
 		return err

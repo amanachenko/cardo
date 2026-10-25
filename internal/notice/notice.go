@@ -30,6 +30,10 @@ type Settings struct {
 	ArtifactNames string
 	// OrgRepos is the pattern naming the organization's repositories.
 	OrgRepos string
+	// InstructionsNames is the mode for instruction file names: "project" keeps the names of
+	// project-level instruction files, and any other value means the default, where only the
+	// organization's own artifacts are named (ADR-0035).
+	InstructionsNames string
 	// MinGroupSize is how many people a name needs before a view shows it.
 	MinGroupSize int
 	// RetentionDays is the window raw rows are kept. Zero means nothing expires on its own.
@@ -82,7 +86,7 @@ func (s Settings) Markdown() string {
 	fmt.Fprintf(&b, "| `CARDO_ORG_ARTIFACTS` — your organization's own artifacts | %s |\n", s.orgArtifacts())
 	fmt.Fprintf(&b, "| `CARDO_ARTIFACT_NAMES` — names of tools engineers define themselves | %s |\n", s.artifactNames())
 	fmt.Fprintf(&b, "| `CARDO_ORG_REPOS` — your organization's repositories | %s |\n", s.orgRepos())
-	fmt.Fprintf(&b, "| Names of project instruction files | %s |\n", s.instructionsNames())
+	fmt.Fprintf(&b, "| `CARDO_INSTRUCTIONS_NAMES` — names of project instruction files | %s |\n", s.instructionsNames())
 	fmt.Fprintf(&b, "| `CARDO_MIN_GROUP_SIZE` — people needed before a name is shown | %d |\n", s.minGroupSize())
 	fmt.Fprintf(&b, "| `CARDO_RETENTION_DAYS` — raw rows kept | %s |\n\n", s.retention())
 
@@ -144,18 +148,22 @@ func (s Settings) orgRepos() string {
 	return "no, every repository is external"
 }
 
-// instructionsNames says what the collector does with an instructions file's name.
+// instructionsNames says which way the organization set the instructions-names setting.
 //
-// It does not report a setting, because the setting ADR-0035 names is not implemented yet, and a
-// page that claimed a setting was in force when it was not would be worse than no page. It reports
-// the rule the collector actually applies: a name is kept when it matches the organization's
-// artifact pattern, and dropped otherwise (ADR-0026). When the setting lands, this line changes
-// with it.
+// ADR-0035 says the notice states it, so the page names the mode and not the pattern. Two modes
+// exist: "project" keeps the names of project-level instruction files, and anything else means
+// the default, where the organization's own artifacts keep their names (ADR-0026) and nothing
+// else does. A value Cardo does not document is the default, and the page says so rather than
+// claiming a mode that is not in force.
 func (s Settings) instructionsNames() string {
-	if p := strings.TrimSpace(s.OrgArtifacts); p != "" {
-		return "yes, the ones matching your organization's artifact pattern"
+	switch m := strings.TrimSpace(s.InstructionsNames); m {
+	case "project":
+		return "yes, the names of your project's instruction files"
+	case "":
+		return "no, only your organization's own artifacts"
+	default:
+		return fmt.Sprintf("no, and %q is not one Cardo documents, so only your organization's own artifacts", m)
 	}
-	return "no, only whether a file was loaded"
 }
 
 func (s Settings) minGroupSize() int {
@@ -185,15 +193,16 @@ func (s Settings) retention() string {
 // which is what an absent setting means everywhere else in Cardo.
 func FromEnv(env map[string]string, custody string) Settings {
 	s := Settings{
-		SaltVersion:      strings.TrimSpace(env["CARDO_SALT_VERSION"]),
-		SaltPresent:      strings.TrimSpace(env["CARDO_SALT"]) != "",
-		Custody:          custody,
-		OrgArtifacts:     strings.TrimSpace(env["CARDO_ORG_ARTIFACTS"]),
-		ArtifactNames:    strings.TrimSpace(env["CARDO_ARTIFACT_NAMES"]),
-		OrgRepos:         strings.TrimSpace(env["CARDO_ORG_REPOS"]),
-		MinGroupSize:     DefaultMinGroupSize,
-		RetentionDays:    DefaultRetentionDays,
-		RetentionDefault: true,
+		SaltVersion:       strings.TrimSpace(env["CARDO_SALT_VERSION"]),
+		SaltPresent:       strings.TrimSpace(env["CARDO_SALT"]) != "",
+		Custody:           custody,
+		OrgArtifacts:      strings.TrimSpace(env["CARDO_ORG_ARTIFACTS"]),
+		ArtifactNames:     strings.TrimSpace(env["CARDO_ARTIFACT_NAMES"]),
+		OrgRepos:          strings.TrimSpace(env["CARDO_ORG_REPOS"]),
+		InstructionsNames: strings.TrimSpace(env["CARDO_INSTRUCTIONS_NAMES"]),
+		MinGroupSize:      DefaultMinGroupSize,
+		RetentionDays:     DefaultRetentionDays,
+		RetentionDefault:  true,
 	}
 	if n := strings.TrimSpace(env["CARDO_MIN_GROUP_SIZE"]); n != "" {
 		if v, ok := parseInt(n); ok && v >= DefaultMinGroupSize {

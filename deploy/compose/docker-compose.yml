@@ -90,6 +90,9 @@ services:
       # the collector gets below, so what it stores and what the views label agree.
       CARDO_ORG_ARTIFACTS: ${CARDO_ORG_ARTIFACTS:-}
       CARDO_MIN_GROUP_SIZE: ${CARDO_MIN_GROUP_SIZE:-}
+      # ADR-0035's mode: "project" keeps the names of project-level instruction files. The same
+      # value the collector gets below, so the views and the collector mean the same thing by it.
+      CARDO_INSTRUCTIONS_NAMES: ${CARDO_INSTRUCTIONS_NAMES:-}
 
   # The Admin API poller. Optional: it starts only with the "admin" profile, so a stack that has no
   # organization key never carries a container that cannot work. The window is two days on every
@@ -138,6 +141,7 @@ services:
       CARDO_ORG_ARTIFACTS: ${CARDO_ORG_ARTIFACTS:-}
       CARDO_ARTIFACT_NAMES: ${CARDO_ARTIFACT_NAMES:-all}
       CARDO_ORG_REPOS: ${CARDO_ORG_REPOS:-}
+      CARDO_INSTRUCTIONS_NAMES: ${CARDO_INSTRUCTIONS_NAMES:-}
       CARDO_CLICKHOUSE_ENDPOINT: tcp://clickhouse:9000
       CARDO_CLICKHOUSE_USER: ${CLICKHOUSE_USER:-cardo}
       CARDO_CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}

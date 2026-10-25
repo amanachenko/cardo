@@ -278,6 +278,26 @@ a mechanism before the decision.
 **Watch for:** this changes what the collector stores. If a new field has to be stored, that is a
 record, not a pull request ([INV-4](design/invariants.md)) — check with T3's discipline.
 
+**Done on 2026-10-25.** The classification is read and the setting exists.
+
+- `sql/clickhouse/015_repo_identity.sql` adds `silver_session_repo`, `silver_instruction_load`,
+  `gold_repo_instructions` and `gold_repo_instruction_files`. The full URL was never stored, so no
+  view can show one; the organization keeps its owner and name, everything else keeps its host.
+- `CARDO_INSTRUCTIONS_NAMES=project` keeps the names of project-level instruction files. Any other
+  value means the default, so a typo keeps nothing. A person's own files are never named, whatever
+  the setting says. The collector's rule reads the same value the views read, through
+  `cardo.settings`.
+- The notice names the mode the organization set.
+- `internal/store/clickhouse/repo_identity_test.go` covers each class, the absence of a full URL,
+  the absent number of files without the setting, the five-person rule and the user's own files.
+  The collector's own test mirrors the setting the collector was started with, so a run with a typo
+  in it proves the typo fails closed.
+- `internal/store/clickhouse/settings.go` writes the setting; `cmd/cardo/main.go` passes it;
+  `deploy/compose/docker-compose.yml` gives the same value to the collector and to `cardo migrate`.
+
+**Still open:** decision 3 of ADR-0035, the full external URL into the security stream, which waits
+for ADR-0037.
+
 ---
 
 ## T7 — The catalog and the views, joined
