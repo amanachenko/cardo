@@ -19,10 +19,10 @@ pull request first, so two people do not build the same thing.
 
 ## The order
 
-| # | Task | Closes | Ready to start | Size |
-|---|---|---|---|---|
-| T1 | The pilot rows of the launcher | item 1 | yes | small |
-| T2 | The engineer notice | item 2 | after T1 | small |
+| # | Task | Closes | Ready to start | Size | State |
+|---|---|---|---|---|---|
+| T1 | The pilot rows of the launcher | item 1 | yes | small | done 2026-10-25 |
+| T2 | The engineer notice | item 2 | after T1 | small | done 2026-10-25 |
 | T3 | The efficiency family, decided | item 3 (part) | needs a decision | medium |
 | T4 | The efficiency family, built | item 3 | after T3 | large |
 | T5 | The collector's open door | item 4 | needs a decision | small |
@@ -39,11 +39,23 @@ T9 can move up: it is independent of everything except the group floor, which is
 
 ## T1 — The pilot rows of the launcher
 
-**Closes:** item 1.
+**Closes:** item 1. **Done on 2026-10-25.**
 
-**Touches:** `internal/launcher/steps.go` (the dispatch at line 220), `internal/launcher/grafana_ro.go`
-(reuse), a new file for the bundle writer, `cmd/cardo/up.go` (the `--pilot` path),
-`internal/launcher/web/app.js` (the rows already render).
+**What the work turned out to be.** The task said to make `grafana_ro` call `stepGrafanaRO`. There
+was no such step: the design document's row 08, "Leaders' logins", is the `gold` step, and it was
+already built. Only the dispatch case was a leftover, so it was removed rather than wired up.
+
+The second thing the task did not foresee: the pilot rows were excluded from "install all" by the
+`Planned` mark, not by anything that knew about the pilot. Taking that mark off — which is what
+"built" means for the board — made them part of every install. The server now skips a pilot row
+unless `pilot_mode` says the organization chose the team path, and the board's own path selector
+agrees because it writes that setting.
+
+**Touches:** `internal/launcher/steps.go` (the dispatch and the two rows), a new
+`internal/launcher/step_bundle.go` and `internal/launcher/step_notice.go`,
+`internal/launcher/settings.go` (the bundle for a named host), `internal/launcher/launcher.go`
+(the `--pilot` path), `internal/launcher/server.go` (the pilot filter), `cmd/cardo/notice.go` (the
+two commands).
 
 **Do this:**
 
@@ -78,10 +90,21 @@ real developer machines stays an owner-gated action.
 
 ## T2 — The engineer notice
 
-**Closes:** item 2.
+**Closes:** item 2. **Done on 2026-10-25.**
 
-**Touches:** a new `internal/notice` package (or a file next to the launcher), `cmd/cardo/main.go`
-(a new command), `test/` (a test that reads the rendered page).
+**What the work turned out to be.** Three decisions the task did not settle, taken while building:
+
+- **The salt is named, never printed.** The page says who holds it and which version is in force.
+  The salt is the key that could reveal who is behind a code name.
+- **A pattern that names the organization is reported as set, without its text.**
+  `CARDO_ORG_REPOS` carries the organization's own name, and the page goes to every engineer.
+- **The instructions-names line reports what the collector does, not a setting.** ADR-0035 names
+  `CARDO_INSTRUCTIONS_NAMES=project` and the setting does not exist yet — that is T6. A page that
+  claimed a setting was in force when it was not would be worse than no page, so the line reports
+  the rule in force today (ADR-0026) and changes with the setting when it lands.
+
+**Touches:** a new `internal/notice` package, `cmd/cardo/notice.go` (the command and the launcher's
+step), `cmd/cardo/main.go` (the command table).
 
 **Do this:**
 

@@ -278,6 +278,19 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, out)
 }
 
+// pilotMode says whether the organization chose the team pilot path.
+//
+// It reads the same setting the board writes, so the CLI and the board cannot disagree about which
+// rows belong to a pilot. A store that cannot be read answers false: the solo path is the safe
+// one, and it runs no row that would hand something to a second person.
+func (s *Server) pilotMode(ctx context.Context) bool {
+	body, err := s.ch(ctx, "SELECT argMax(value, version) FROM cardo.settings WHERE key = 'pilot_mode' FORMAT TSV")
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(body) == "1"
+}
+
 func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Step    string `json:"step"`
@@ -293,12 +306,19 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Step == "all" || body.Step == "" {
 		ids = nil
+		// The pilot rows are the ones a team needs: the leaders' read-only login, the bundle for
+		// the machines it manages, and the notice it hands to its engineers. A solo install has
+		// no second person, so they run only when the organization chose the pilot path.
+		pilot := s.pilotMode(r.Context())
 		for _, m := range Steps {
 			if m.Planned {
 				continue // not built yet; the board says so instead of pretending
 			}
 			if m.OptIn {
 				continue // the person's choice: "install all" never takes it
+			}
+			if m.Pilot && !pilot {
+				continue // a team-only row; the solo path has nobody to hand it to
 			}
 			ids = append(ids, m.ID)
 		}
@@ -324,6 +344,11 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 	if body.Project != "" {
 		opts.Project = body.Project
 	}
+	// The team rows read the path the organization chose: the notice names the security team as
+	// the salt's holder in a pilot, and the bundle points at the collector's network address.
+	// The board's path selector writes that choice to the settings table, so it is read from
+	// there rather than from a flag the browser does not send.
+	opts.Pilot = s.pilotMode(r.Context())
 	go s.runAll(ids, opts)
 	w.WriteHeader(http.StatusAccepted)
 	writeJSON(w, map[string]any{"started": ids})

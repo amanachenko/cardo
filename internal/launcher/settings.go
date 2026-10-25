@@ -3,6 +3,8 @@ package launcher
 import (
 	"encoding/json"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 )
@@ -12,13 +14,22 @@ import (
 // (INV-5). test/bundle_test.go enforces the same shape for the shipped file; this is the same
 // document, generated so the launcher does not depend on a path inside the repository.
 func SettingsBundle() ([]byte, error) {
+	return SettingsBundleAt("127.0.0.1", "http", "4319", "8089")
+}
+
+// SettingsBundleAt builds the same bundle for a collector reached at the given host and ports.
+//
+// The single-engineer install uses loopback. A pilot that serves a team reaches the collector
+// through the edge proxy, on the hostname the certificate is for, and the hook URL carries the
+// same host as the OTLP one because test/bundle_test.go holds that they agree.
+func SettingsBundleAt(host, scheme, otlpPort, hookPort string) ([]byte, error) {
 	env := map[string]string{
 		"CLAUDE_CODE_ENABLE_TELEMETRY":                      "1",
 		"OTEL_METRICS_EXPORTER":                             "otlp",
 		"OTEL_LOGS_EXPORTER":                                "otlp",
 		"OTEL_EXPORTER_OTLP_PROTOCOL":                       "http/protobuf",
 		"OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE": "delta",
-		"OTEL_EXPORTER_OTLP_ENDPOINT":                       serviceURL("4319", ""),
+		"OTEL_EXPORTER_OTLP_ENDPOINT":                       endpointAt(host, scheme, otlpPort, ""),
 		"OTEL_METRICS_INCLUDE_SESSION_ID":                   "true",
 		"OTEL_METRICS_INCLUDE_VERSION":                      "true",
 		"OTEL_METRICS_INCLUDE_ACCOUNT_UUID":                 "false",
@@ -32,7 +43,7 @@ func SettingsBundle() ([]byte, error) {
 		"OTEL_LOG_MANAGED_SETTINGS":                         "0",
 	}
 
-	hookURL := serviceURL("8089", "/v1/hooks")
+	hookURL := endpointAt(host, scheme, hookPort, "/v1/hooks")
 	hook := func() []map[string]any {
 		return []map[string]any{{
 			"hooks": []map[string]any{{"type": "http", "url": hookURL, "timeout": 1}},
@@ -53,6 +64,13 @@ func SettingsBundle() ([]byte, error) {
 		return nil, err
 	}
 	return append(b, '\n'), nil
+}
+
+// endpointAt builds one URL for a host and a port. The host may be a name or an address, and
+// JoinHostPort brackets an IPv6 one.
+func endpointAt(host, scheme, port, path string) string {
+	u := url.URL{Scheme: scheme, Host: net.JoinHostPort(host, port), Path: path}
+	return u.String()
 }
 
 // InstallSettings writes the bundle into projectDir/.claude/settings.json. An existing file keeps

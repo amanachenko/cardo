@@ -24,19 +24,19 @@ concern.
 
 The items are grouped by what unblocks the most work first, not by the order they were found in.
 
-| # | Item | Kind | Needs a decision | Depends on |
-|---|---|---|---|---|
-| 1 | The pilot rows of the launcher | code | no | — |
-| 2 | The engineer notice | code | no | 1 |
-| 3 | The signs of struggle, first version | code + a record | yes | — |
-| 4 | The collector's open door | a record | yes | — |
-| 5 | Repository identity, read | code | no | — |
-| 6 | The catalog and the views, joined | code | yes | — |
-| 7 | Policy evidence | code | no | — |
-| 8 | Team coverage, in the views | code | no | — |
-| 9 | The board report | code | no | 3, and an organization |
-| 10 | The gaps in the guide | code + documents | no | — |
-| 11 | Aggregates that outlive their rows | code | no | — |
+| # | Item | Kind | Needs a decision | Depends on | State |
+|---|---|---|---|---|---|
+| 1 | The pilot rows of the launcher | code | no | — | built 2026-10-25 |
+| 2 | The engineer notice | code | no | 1 | built 2026-10-25 |
+| 3 | The signs of struggle, first version | code + a record | yes | — | open |
+| 4 | The collector's open door | a record | yes | — | open |
+| 5 | Repository identity, read | code | no | — | open |
+| 6 | The catalog and the views, joined | code | yes | — | open |
+| 7 | Policy evidence | code | no | — | open |
+| 8 | Team coverage, in the views | code | no | — | open |
+| 9 | The board report | code | no | 3, and an organization | open |
+| 10 | The gaps in the guide | code + documents | no | — | open |
+| 11 | Aggregates that outlive their rows | code | no | — | open |
 
 **The largest is 3.** It is the only one whose output is a set of numbers people will argue about,
 and every other item about "what works" waits for it.
@@ -54,40 +54,53 @@ logins (row 08), the file on the machines (row 09) and the notice (row 10). The 
 pilot path takes about forty minutes against ten for a solo install, and that rows 08 to 10 are what
 the extra thirty minutes buy.
 
-**What the code says.** `internal/launcher/steps.go:220` returns a placeholder for all three:
+**What the code said.** `internal/launcher/steps.go:220` returned a placeholder for all three:
 
 ```go
 case "grafana_ro", "bundle", "notice":
     return Result{ID: id, Name: "PILOT", Value: "not implemented", ...}, nil
 ```
 
-The steps are listed in the table (`steps.go:122` for `gold`, `:163` for `bundle`, `:170` for
-`notice`), the board draws them, and `cmd/cardo/up.go:31` takes `--pilot`. So the surface says
-yes and the dispatch says no. `internal/launcher/launcher.go:66` says so in a comment: "the
-pilot-only rows (leaders' logins, bundle, notice) land with the next change."
+The steps were listed in the table, the board drew them, and `cmd/cardo/up.go:31` took `--pilot`.
+So the surface said yes and the dispatch said no.
 
-**What is already there, and must not be rebuilt.** The read-only user is not missing. `gold` is
-implemented (`steps.go:212` dispatches to `stepGrafanaRO` in `internal/launcher/grafana_ro.go:19`),
-it creates `cardo_ro`, and `checkGoldAccess` (`grafana_ro.go:125`) proves the refusal live. The
-bundle file is not missing either: `deploy/managed-settings/managed-settings.json` exists, and
-`test/bundle_test.go` pins its shape. What is missing is that the pilot path does not call the
-first and does not write the second anywhere a machine can pick it up.
+**Built on 2026-10-25.** The three rows are `gold`, `bundle` and `notice`, and all three run. Two
+things turned out to be different from what this page first said:
+
+- There was no `grafana_ro` step to implement. The design document's row 08, "Leaders' logins", is
+  the `gold` step, and it was already built. Only the dispatch case was a leftover, so it was
+  removed rather than wired up.
+- The pilot rows were not excluded from "install all" — they were marked `Planned`, which the board
+  shows as "Later" and skips. Taking that mark off made them part of every install, so the server
+  now skips a pilot row unless the organization chose the pilot path (`pilot_mode` in the settings
+  table, the same setting the board writes).
+
+**What was already there, and was not rebuilt.** The read-only user was not missing: `gold` was
+implemented (`steps.go` dispatches to `stepGrafanaRO` in `internal/launcher/grafana_ro.go:19`), it
+creates `cardo_ro`, and `checkGoldAccess` (`grafana_ro.go:125`) proves the refusal live. The
+bundle file was not missing either: `deploy/managed-settings/managed-settings.json` exists, and
+`test/bundle_test.go` pins its shape. What was missing was that the pilot path did not write the
+second one anywhere a machine could pick it up.
 
 **What closing it looks like.**
 
-- `grafana_ro` calls `stepGrafanaRO`, so the pilot row is the same code the solo row already runs.
-- `bundle` writes the bundle to a path the operator can hand to an MDM, and says which path. The
-  file it writes is the shipped one, with the collector's address inside the organization's
-  network — the bundle is `env` and `hooks`, nothing else, each hook waits at most a second
-  ([ADR-0039](adr/0039-hooks-wait-at-most-one-second.md), [ADR-0024](adr/0024-bundle-configures-telemetry-only.md)).
-- `notice` writes the notice (item 2).
+- The `bundle` step writes the bundle to a path the operator can hand to an MDM, and says which
+  path. The file it writes is the shipped one, with the collector's address inside the
+  organization's network — the bundle is `env` and `hooks`, nothing else, each hook waits at most a
+  second ([ADR-0039](adr/0039-hooks-wait-at-most-one-second.md),
+  [ADR-0024](adr/0024-bundle-configures-telemetry-only.md)). On a laptop the collector is on
+  loopback; a pilot that serves a team reaches it through the edge proxy, on the hostname the
+  certificate is for.
+- The `notice` step writes the notice (item 2).
 - `cardo up --pilot` runs all three and each row's check passes: the read-only user is refused on
-  raw and per-person tables, the bundle is written, the notice exists.
-- The placeholder disappears. A step that is listed and returns "not implemented" is the exact
+  raw and per-person tables, the bundle is written, the notice exists. A solo install runs seven
+  rows and writes neither file.
+- The placeholder is gone. A step that is listed and returns "not implemented" is the exact
   failure this repo's own guidance warns about.
 
 **The check that would prove it closed:** `cardo up --pilot` on a clean machine, then read the
-board: three rows pass, none says "PILOT" and "not implemented".
+board: three rows pass, none says "PILOT" and "not implemented". **Proved on 2026-10-25** against
+the reference stack: ten rows complete, and a solo run completes seven.
 
 **Watch for.** Writing the bundle is a file on the operator's machine, not an installation on a
 developer's. Pushing managed settings to real developer machines is an owner-gated action and stays
@@ -101,10 +114,13 @@ one: the launcher writes a file, and a human hands it over.
 its engineers. It says who holds the salt, which settings are on, and that Cardo's data is not for
 individual performance decisions.
 
-**What the code says.** The step exists and is a placeholder (item 1). The command the step names,
-`cardo notice --format md`, is not in the command table at `cmd/cardo/main.go:109`. The design
-document lists the command as if it existed (`quickstart-launcher.md:115`: "`cardo notice` | writes
-the engineer notice from the current `.env`").
+**What the code said.** The step existed and was a placeholder (item 1). The command the step
+named, `cardo notice --format md`, was not in the command table at `cmd/cardo/main.go:109`. The
+design document listed the command as if it existed (`quickstart-launcher.md:115`: "`cardo notice` |
+writes the engineer notice from the current `.env`").
+
+**Built on 2026-10-25.** The command exists and writes the page, and the launcher writes it as
+well. It is in `internal/notice`, so the page can be read and tested without the CLI.
 
 **What it must say.** The three things the roadmap names, and the two that other decisions add:
 which way the organization set the instructions-names setting ([ADR-0035](adr/0035-repository-identity-classified.md)
@@ -122,6 +138,19 @@ salt custody, the enabled settings, the group size, and the sentence about perfo
 organization hands out, and everything committed is public
 ([ADR-0038](adr/0038-public-under-a-collective-copyright.md)). It describes the settings file, not
 the people in it.
+
+**Two things the build had to decide, and one it could not.**
+
+- The salt is named, never printed: the page says who holds it and which version is in force, and
+  the salt itself is not in the page. It is the key that could reveal who is behind a code name.
+- A pattern that names the organization is reported as set, without its text. `CARDO_ORG_REPOS`
+  carries the organization's own name, and the page is handed to every engineer.
+- **The instructions-names line could not report a setting.** ADR-0035 names
+  `CARDO_INSTRUCTIONS_NAMES=project`, and the setting does not exist in the code yet — that is
+  item 5. A page that claimed a setting was in force when it was not would be worse than no page,
+  so the line reports the rule the collector actually applies today (ADR-0026: a name is kept when
+  it matches the organization's artifact pattern). When the setting lands, the line changes with
+  it.
 
 ---
 
