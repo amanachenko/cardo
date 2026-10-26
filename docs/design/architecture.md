@@ -154,6 +154,11 @@ must be refused before the step passes — and `cardo check` repeats that proof 
 anything. DEFiner rights are what let the grant stay on `leadership.*` without reaching bronze or
 silver underneath.
 
+Both datasources are in the same Grafana organization, and a login can query any data source in
+its organization by id. So the grant does not yet limit what a leader's login can read: until the
+gold datasource has a Grafana organization of its own, only the operator logs in
+([risks.md](../../risks.md) #15).
+
 
 ## The console
 

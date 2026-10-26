@@ -92,7 +92,10 @@ missing is an organization running Cardo safely, so this comes first.
   the operator gets a Grafana login. **Built:** `cardo gold` creates `cardo_ro`, the `leadership`
   database of SQL SECURITY DEFINER views, grants `leadership.*` only, and proves the refusal live;
   the `Cardo gold (read-only)` datasource uses it, and `cardo check` re-proves the boundary without
-  writing anything.
+  writing anything. **Still missing:** that datasource sits in the same Grafana organization as the
+  full-access one, and a login can query any data source in its organization. Leaders need a
+  Grafana organization of their own that holds only the gold datasource, with a live test that a
+  leader's login is refused the full-access one.
 - **A notice an organization can hand to its engineers.** It says:
   - who holds the salt, the key that could reveal who is behind a code name;
   - which settings are on;

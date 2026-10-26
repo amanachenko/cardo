@@ -437,6 +437,13 @@ user granted the gold views only. Per-person pages move to a second Grafana that
 logs in to (ADR-0032). **Would close it:** that grant in place, and a live test that the leadership
 data source's user is refused a bronze or silver read.
 
+**Update 2026-10-26: the grant is built, and this stays open.** `cardo gold` creates the gold-only
+user, and the `Cardo gold (read-only)` datasource uses it. But that datasource sits in the same
+Grafana organization as the full-access one, and a login can send a query to either by its id,
+the same way the 2026-09-25 measurement read bronze. **Would close it, as amended:** the gold
+datasource in a Grafana organization of its own, leaders' logins only there, and a live test that
+such a login is refused a query to the full-access datasource.
+
 ### 16. Two of the new signals rest on unobserved or conditional telemetry
 
 **Threatens:** [ADR-0035](docs/adr/0035-repository-identity-classified.md) and

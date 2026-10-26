@@ -66,6 +66,10 @@ always shows the command it will run. The ticker carries the one sentence that m
 | 09 | File on machines (pilot) | the bundle is deployed and reporting | count distinct machines reporting |
 | 10 | Notice (pilot) | the page exists with salt custody and settings listed | render and check required fields |
 
+Rows 08 to 10 are not built yet: the board shows them as "not implemented". Row 08's check, as
+written, proves only the database user. A leader's login also needs a Grafana organization
+without the full-access datasource ([risks.md](../../risks.md) #15).
+
 Rows 05 and 06 are the aha. Everything before them is plumbing, and the board says so by grouping:
 "machine", "start", "data", "people".
 

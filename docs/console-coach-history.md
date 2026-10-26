@@ -146,6 +146,10 @@ There is no catalog of patterns and tools and no fixed tip. The page says explic
 comparing a person with their own previous window. There is no rank, no percentile, no composite
 score, and no other person's rows are read.
 
+On a stack with fewer people than the minimum group size, such as one engineer's own install, no
+artifact can reach the floor. The report then has no suggestion, and shows only the person's own
+figures against their previous window.
+
 A pseudonym is checked for its shape before it reaches a query: 64 lowercase hex characters, which is
 what a salted SHA-256 looks like. A value that is not one is refused rather than escaped.
 
