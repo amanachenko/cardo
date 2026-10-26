@@ -52,6 +52,15 @@ The hard rules that these decisions produce live in
 | [0040](0040-spread-is-a-vote-only-for-what-teams-chose.md) | Spread is a vote only for what teams chose | Accepted, not built | 2026-10-08 |
 | [0041](0041-the-coach-suggests-what-the-fleet-has-shown.md) | The coach suggests only what the fleet has shown | Accepted, not built | 2026-10-08 |
 | [0042](0042-the-north-star.md) | Organizations decide what becomes standard, without watching anyone | Accepted | 2026-10-14 |
+| [0043](0043-admin-poller-in-the-reference-stack.md) | The Admin API poller runs as a service in the reference stack | Accepted | 2026-10-18 |
+| [0044](0044-console-surface.md) | The board is a console of four surfaces; Install is its repair room | Accepted | 2026-10-18 |
+| [0045](0045-catalog-storage.md) | The enablement catalog is versioned files plus metadata rows | Accepted | 2026-10-18 |
+| [0046](0046-hashed-team-directory.md) | The team directory is loaded as a hashed mapping, never as addresses | Accepted | 2026-10-18 |
+| [0047](0047-loopback-admin-stand-in.md) | A loopback stand-in for the Analytics API, for verification only | Accepted — built | 2026-10-18 |
+| [0048](0048-coach-in-the-console.md) | The coach is a page in the console, not a second Grafana | Accepted | 2026-10-18 |
+| [0050](0050-local-transcript-import.md) | Cardo never reads transcripts on its own; `cardo import` is the one exception | Accepted | 2026-10-18 |
+| [0053](0053-retention-default-and-organization-choice.md) | Retention is 90 days by default, and the organization may change it | Accepted | 2026-10-25 |
+| [0054](0054-both-actor-types-are-people.md) | Both actor types are people, so a service run is labelled by the run itself | Accepted | 2026-10-25 |
 
 ADR-0030 to ADR-0037 came out of one design review on 2026-09-25, which asked who Cardo is for and
 what each of them needs. Its evidence is

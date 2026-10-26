@@ -286,7 +286,8 @@ whose shape has not survived contact with real data is the wrong order.
 poller after each day's `Put` and therefore idempotent, with no TTL. It is not a materialized view:
 ClickHouse materialized views fire on INSERT, and the store swaps partitions with
 `REPLACE PARTITION`, which does not trigger them. Until that exists, **the practical retention of
-every Cardo trend is 90 days, not indefinite**, and `docs/design/architecture.md` says so.
+every Cardo trend is the window in force (90 days by default), not indefinite**, and
+`docs/design/architecture.md` says so.
 **Would falsify it:** a first organization for which 90 days of trend is enough, which would make the
 rollup premature rather than missing.
 
@@ -436,6 +437,13 @@ user granted the gold views only. Per-person pages move to a second Grafana that
 logs in to (ADR-0032). **Would close it:** that grant in place, and a live test that the leadership
 data source's user is refused a bronze or silver read.
 
+**Update 2026-10-26: the grant is built, and this stays open.** `cardo gold` creates the gold-only
+user, and the `Cardo gold (read-only)` datasource uses it. But that datasource sits in the same
+Grafana organization as the full-access one, and a login can send a query to either by its id,
+the same way the 2026-09-25 measurement read bronze. **Would close it, as amended:** the gold
+datasource in a Grafana organization of its own, leaders' logins only there, and a live test that
+such a login is refused a query to the full-access datasource.
+
 ### 16. Two of the new signals rest on unobserved or conditional telemetry
 
 **Threatens:** [ADR-0035](docs/adr/0035-repository-identity-classified.md) and
@@ -543,3 +551,16 @@ rollout question, "which teams has it not reached?", goes unanswered.
 the smallest group with five or more in it, such as a group of teams. The threshold is never
 lowered to make a small team visible. **Would show the mitigation failing:** an adoption owner
 asking for reach by team that the cohorts cannot give.
+
+### 23. Imported cost depends on a published price list
+
+**Threatens:** the coach's cost figure.
+
+Prices come from a table of Anthropic's published list prices, held in the binary. A model renamed
+upstream, or a price change after the table was taken, makes the estimate drift; discounts and
+credits are invisible by construction. The number is a comparable list price, not money anyone spent.
+
+**Mitigation:** unpriced models are counted and printed rather than billed at zero, every surface
+labels the figure as list price, and the table can be replaced by a local file for an organization
+whose contract differs. **Would show the mitigation failing:** a coach report whose cost cannot be
+reconciled with any invoice at all, or a model family that stays unpriced.

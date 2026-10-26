@@ -71,11 +71,15 @@ func goSources(t *testing.T) map[string]string {
 	return out
 }
 
-// INV-1 — Session transcripts are never read. No code path opens anything under
-// ~/.claude/projects/. Not for debugging, not once, not behind a flag.
+// INV-1 — The collection path never reads session transcripts. No automatic code path opens anything
+// under ~/.claude/projects/. Not for debugging, not once, not behind a flag.
 //
 // This is the single thing that would let a sceptic say "it reads my code", so the test scans for
-// the path itself rather than for any particular way of opening it.
+// the path itself rather than for any particular way of opening it — including a path assembled from
+// parts, which is how the first import slipped past this test.
+//
+// The one sanctioned exception is the local, user-invoked importer (ADR-0050): it reads metadata only
+// and never runs on the collection path.
 func TestINV1_NoTranscriptAccess(t *testing.T) {
 	forbidden := []string{
 		".claude/projects",
@@ -83,14 +87,37 @@ func TestINV1_NoTranscriptAccess(t *testing.T) {
 		"claude/projects",
 		"cleanupPeriodDays",
 	}
-	for file, body := range goSources(t) {
+	// Files allowed to assemble the transcript root, and why. Keep this list short: adding a file is
+	// a design decision, not a formality (ADR-0050).
+	localImport := map[string]bool{
+		"cmd/cardo/import.go": true,
+		// The installer's visible `history` step invokes the same command for the person running it.
+		"internal/launcher/step_history.go": true,
+	}
+
+	seen := map[string]bool{}
+	sources := goSources(t)
+	for file, body := range sources {
 		for _, needle := range forbidden {
-			if strings.Contains(body, needle) {
+			if strings.Contains(body, needle) && !localImport[file] {
 				t.Errorf("INV-1 violated: %s references %q.\n"+
-					"  Session transcripts are never read — not for debugging, not once, not\n"+
-					"  behind a flag. Changing this requires a superseding ADR (see ADR-0005).",
+					"  The collection path never reads session transcripts. The local importer is the\n"+
+					"  only sanctioned reader and is named in ADR-0050.",
 					file, needle)
 			}
+		}
+		// A path assembled from parts defeats the literals above; catch that form too.
+		if strings.Contains(body, `".claude"`) && strings.Contains(body, "projects") {
+			if !localImport[file] {
+				t.Errorf("INV-1 violated: %s assembles the transcript directory from parts.\n"+
+					"  Naming the components separately does not make the read allowed (ADR-0050).", file)
+			}
+			seen[file] = true
+		}
+	}
+	for file := range localImport {
+		if _, ok := sources[file]; !ok {
+			t.Errorf("INV-1 allowlist names %s, which no longer exists; prune it", file)
 		}
 	}
 }
@@ -468,5 +495,29 @@ func TestINV5_ClickHouseBronzeMatchesTheAllowlist(t *testing.T) {
 				"  The two storage targets must hold the same columns, or the same query returns\n"+
 				"  different answers depending on which one an organization deployed.", col)
 		}
+	}
+}
+
+// Service runs are labelled and never counted as people (ADR-0036). The views must keep the label
+// out of people counts, and the migration must carry the label from the resource attributes.
+func TestServiceRunsStayOutOfPeopleCounts(t *testing.T) {
+	body, err := os.ReadFile("../sql/clickhouse/012_service_runs.sql")
+	if err != nil {
+		t.Fatalf("read migration: %v", err)
+	}
+	sql := string(body)
+	for _, want := range []string{
+		"cardo.actor",
+		"cardo.workflow",
+		"actor_kind",
+		"countDistinctIf(pseudonym, pseudonym != '')",
+		"actor_kind != 'service'",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Errorf("012_service_runs.sql does not contain %q", want)
+		}
+	}
+	if n := strings.Count(sql, "actor_kind != 'service'"); n < 2 {
+		t.Errorf("gold views filter service sessions %d times, want at least 2", n)
 	}
 }

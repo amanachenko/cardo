@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cardo UI — components</title>
+<link rel="stylesheet" href="cardo-ui.css">
+<style>
+  /* only layout for this sheet; every component comes from cardo-ui.css */
+  .sheet{max-width:1240px;margin:0 auto;padding:24px clamp(14px,3vw,40px) 64px}
+  .sheet > header{border-bottom:1px solid var(--steel);padding-bottom:14px;display:flex;justify-content:space-between;align-items:baseline;gap:20px;flex-wrap:wrap}
+  .sheet h1{font:600 22px/1.2 var(--mono);letter-spacing:.14em;text-transform:uppercase;margin:0}
+  .sheet .meta{font:11px/1.5 var(--mono);color:var(--paint-dim);letter-spacing:.06em;text-align:right}
+  .sec{border-bottom:1px solid var(--steel);padding:26px 0 30px}
+  .sec > h2{font:600 13px/1 var(--mono);letter-spacing:.18em;text-transform:uppercase;margin:0 0 4px}
+  .sec > p.hint{margin:0 0 16px;color:var(--paint-dim);font:12px/1.6 var(--mono);max-width:80ch}
+  .demo{border:1px solid var(--steel);background:var(--flap)}
+  .pad{padding:16px}
+  .swatches{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--steel);border:1px solid var(--steel)}
+  @media (max-width:760px){.swatches{grid-template-columns:repeat(2,1fr)}}
+  .sw{background:var(--flap);padding:12px}
+  .sw i{display:block;height:34px;border:1px solid var(--steel-l)}
+  .sw b{display:block;margin-top:8px;font:11px/1.4 var(--mono);letter-spacing:.1em;text-transform:uppercase}
+  .sw span{display:block;font:11px/1.5 var(--mono);color:var(--paint-dim)}
+  .type{display:grid;grid-template-columns:120px 1fr;gap:0;border:1px solid var(--steel);border-bottom:0}
+  .type > div{padding:10px 12px;border-bottom:1px solid var(--steel)}
+  .type .k{font:10px/1.4 var(--mono);color:var(--paint-dim);letter-spacing:.1em;text-transform:uppercase}
+  .rules{display:grid;grid-template-columns:1fr 1fr;gap:26px}
+  .rules ul{margin:0;padding-left:18px;font-size:14px;color:#cfc9b8;line-height:1.7}
+  @media (max-width:760px){.rules{grid-template-columns:1fr}}
+</style>
+</head>
+<body data-surface="operate">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-check" viewBox="0 0 16 16"><polyline points="3,8.5 6.5,12 13,4" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+</svg>
+<div class="sheet">
+
+  <header>
+    <h1>Cardo UI</h1>
+    <div class="meta">one stylesheet · docs/design/cardo-ui.css<br>every screen after the launcher is built from this</div>
+  </header>
+
+  <section class="sec">
+    <h2>Mark</h2>
+    <p class="hint">Two squares, one filled and one outlined: done and pending. Amber is the brand accent; the outline is paper. At favicon sizes both squares are filled so the gap does not close.</p>
+    <div class="demo pad" style="display:flex;align-items:flex-end;gap:32px">
+      <svg width="56" height="56" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="8.5" height="8.5" fill="#d7a12a"/><rect x="13.75" y="12.75" width="7" height="7" fill="none" stroke="#ece5d3" stroke-width="1.2"/></svg>
+      <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="8.5" height="8.5" fill="#d7a12a"/><rect x="13.75" y="12.75" width="7" height="7" fill="none" stroke="#ece5d3" stroke-width="1.2"/></svg>
+      <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="8.5" height="8.5" fill="#d7a12a"/><rect x="13.75" y="12.75" width="7" height="7" fill="none" stroke="#ece5d3" stroke-width="1.6"/></svg>
+      <span class="hint">tiny (favicon): <svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true" style="vertical-align:-3px"><rect x="4" y="4" width="11" height="11" fill="#d7a12a"/><rect x="17" y="17" width="11" height="11" fill="#ece5d3"/></svg></span>
+    </div>
+  </section>
+<section class="sec">
+    <h2>Colour</h2>
+    <p class="hint">Four roles, not a palette: ground, ink, structure and three signals. A signal means one thing only.</p>
+    <div class="swatches">
+      <div class="sw"><i style="background:var(--void)"></i><b>void</b><span>#0b0c0a · ground</span></div>
+      <div class="sw"><i style="background:var(--flap)"></i><b>flap</b><span>#141513 · surface</span></div>
+      <div class="sw"><i style="background:var(--steel)"></i><b>steel</b><span>#33352f · structure</span></div>
+      <div class="sw"><i style="background:var(--paint)"></i><b>paint</b><span>#ece5d3 · verified</span></div>
+      <div class="sw"><i style="background:var(--paint-dim)"></i><b>paint-dim</b><span>#a9a494 · text</span></div>
+      <div class="sw"><i style="background:var(--amber)"></i><b>amber</b><span>#d7a12a · in progress</span></div>
+      <div class="sw"><i style="background:var(--red)"></i><b>red</b><span>#a8453c · failed</span></div>
+      <div class="sw"><i style="background:var(--green)"></i><b>green</b><span>#5e7d54 · policy holds</span></div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <h2>Typography</h2>
+    <p class="hint">Monospace carries data and step names: these are the board's fixed cells, not a technical costume. Sans carries explanation. Six sizes, one step of roughly 1.2.</p>
+    <div class="type">
+      <div class="k">board · 26</div><div style="font:600 var(--t-board)/1.15 var(--mono);letter-spacing:.16em;text-transform:uppercase">Installation</div>
+      <div class="k">title · 18</div><div style="font:600 var(--t-title)/1.2 var(--mono);letter-spacing:.1em;text-transform:uppercase">Data arrived</div>
+      <div class="k">body · 15</div><div style="font-size:var(--t-body);max-width:70ch">One row from your own session: time, duration, tool calls and version; prompt text and paths are not included.</div>
+      <div class="k">small · 12</div><div style="font:var(--t-small)/1.6 var(--mono);color:var(--paint-dim)">otlp + hook + query · ok</div>
+      <div class="k">micro · 10</div><div style="font:var(--t-micro)/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--paint-faint)">Step · result · state</div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <h2>Command and facts</h2>
+    <p class="hint">The command is always shown in full: the board does not hide what it will execute. Values are right-aligned and use tabular numerals.</p>
+    <div class="demo pad">
+      <div class="cmd"><code>docker compose up -d --wait</code><button class="copy" data-copy>Copy</button></div>
+      <table class="wiz-facts">
+        <tr><td>ClickHouse</td><td>127.0.0.1:8124 · 9001</td></tr>
+        <tr><td>Grafana</td><td>127.0.0.1:3001</td></tr>
+        <tr><td>enabled</td><td>command, subagent and MCP names · duration · errors</td></tr>
+        <tr><td>disabled</td><td>prompt text · file contents</td></tr>
+        <tr><td>outbound</td><td>0 bytes</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section class="sec">
+    <h2>Actions</h2>
+    <p class="hint">One primary action per screen; the rest are secondary. A button names what will happen, not "continue".</p>
+    <div class="demo pad">
+      <div class="actions" style="margin-top:0">
+        <button class="act">Check the chain</button>
+        <button class="act ghost">Close</button>
+        <button class="act" disabled>Unavailable</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <h2>Path selection</h2>
+    <p class="hint">First screen: two paths and an honest time estimate. The whole row is clickable; there is no wrapper button.</p>
+    <div class="departures">
+      <div class="dephead"><span>Platform</span><span>Path</span><span>Time</span><span></span></div>
+      <button class="dep">
+        <span class="plat">1</span>
+        <span class="dest">Single engineer<span class="note">One command, four checks, your own session in the table.</span></span>
+        <span class="time">~10 MIN</span>
+        <span class="go">Begin</span>
+      </button>
+      <div class="deptail"><span>Both paths: <b>local</b> · <b>no account</b></span><span>Outbound: <b>0 bytes</b></span></div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <h2>Installation wizard</h2>
+    <p class="hint">Rail, segmented progress, one primary action, and a failure that stays in the pane. These are the pieces every later multi-step flow reuses.</p>
+    <div class="demo">
+      <div style="padding:12px 14px;border-bottom:1px solid var(--steel)">
+        <div class="segbar"><i class="ok"></i><i class="ok"></i><i class="run"></i><i></i><i></i><i></i></div>
+        <div class="wiz-progress"><span>Step 3 of 6</span><span>Running: Secrets</span><span>About 10 minutes</span></div>
+      </div>
+      <div class="wiz" style="border:0">
+        <aside class="wiz-rail" style="border-right:1px solid var(--steel)">
+          <div class="wiz-rail-head"><span>Steps</span><b>2 / 6</b></div>
+          <ol class="wiz-steps" style="max-height:none">
+            <li><button class="wiz-step" data-state="ok"><span class="n">01</span><span class="t">Docker daemon</span><span class="s"><svg class="icon sm"><use href="#i-check"/></svg></span></button></li>
+            <li><button class="wiz-step" data-state="ok"><span class="n">02</span><span class="t">Network ports</span><span class="s"><svg class="icon sm"><use href="#i-check"/></svg></span></button></li>
+            <li><button class="wiz-step" data-state="run" aria-current="true"><span class="n">03</span><span class="t">Secrets</span><span class="s"></span></button></li>
+            <li><button class="wiz-step" data-state="wait" disabled><span class="n">04</span><span class="t">Reference stack</span><span class="s"></span></button></li>
+            <li><button class="wiz-step" data-state="planned" disabled><span class="n">··</span><span class="t">Read-only logins</span><span class="later">Later</span><span class="s"></span></button></li>
+          </ol>
+        </aside>
+        <main class="wiz-pane">
+          <div class="wiz-head">
+            <div class="wiz-meta"><span>Step 3 of 6</span><span>·</span><b>Machine</b></div>
+            <h1 class="wiz-title">Secrets</h1>
+            <div class="wiz-body">
+              <div class="wiz-result"><span class="lamp" data-s="fail"><b></b><span>Failed</span></span><span class="v">salt is 31 characters</span></div>
+              <p>The salt and two passwords are generated locally and written with mode 0600. A second run does not rotate the salt.</p>
+            </div>
+          </div>
+          <div class="wiz-error">
+            <span class="lbl">! What failed</span>
+            <p class="cause">The existing .env could not be read: permission denied.</p>
+            <div class="rec"><b>Recovery</b><span>Correct the file permissions, or move the file aside and run the step again.</span></div>
+          </div>
+          <div class="wiz-section">
+            <h3>Blocked</h3>
+            <p style="margin:0">The installation cannot continue until this step succeeds. The next step stays locked.</p>
+          </div>
+          <div class="wiz-actions">
+            <button class="act primary">Retry</button>
+            <span class="hint">Step 3 of 6</span>
+          </div>
+        </main>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <h2>Requirements list</h2>
+    <p class="hint">Prerequisites before a destructive or long action. One line each, no checkboxes: the installer verifies them itself and reports the first failure.</p>
+    <div class="demo pad">
+      <ul class="reqlist">
+        <li><span><b>Docker Desktop 24 or later</b>, running.</span></li>
+        <li><span><b>Five free loopback ports:</b> 8124, 9001, 3001, 4319, 8089.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="sec">
+    <h2>Rules</h2>
+    <div class="rules">
+      <ul>
+        <li>A component is taken from this file rather than redrawn.</li>
+        <li>A new colour or size enters the tokens and DESIGN.md first.</li>
+        <li>There are exactly four states: waiting, running, done, failed.</li>
+        <li>No cards inside cards, no rounding, no shadows, no gradients.</li>
+      </ul>
+      <ul>
+        <li>Numbers are right-aligned and tabular.</li>
+        <li>No screen shows one person to another.</li>
+        <li>A number is never shown without its source.</li>
+        <li>Plain words, one example for every claim.</li>
+      </ul>
+    </div>
+  </section>
+</div>
+<script>
+  document.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', () => {
+    const t = b.closest('.cmd').querySelector('code').textContent;
+    (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).catch(()=>{}).finally(()=>{
+      const old = b.textContent; b.textContent = 'Скопировано'; setTimeout(()=>b.textContent = old, 1400);
+    });
+  }));
+</script>
+</body>
+</html>
