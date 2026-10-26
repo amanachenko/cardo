@@ -158,19 +158,24 @@ func Up(ctx context.Context, opts Options) error {
 	}
 	alreadyRunning := len(busy) > 0 && pingClickHouse(ctx, opts) == nil
 	if len(busy) > 0 && !alreadyRunning {
-		return fmt.Errorf("preflight: port %d is already taken\n  stop the process holding it, or run cardo up --hook-port 8099", busy[0])
+		return fmt.Errorf("preflight: port %d is already taken\n  stop the process holding it, then run cardo up again", busy[0])
 	}
+	ports := Result{ID: "ports", Name: "PORTS", Value: portSummary(busy), OK: true}
 
-	secrets, err := stepSecrets(opts)
+	secrets, err := stepSecrets(ctx, opts)
 	if err != nil {
 		return fmt.Errorf("secrets: %w", err)
 	}
-	stack, err := stepStack(ctx, opts, alreadyRunning)
+	if !secrets.OK {
+		Render(opts.Out, []Result{docker, ports, secrets})
+		return fmt.Errorf("check %s failed: %s", secrets.Name, secrets.Fix)
+	}
+	stack, err := stepStack(ctx, opts)
 	if err != nil {
 		return fmt.Errorf("stack: %w", err)
 	}
 
-	rows := []Result{docker, {ID: "ports", Name: "PORTS", Value: portSummary(busy), OK: true}, secrets, stack}
+	rows := []Result{docker, ports, secrets, stack}
 	for _, id := range []string{"clickhouse", "grafana", "collector"} {
 		r, err := RunStep(ctx, opts, id)
 		if err != nil {

@@ -50,6 +50,7 @@ Check
   coach       Show your figures against your own previous window (<email>)
 
 Data
+  import      Preview, then with -write store, your own past sessions (one time)
   poll        Poll an analytics source into a local store
   mock-admin  Serve the Analytics API shape on loopback, for verification
   prune       Delete raw rows older than the retention window
@@ -106,17 +107,22 @@ func main() {
 // synopsis is the one line a person needs before typing the command, and the flag text comes from
 // the command itself so the two can never disagree.
 var synopsis = map[string][2]string{
-	"up":      {"cardo up [flags]", "Install or repair the reference stack, then prove that data arrives."},
-	"ui":      {"cardo ui [flags]", "Serve the board on loopback; its buttons run the same steps."},
-	"check":   {"cardo check [flags]", "Read-only checks; exit 1 if anything fails."},
-	"connect": {"cardo connect --project <dir>", "Write .claude/settings.json into one project."},
-	"secret":  {"cardo secret [--dir]", "Generate the salt and passwords into .env (mode 0600)."},
-	"probe":   {"cardo probe [--dir]", "Send one OTLP log and one hook event, then read them back."},
-	"session": {"cardo session [--dir]", "Check whether a real session has reached the stack."},
-	"gold":    {"cardo gold [--dir]", "Create the gold-only ClickHouse user and prove the refusal."},
-	"poll":    {"cardo poll [flags]", "Poll an analytics source into a local store."},
-	"migrate": {"cardo migrate [-v]", "Apply the ClickHouse schema and exit."},
-	"version": {"cardo version [--long|--short]", "Print the version; --long adds platform and toolchain, --short prints the bare version."},
+	"up":         {"cardo up [flags]", "Install or repair the reference stack, then prove that data arrives."},
+	"ui":         {"cardo ui [flags]", "Serve the board on loopback; its buttons run the same steps."},
+	"check":      {"cardo check [flags]", "Read-only checks; exit 1 if anything fails."},
+	"connect":    {"cardo connect --project <dir>", "Write .claude/settings.json into one project."},
+	"secret":     {"cardo secret [--dir]", "Generate the salt and passwords into .env (mode 0600)."},
+	"probe":      {"cardo probe [--dir]", "Send one OTLP log and one hook event, then read them back."},
+	"session":    {"cardo session [--dir]", "Check whether a real session has reached the stack."},
+	"gold":       {"cardo gold [--dir]", "Create the gold-only ClickHouse user and prove the refusal."},
+	"pseudonym":  {"cardo pseudonym [flags] <email>", "Print the pseudonym the views join on for this address."},
+	"coach":      {"cardo coach [flags] <email>", "Show your figures against your own previous window."},
+	"import":     {"cardo import [flags]", "Count your past sessions from Claude Code's local transcripts; -write stores the counts, never the text."},
+	"prune":      {"cardo prune [flags]", "Delete raw rows older than the retention window."},
+	"mock-admin": {"cardo mock-admin [flags]", "Serve the Analytics API shape on loopback, for verification."},
+	"poll":       {"cardo poll [flags]", "Poll an analytics source into a local store."},
+	"migrate":    {"cardo migrate [-v]", "Apply the ClickHouse schema and exit."},
+	"version":    {"cardo version [--long|--short]", "Print the version; --long adds platform and toolchain, --short prints the bare version."},
 }
 
 // helpFor prints one command's synopsis instead of the whole surface.

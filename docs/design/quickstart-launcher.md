@@ -81,7 +81,7 @@ touched.
 | Failure | What is shown | Recovery |
 |---|---|---|
 | Docker not running | "демон Docker не отвечает" | start Docker Desktop, press retry |
-| Port held | port, process name, pid | stop it, or `cardo up --hook-port 8099` |
+| Port held | port, process name, pid | stop it, then run `cardo up` again |
 | `.env` exists | will not overwrite; shows which keys are set | `cardo up --rotate` or continue |
 | Salt present but invalid | "соль должна быть hex, 32+ символа" | `cardo secret --rotate-salt` |
 | Migration failed | last migration id and error | `cardo up` retries; data kept |
@@ -97,7 +97,7 @@ resumes and updates.
 |---|---|---|
 | A flag on every `claude` run | it is a habit, and habits lapse | the settings file is installed once per project or machine |
 | A daemon on developer laptops | it needs updates, permissions and trust | hooks are plain HTTP with a one-second timeout |
-| A weekly "sync" step | it is invisible work | `cardo up` pulls and rebuilds only what changed |
+| A weekly "sync" step | it is invisible work | after a `git pull`, `cardo up` rebuilds only what changed |
 | Manual `.env` editing | it invites drift and shared passwords | generated once, `0600`, never printed twice |
 | Hand-maintained dashboards | they rot | provisioned from the repository |
 | Asking engineers to label work | it is surveillance by another name | everything comes from Claude Code's own telemetry |
