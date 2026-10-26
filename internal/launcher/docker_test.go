@@ -156,7 +156,7 @@ func TestStackFallsBackWithoutWait(t *testing.T) {
 	})
 	opts.Deps.WaitHTTP = func(ctx context.Context, url string, timeout time.Duration) error { return nil }
 
-	res, err := stepStack(context.Background(), opts, false)
+	res, err := stepStack(context.Background(), opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,12 +185,12 @@ func TestStackUsesWaitWhenAvailable(t *testing.T) {
 	})
 	opts.Deps.WaitHTTP = func(ctx context.Context, url string, timeout time.Duration) error { return nil }
 
-	if _, err := stepStack(context.Background(), opts, false); err != nil {
+	if _, err := stepStack(context.Background(), opts); err != nil {
 		t.Fatal(err)
 	}
 	var sawWait bool
 	for _, c := range calls {
-		if strings.Contains(c, "up -d --wait") {
+		if strings.Contains(c, "up -d --build --wait") {
 			sawWait = true
 		}
 	}

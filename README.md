@@ -18,29 +18,32 @@ not your engineers.
 ## Install the launcher
 
 The launcher is one binary. It installs the stack, verifies it, and serves the installation board on
-loopback. Docker Desktop 24 or later must be running first; nothing else is required.
+loopback. It runs from a clone of this repository, because the stack is built from the repository's
+files: the compose file, the collector's configuration, the dashboards and the image's Dockerfile.
+You need Git, Go 1.23 or later, and Docker Desktop 24 or later, running.
 
 macOS and Linux:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/amanachenko/cardo/main/install.sh | sh
+git clone https://github.com/amanachenko/cardo.git && cd cardo
+go build -o bin/cardo ./cmd/cardo
+./bin/cardo ui     # opens the installation board
 ```
 
 Windows (PowerShell):
 
 ```powershell
-irm https://raw.githubusercontent.com/amanachenko/cardo/main/install.ps1 | iex
+git clone https://github.com/amanachenko/cardo.git; cd cardo
+go build -o bin\cardo.exe .\cmd\cardo
+.\bin\cardo.exe ui
 ```
 
-Both installers download the archive and `checksums.txt` for the same release and refuse to unpack
-anything whose SHA-256 does not match. Neither needs `sudo` or administrator rights: the binary goes
-to `~/.local/bin` or `%LOCALAPPDATA%\Cardo\bin`, and only the user `PATH` is touched.
+Run every `cardo` command from the root of the clone. To update, `git pull`, build again and run
+`cardo up`: it rebuilds the stack's image from the checkout and applies any new migration, keeping
+the salt and the data.
 
-Then:
-
-```sh
-cardo ui     # opens the installation board
-```
+`install.sh` and `install.ps1` download a published release's binary and check its SHA-256. No
+release has been published yet, and that binary would still have to run from a clone.
 
 CI runs are not people: `deploy/ci/github-actions.card.yaml` turns on telemetry for GitHub Actions with
 `cardo.actor=service` and `cardo.workflow=<workflow>`; those runs count as work and cost, never as a
@@ -53,15 +56,17 @@ Settings → Installation → *Open install and repair*, and on the Overview nex
 How each surface works, and how to run the coach and the one-time transcript importer:
 **[docs/console-coach-history.md](docs/console-coach-history.md)**.
 
-`cardo up` runs the same installation without the board, `cardo check` re-runs the checks read-only,
-and `cardo connect --project <dir>` installs the Claude Code settings file.
+`cardo up` runs the same installation without the board, and on an installed stack applies an
+update. `cardo check` re-runs the checks read-only, and `cardo connect --project <dir>` installs the
+Claude Code settings file.
 
 The Admin API path is configured on the same board: paste an organization admin key once and the
 `poller` service starts inside the stack (Compose profile `admin`) on the interval you choose. The key
 is written to `deploy/compose/.env` with mode 0600, never shown again, and the poller runs no cron on
 any machine. Without a key the service is never started.
 
-The installer downloads the binary from GitHub; the stack it installs sends nothing out. `cardo probe`
+The first start downloads the Docker images and Grafana's ClickHouse plugin; the running stack sends
+nothing out. `cardo probe`
 proves the local pipeline with one synthetic event and deletes its rows immediately, so the session
 model never counts it; `cardo check --proof` passes only when one of your own sessions has the fields
 the views read.

@@ -55,7 +55,9 @@ func TestStepCommandsAreExecutable(t *testing.T) {
 func TestSecretsAreNotExposedByTheStateEndpoint(t *testing.T) {
 	dir := t.TempDir()
 	writeCompose(t, dir)
-	srv, err := NewServer(Options{Dir: dir, Out: os.Stdout})
+	// The fake has no stack running: with real ones, a stack on this machine's 8124 would make the
+	// secrets step refuse to generate a salt.
+	srv, err := NewServer(Options{Dir: dir, Out: os.Stdout, Deps: (&fakeDeps{}).deps()})
 	if err != nil {
 		t.Fatal(err)
 	}

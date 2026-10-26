@@ -196,9 +196,9 @@ func RunStep(ctx context.Context, opts Options, id string) (Result, error) {
 	case "ports":
 		return stepPorts(ctx, opts)
 	case "secrets":
-		return stepSecrets(opts)
+		return stepSecrets(ctx, opts)
 	case "stack":
-		return stepStack(ctx, opts, false)
+		return stepStack(ctx, opts)
 	case "clickhouse":
 		return stepClickHouse(ctx, opts)
 	case "grafana":
@@ -266,7 +266,7 @@ func stepPorts(ctx context.Context, opts Options) (Result, error) {
 	}, nil
 }
 
-func stepSecrets(opts Options) (Result, error) {
+func stepSecrets(ctx context.Context, opts Options) (Result, error) {
 	path := filepath.Join(opts.Dir, ".env")
 	env, err := ReadDotEnv(path)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -279,6 +279,16 @@ func stepSecrets(opts Options) (Result, error) {
 	if problems := ValidateEnv(env); len(problems) == 0 {
 		return Result{ID: "secrets", Name: "SECRETS", Value: ".env kept, salt unchanged", OK: true}, nil
 	} else {
+		// A stack that already answers was started with a salt this directory does not hold. A
+		// new salt would give every person a second pseudonym, and the next step would restart the
+		// stack with it.
+		if salt := env["CARDO_SALT"]; (len(salt) < 32 || !isHex(salt)) && pingClickHouse(ctx, opts) == nil {
+			return Result{
+				ID: "secrets", Name: "SECRETS", Value: "a stack is running, its salt is not here",
+				Cause: "ClickHouse already answers on 8124, but " + path + " holds no valid salt: " + strings.Join(problems, "; ") + ".",
+				Fix:   "Run cardo from the directory the stack was installed from: its deploy/compose/.env holds the salt. A new salt would split every person's history in two.",
+			}, nil
+		}
 		s, err := GenerateSecrets(cryptoReader{})
 		if err != nil {
 			return Result{
@@ -309,10 +319,10 @@ func stepSecrets(opts Options) (Result, error) {
 	}
 }
 
-func stepStack(ctx context.Context, opts Options, alreadyRunning bool) (Result, error) {
-	if alreadyRunning {
-		return Result{ID: "stack", Name: "STACK", Value: "already running", OK: true}, nil
-	}
+// stepStack starts the stack, or brings a running one up to date. Compose recreates only what
+// changed, and --build rebuilds the cardo image from this checkout, so a new migration runs on the
+// next `cardo up` instead of waiting for an image built once at install.
+func stepStack(ctx context.Context, opts Options) (Result, error) {
 	if opts.DryRun {
 		return Result{ID: "stack", Name: "STACK", Value: "dry run: would start", OK: true}, nil
 	}
@@ -323,7 +333,7 @@ func stepStack(ctx context.Context, opts Options, alreadyRunning bool) (Result, 
 	if env, err := ReadDotEnv(filepath.Join(opts.Dir, ".env")); err == nil && strings.TrimSpace(env["CARDO_ADMIN_KEY"]) != "" {
 		base = append(base, "--profile", "admin")
 	}
-	args := append(append([]string{}, base...), "up", "-d")
+	args := append(append([]string{}, base...), "up", "-d", "--build")
 	if waitFlag {
 		args = append(args, "--wait")
 	}
@@ -331,7 +341,7 @@ func stepStack(ctx context.Context, opts Options, alreadyRunning bool) (Result, 
 	if err != nil && waitFlag && looksLikeUnknownWait(out+err.Error()) {
 		// Compose answered a version that supports --wait but the flag is not there: older plugin.
 		waitFlag = false
-		args = append(append([]string{}, base...), "up", "-d")
+		args = append(append([]string{}, base...), "up", "-d", "--build")
 		out, err = opts.Deps.Exec(ctx, opts.Dir, "docker", args...)
 	}
 	if err != nil {
@@ -353,6 +363,15 @@ func stepStack(ctx context.Context, opts Options, alreadyRunning bool) (Result, 
 			ID: "stack", Name: "STACK", Value: "ClickHouse did not answer",
 			Cause: "The containers started, but ClickHouse did not answer within " + opts.Wait.String() + ": " + err.Error(),
 			Fix:   "Run docker compose logs clickhouse. On a fresh volume the first start can take longer; run this step again before changing anything.",
+		}, nil
+	}
+	// Grafana's first start sets up its own database and installs the ClickHouse plugin before it
+	// answers, which takes longer than ClickHouse. Without this wait a first run fails at the next row.
+	if err := opts.Deps.WaitHTTP(ctx, serviceURL("3001", "/api/health"), opts.Wait); err != nil {
+		return Result{
+			ID: "stack", Name: "STACK", Value: "Grafana did not answer",
+			Cause: "The containers started, but Grafana did not answer within " + opts.Wait.String() + ": " + err.Error(),
+			Fix:   "Run docker compose logs grafana. Its first start downloads the ClickHouse plugin, so check the network; run this step again before changing anything.",
 		}, nil
 	}
 

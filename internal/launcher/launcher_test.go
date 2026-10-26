@@ -254,17 +254,21 @@ func TestUpWritesSecretsOnceAndStartsTheStack(t *testing.T) {
 	if len(salt) < 32 {
 		t.Fatalf("salt = %q, want a generated salt", salt)
 	}
-	if !hasCall(f.calls, "docker compose up -d --wait") {
+	if !hasCall(f.calls, "docker compose up -d --build --wait") {
 		t.Errorf("calls = %v, want compose up", f.calls)
 	}
 	if !strings.Contains(out.String(), "ГОТОВО") && !strings.Contains(out.String(), "OK") {
 		t.Errorf("output does not report a finished board:\n%s", out.String())
 	}
 
-	// A second run must not rotate the salt.
+	// A second run must not rotate the salt, and must still run Compose: that is how an update
+	// reaches a running stack.
 	f.calls = nil
 	if err := Up(context.Background(), opts); err != nil {
 		t.Fatalf("second up: %v", err)
+	}
+	if !hasCall(f.calls, "docker compose up -d --build --wait") {
+		t.Errorf("second run calls = %v, want compose up --build on the running stack", f.calls)
 	}
 	again, _ := ReadDotEnv(filepath.Join(dir, ".env"))
 	if again["CARDO_SALT"] != salt {
@@ -394,6 +398,46 @@ func TestPortsStepAcceptsAnAlreadyRunningStack(t *testing.T) {
 	}
 	if !strings.Contains(res.Value, "already running") {
 		t.Errorf("value = %q, want it to say the stack is running", res.Value)
+	}
+}
+
+// A running stack with no salt in this directory was installed from somewhere else. Generating a
+// salt here, then restarting the stack with it, would give every person a second pseudonym.
+func TestUpRefusesANewSaltForARunningStack(t *testing.T) {
+	dir := t.TempDir()
+	writeCompose(t, dir)
+	f := &fakeDeps{started: true}
+	var out bytes.Buffer
+	err := Up(context.Background(), Options{Dir: dir, Out: &out, Deps: f.deps()})
+	if err == nil {
+		t.Fatal("up succeeded over a running stack whose salt is elsewhere")
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, ".env")); statErr == nil {
+		t.Error("a new .env was written over a running stack")
+	}
+	for _, c := range f.calls {
+		if strings.Contains(c, "compose up") {
+			t.Errorf("compose was started without the stack's salt: %s", c)
+		}
+	}
+}
+
+// Grafana answers later than ClickHouse on a first start; the stack step waits for both.
+func TestStackWaitsForGrafana(t *testing.T) {
+	f := &fakeDeps{}
+	opts := Options{Dir: t.TempDir(), Wait: time.Second, Deps: f.deps()}
+	opts.Deps.WaitHTTP = func(ctx context.Context, url string, timeout time.Duration) error {
+		if strings.Contains(url, ":3001") {
+			return errors.New("EOF")
+		}
+		return nil
+	}
+	res, err := stepStack(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.OK || !strings.Contains(res.Value, "Grafana") {
+		t.Fatalf("stack = %+v, want it to wait for Grafana and name it", res)
 	}
 }
 
