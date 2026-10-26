@@ -245,6 +245,21 @@ No admin key yet? `make sample-seed` writes invented data so the dashboards have
 Details, including why the stack ships a ClickHouse config that turns off most of its own
 telemetry: **[deploy/compose/README.md](deploy/compose/README.md)**.
 
+### On a made-up organization
+
+One person's sessions show almost nothing under the five-person minimum: a command is named once
+five people use it, so with one person it shows as "other". A stack of its own holds 60 invented
+engineers in six teams instead, sent through the collector, with stories planted in their sessions
+and an answer key that every view is checked against:
+
+```bash
+bash scripts/made-up.sh up && bash scripts/made-up.sh load && bash scripts/made-up.sh check
+```
+
+The load takes about 16 minutes. Its Grafana is on `127.0.0.1:3003`. Nothing seen there is a finding
+about real engineers ([ADR-0051](docs/adr/0051-a-made-up-organization.md)). How to run it, what was
+planted, and what no view shows yet: **[docs/made-up-organization.md](docs/made-up-organization.md)**.
+
 ### Retention deletes data
 
 Tier-1 rows are kept for **90 days by default** and then removed by a ClickHouse TTL
