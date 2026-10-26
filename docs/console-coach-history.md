@@ -209,6 +209,15 @@ Properties worth knowing before handing one out:
 **Prompt text is measured and discarded.** Tool calls, file paths and any other content are not
 read either.
 
+**A reply is counted once.** Claude Code writes one reply as several lines, one per part (its
+thinking, its text, each tool call), and every line carries the whole reply's token usage. The
+importer keeps one request per message id, so a reply with thinking, text and a tool call is one
+request, not three.
+
+**It reaches back as far as the transcripts do.** Claude Code deletes a transcript 30 days after it
+was last used, unless `cleanupPeriodDays` in its settings is raised. So on most machines the import
+brings about a month of history, and raising the setting now keeps more for a later import.
+
 ### 5.2 Dry run, then write
 
 ```sh
@@ -471,6 +480,8 @@ counting `silver_session` rows with `session_id LIKE 'demo-%'` (expect 0).
 8. The team path still needs `cardo connect --project` per repository; user-level instrumentation is
    the planned fix and needs explicit consent because it edits `~/.claude/settings.json` for every
    project.
+9. **The import reaches back about a month** on most machines, because Claude Code deletes
+   transcripts after 30 days by default (§5.1).
 
 ---
 

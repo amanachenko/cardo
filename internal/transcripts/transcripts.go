@@ -55,10 +55,12 @@ type line struct {
 	UUID      string          `json:"uuid"`
 	Parent    string          `json:"parentUuid"`
 	IsSide    bool            `json:"isSidechain"`
+	RequestID string          `json:"requestId"`
 	Message   json.RawMessage `json:"message"`
 }
 
 type message struct {
+	ID      string          `json:"id"`
 	Role    string          `json:"role"`
 	Model   string          `json:"model"`
 	Usage   Usage           `json:"usage"`
@@ -72,6 +74,14 @@ func Scan(root string) (Stats, error) {
 	promptOf := map[string]map[string]string{}
 	parentOf := map[string]string{}
 	lastPrompt := map[string]string{}
+	// Claude Code writes a reply as one line per part (its thinking, its text, each tool call), and
+	// every line carries the whole reply's usage. A reply is counted once, by its message id, in
+	// whichever file it appears first.
+	type reply struct {
+		s *Session
+		i int
+	}
+	replies := map[string]reply{}
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() || !strings.HasSuffix(path, ".jsonl") {
 			return nil
@@ -115,21 +125,6 @@ func Scan(root string) (Stats, error) {
 				if m.Model != "" {
 					s.Models[m.Model] = true
 				}
-				if m.Usage.In+m.Usage.Out+m.Usage.CacheRead+m.Usage.CacheCreate > 0 {
-					s.Usage.In += m.Usage.In
-					s.Usage.Out += m.Usage.Out
-					s.Usage.CacheRead += m.Usage.CacheRead
-					s.Usage.CacheCreate += m.Usage.CacheCreate
-					if s.ModelsTok == nil {
-						s.ModelsTok = map[string]Usage{}
-					}
-					acc := s.ModelsTok[m.Model]
-					acc.In += m.Usage.In
-					acc.Out += m.Usage.Out
-					acc.CacheRead += m.Usage.CacheRead
-					acc.CacheCreate += m.Usage.CacheCreate
-					s.ModelsTok[m.Model] = acc
-				}
 				if l.Type == "user" && !l.IsSide && m.Role == "user" && isPrompt(m.Content) {
 					s.Prompts++
 					st.PromptSum++
@@ -142,8 +137,22 @@ func Scan(root string) (Stats, error) {
 					lastPrompt[l.SessionID] = l.UUID
 				}
 				if l.Type == "assistant" && m.Usage.In+m.Usage.Out+m.Usage.CacheRead+m.Usage.CacheCreate > 0 {
-					pid := resolvePrompt(l.SessionID, l.UUID, l.Parent, parentOf, promptOf, lastPrompt)
-					s.Requests = append(s.Requests, Request{PromptID: pid, TS: ts, Model: m.Model, Usage: m.Usage})
+					id := m.ID
+					if id == "" {
+						id = l.RequestID
+					}
+					if r, seen := replies[id]; seen && id != "" {
+						// If the parts disagree, the largest output count is the reply's.
+						if m.Usage.Out > r.s.Requests[r.i].Usage.Out {
+							r.s.Requests[r.i].Usage = m.Usage
+						}
+					} else {
+						pid := resolvePrompt(l.SessionID, l.UUID, l.Parent, parentOf, promptOf, lastPrompt)
+						s.Requests = append(s.Requests, Request{PromptID: pid, TS: ts, Model: m.Model, Usage: m.Usage})
+						if id != "" {
+							replies[id] = reply{s, len(s.Requests) - 1}
+						}
+					}
 				}
 			}
 		}
@@ -153,9 +162,26 @@ func Scan(root string) (Stats, error) {
 		return st, err
 	}
 	for _, s := range sessions {
+		// A session's totals are the sum of its replies, each counted once.
+		for _, r := range s.Requests {
+			s.Usage.add(r.Usage)
+			if s.ModelsTok == nil {
+				s.ModelsTok = map[string]Usage{}
+			}
+			acc := s.ModelsTok[r.Model]
+			acc.add(r.Usage)
+			s.ModelsTok[r.Model] = acc
+		}
 		st.Sessions = append(st.Sessions, s)
 	}
 	return st, nil
+}
+
+func (u *Usage) add(v Usage) {
+	u.In += v.In
+	u.Out += v.Out
+	u.CacheRead += v.CacheRead
+	u.CacheCreate += v.CacheCreate
 }
 
 // isPrompt is true for a typed prompt, false for tool results and system reminders.
