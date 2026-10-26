@@ -303,9 +303,11 @@ batches on a 10-second timer, so it does not wake ClickHouse more often than tha
 ## Retention deletes data
 
 `bronze_actor_day` carries `TTL day + INTERVAL 90 DAY DELETE`, per
-[ADR-0016](../../docs/adr/0016-retention.md): with a stable salt, retention rather than hashing is
-what actually bounds exposure. Rows older than 90 days are removed on a background merge.
+[ADR-0016](../../docs/adr/0016-retention.md) and
+[ADR-0053](../../docs/adr/0053-retention-default-and-organization-choice.md): with a stable salt,
+retention rather than hashing is what actually bounds exposure. Rows older than the window are
+removed on a background merge, and the window is 90 days unless the organization changes it.
 
 Because the gold marts are views over bronze rather than materialized tables, **trends older than
-90 days disappear along with the rows**. ADR-0016 intends aggregates to be kept indefinitely and
+the window disappear along with the rows**. ADR-0016 intends aggregates to be kept indefinitely and
 that part is not built yet — see [risks.md](../../risks.md) #10.

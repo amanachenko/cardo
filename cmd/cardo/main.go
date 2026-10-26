@@ -13,12 +13,14 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/amanachenko/cardo/internal/poll"
 	"github.com/amanachenko/cardo/internal/pseudonym"
+	"github.com/amanachenko/cardo/internal/retention"
 	"github.com/amanachenko/cardo/internal/source"
 	"github.com/amanachenko/cardo/internal/source/console"
 	"github.com/amanachenko/cardo/internal/store"
@@ -28,74 +30,216 @@ import (
 
 var version = "0.1.0-dev"
 
-const usage = `cardo — self-hosted observability for Claude Code
+const usage = `cardo — installation, checks, and local telemetry for Claude Code
 
 Usage:
-  cardo poll [flags]      Poll an analytics source into a local store
-  cardo migrate [-v]      Apply the ClickHouse schema and exit (needs no salt or key)
-  cardo version           Print the version
+  cardo <command> [flags]
 
-Secrets are read from the environment, never from flags, because command-line
-arguments are visible to every other process on the machine:
+Install
+  up          Install or repair the reference stack, then prove that data arrives
+  ui          Serve the board on loopback; its buttons run the same steps as up
+  connect     Write .claude/settings.json into one project (--project <dir>)
+  secret      Generate the salt and the passwords into .env with mode 0600
 
-  CARDO_ADMIN_KEY         Admin API key (sk-ant-admin...), provisioned by an
-                          organization admin in Console > Settings > Admin keys
-  CARDO_SALT              Pseudonymization salt, at least 32 hex characters
-                          (openssl rand -hex 32). Held by the organization's
-                          security team; never stored beside the data it
-                          protects and never committed (ADR-0006)
-  CARDO_SALT_VERSION      Label for the current salt, stored beside every
-                          pseudonym so rotation stays possible. Default: v1
+Check
+  check       Read-only: run the same checks and exit 1 if anything is wrong
+  probe       Send one OTLP log and one hook event, then read them back
+  session     Check whether a real Claude Code session has reached the stack
+  gold        Create the gold-only ClickHouse user and prove bronze/silver are refused
+  pseudonym   Print the pseudonym the views join on (<email>)
+  coach       Show your figures against your own previous window (<email>)
 
-With -store clickhouse the destination is read from the environment too. There
-is no default endpoint: it is your infrastructure and cardo will not guess.
+Data
+  import      Preview, then with -write store, your own past sessions (one time)
+  poll        Poll an analytics source into a local store
+  mock-admin  Serve the Analytics API shape on loopback, for verification
+  prune       Delete raw rows older than the retention window
+  migrate     Apply the ClickHouse schema and exit
 
-  CARDO_CLICKHOUSE_URL    HTTP interface of your ClickHouse server, including
-                          scheme and port (a stock server listens on 8123)
-  CARDO_CLICKHOUSE_USER   Defaults to "default"
-  CARDO_CLICKHOUSE_PASSWORD
+Other
+  version     Print the version (--long adds platform and toolchain)
+  help        Show this text, or "help <command>" for one command
 
-migrate also stores two choices the collector's views read. Unset leaves the
-stored value alone; set to "" resets it to the default:
+Examples
+  cardo up
+  cardo ui --no-open
+  cardo connect --project ~/work/api
+  cardo check
 
-  CARDO_ORG_ARTIFACTS     The regex naming your organization's own artifacts. Give
-                          it the collector's value
-  CARDO_MIN_GROUP_SIZE    People a home-grown artifact or a cohort needs before a
-                          view names it. At least 5, the default (ADR-0029)
+Exit codes
+  0  success
+  1  a check failed, or the command could not finish
+  2  usage error
+
+Secrets come from the environment, never from flags: command-line arguments are
+visible to every other process on the machine.
+
+  CARDO_ADMIN_KEY      Admin API key, provisioned by an organization admin
+  CARDO_SALT           Pseudonymization salt, at least 32 hex characters
+  CARDO_SALT_VERSION   Label for the current salt (default: v1)
 `
 
-func main() {
-	if err := run(os.Args[1:]); err != nil {
-		fmt.Fprintf(os.Stderr, "\ncardo: %v\n", err)
-		os.Exit(1)
+// parsed keeps flag errors quiet: the flag package already printed the reason, so the process should
+// exit 2 without a second copy of the same sentence. -h is not an error.
+func parsed(err error) error {
+	if err == nil || errors.Is(err, flag.ErrHelp) {
+		return nil
 	}
+	return errUsage
+}
+
+// errUsage marks a bad invocation: the message is already the help text, so main exits 2 without
+// printing a second line that repeats what the person just read.
+var errUsage = errors.New("usage error")
+
+func main() {
+	err := run(os.Args[1:])
+	if err == nil {
+		return
+	}
+	if errors.Is(err, errUsage) {
+		os.Exit(2)
+	}
+	fmt.Fprintf(os.Stderr, "\ncardo: %v\n", err)
+	os.Exit(1)
+}
+
+// synopsis is the one line a person needs before typing the command, and the flag text comes from
+// the command itself so the two can never disagree.
+var synopsis = map[string][2]string{
+	"up":         {"cardo up [flags]", "Install or repair the reference stack, then prove that data arrives."},
+	"ui":         {"cardo ui [flags]", "Serve the board on loopback; its buttons run the same steps."},
+	"check":      {"cardo check [flags]", "Read-only checks; exit 1 if anything fails."},
+	"connect":    {"cardo connect --project <dir>", "Write .claude/settings.json into one project."},
+	"secret":     {"cardo secret [--dir]", "Generate the salt and passwords into .env (mode 0600)."},
+	"probe":      {"cardo probe [--dir]", "Send one OTLP log and one hook event, then read them back."},
+	"session":    {"cardo session [--dir]", "Check whether a real session has reached the stack."},
+	"gold":       {"cardo gold [--dir]", "Create the gold-only ClickHouse user and prove the refusal."},
+	"pseudonym":  {"cardo pseudonym [flags] <email>", "Print the pseudonym the views join on for this address."},
+	"coach":      {"cardo coach [flags] <email>", "Show your figures against your own previous window."},
+	"import":     {"cardo import [flags]", "Count your past sessions from Claude Code's local transcripts; -write stores the counts, never the text."},
+	"prune":      {"cardo prune [flags]", "Delete raw rows older than the retention window."},
+	"mock-admin": {"cardo mock-admin [flags]", "Serve the Analytics API shape on loopback, for verification."},
+	"poll":       {"cardo poll [flags]", "Poll an analytics source into a local store."},
+	"migrate":    {"cardo migrate [-v]", "Apply the ClickHouse schema and exit."},
+	"version":    {"cardo version [--long|--short]", "Print the version; --long adds platform and toolchain, --short prints the bare version."},
+}
+
+// helpFor prints one command's synopsis instead of the whole surface.
+func helpFor(cmd string) error {
+	s, ok := synopsis[cmd]
+	if !ok {
+		fmt.Fprintf(os.Stderr, "cardo: no help for %q\n\n", cmd)
+		fmt.Fprint(os.Stderr, usage)
+		return errUsage
+	}
+	fmt.Printf("%s\n\n%s\n\nRun \"cardo %s -h\" for every flag.\n", s[0], s[1], cmd)
+	return nil
+}
+
+// useSynopsis puts the one-line meaning above the flag list, so -h never opens with "Usage of up:".
+func useSynopsis(fs *flag.FlagSet, cmd string) {
+	fs.Usage = func() {
+		if v, ok := synopsis[cmd]; ok {
+			fmt.Println(v[0])
+			fmt.Println()
+			fmt.Println(v[1])
+			fmt.Println()
+		}
+		fs.PrintDefaults()
+	}
+}
+
+// runVersion prints the mark and the version. The two blocks are the product mark: amber for what is
+// done, dim for what is still ahead; the same pair the board uses.
+func runVersion(args []string) error {
+	fs := flag.NewFlagSet("version", flag.ContinueOnError)
+	useSynopsis(fs, "version")
+	long := fs.Bool("long", false, "add platform and toolchain")
+	short := fs.Bool("short", false, "print only the version, for scripts")
+	if err := fs.Parse(args); err != nil {
+		return parsed(err)
+	}
+	if *short {
+		fmt.Println(version)
+		return nil
+	}
+	done, ahead := "\u2588", "\u2588"
+	if isTTY(os.Stdout) && os.Getenv("NO_COLOR") == "" {
+		done = "\x1b[38;2;215;161;42m" + done + "\x1b[0m"
+		ahead = "\x1b[38;2;169;164;148m" + ahead + "\x1b[0m"
+	}
+	fmt.Printf("%s %s  cardo %s\n", done, ahead, version)
+	if *long {
+		fmt.Printf("        %s/%s · %s\n", runtime.GOOS, runtime.GOARCH, runtime.Version())
+	}
+	return nil
+}
+
+// isTTY keeps colour out of pipes and CI logs.
+func isTTY(f *os.File) bool {
+	fi, err := f.Stat()
+	return err == nil && fi.Mode()&os.ModeCharDevice != 0
 }
 
 func run(args []string) error {
 	if len(args) == 0 {
 		fmt.Print(usage)
-		return errors.New("no command given")
+		return errUsage
 	}
 
 	switch args[0] {
+	case "up":
+		return runUp(args[1:])
+	case "check":
+		return runCheck(args[1:])
+	case "ui":
+		return runServe(args[1:])
+	case "connect":
+		return runConnect(args[1:])
+	case "secret":
+		return runSecret(args[1:])
+	case "probe":
+		return runStepCommand("data", args[1:])
+	case "session":
+		return runStepCommand("session", args[1:])
+	case "gold":
+		return runStepCommand("gold", args[1:])
+	case "pseudonym":
+		return runPseudonym(args[1:])
+	case "import":
+		return runImport(args[1:])
+	case "coach":
+		return runCoach(args[1:])
 	case "poll":
 		return runPoll(args[1:])
+	case "mock-admin":
+		return runMockAdmin(args[1:])
+	case "prune":
+		return runPrune(args[1:])
 	case "migrate":
 		return runMigrate(args[1:])
 	case "version":
-		fmt.Println(version)
+		return runVersion(args[1:])
+	case "-h", "--help":
+		fmt.Print(usage)
 		return nil
-	case "-h", "--help", "help":
+	case "help":
+		if len(args) > 1 {
+			return helpFor(args[1])
+		}
 		fmt.Print(usage)
 		return nil
 	default:
-		fmt.Print(usage)
-		return fmt.Errorf("unknown command %q", args[0])
+		fmt.Fprintf(os.Stderr, "cardo: unknown command %q\n\n", args[0])
+		fmt.Fprint(os.Stderr, usage)
+		return errUsage
 	}
 }
 
 func runPoll(args []string) error {
 	fs := flag.NewFlagSet("poll", flag.ContinueOnError)
+	useSynopsis(fs, "poll")
 	var (
 		srcName   = fs.String("source", "console", "analytics source: console")
 		storeKind = fs.String("store", "file", "storage target: file | clickhouse")
@@ -104,9 +248,11 @@ func runPoll(args []string) error {
 		from      = fs.String("from", "", "first day to poll, YYYY-MM-DD (overrides -days)")
 		to        = fs.String("to", "", "last day to poll, YYYY-MM-DD (defaults to yesterday)")
 		verbose   = fs.Bool("v", false, "verbose logging")
+		every     = fs.Duration("every", 0, "run continuously with this interval (service mode); 0 runs once")
+		baseURL   = fs.String("base-url", "", "local stand-in for the Admin API; loopback only (development)")
 	)
 	if err := fs.Parse(args); err != nil {
-		return err
+		return parsed(err)
 	}
 
 	level := slog.LevelInfo
@@ -120,8 +266,22 @@ func runPoll(args []string) error {
 		return err
 	}
 
-	adapter, err := newAdapter(*srcName, log)
+	base := ""
+	if *baseURL != "" {
+		base, err = console.LoopbackBase(*baseURL)
+		if err != nil {
+			return err
+		}
+		log.Warn("using a local Admin API stand-in", "base", base)
+	}
+	adapter, err := newAdapter(*srcName, log, base)
 	if err != nil {
+		// In service mode a missing key means "the organization has not enabled the Admin API
+		// path yet", not a broken container. Say so once and exit cleanly instead of restarting.
+		if *every > 0 && strings.Contains(err.Error(), "CARDO_ADMIN_KEY") {
+			log.Warn("polling disabled: CARDO_ADMIN_KEY is not set")
+			return nil
+		}
 		return err
 	}
 
@@ -151,6 +311,9 @@ func runPoll(args []string) error {
 		"destination", destination(st, *out))
 
 	runner := &poll.Runner{Adapter: adapter, Hasher: hasher, Store: st, Log: log}
+	if *every > 0 {
+		return pollLoop(ctx, runner, st, log, *every, *days, *out, *storeKind)
+	}
 	res, runErr := runner.Run(ctx, window)
 
 	// Report what happened even when the run failed partway — a backfill that stored twenty days
@@ -177,6 +340,51 @@ func runPoll(args []string) error {
 	return nil
 }
 
+// pollLoop is the service mode: poll the last two days (late rows are common), then sleep. The
+// window is recomputed every time so a long-running container does not drift.
+func pollLoop(ctx context.Context, runner *poll.Runner, st store.Store, log *slog.Logger, every time.Duration, days int, out, storeKind string) error {
+	if days < 2 {
+		days = 2
+	}
+	for {
+		window, err := resolveWindow(time.Now(), "", "", days)
+		if err != nil {
+			return err
+		}
+		res, runErr := runner.Run(ctx, window)
+		if res != nil && res.DaysPolled > 0 {
+			lvl, msg, attrs := res.Diagnose()
+			log.Log(ctx, lvl, msg, attrs...)
+		}
+		if runErr != nil {
+			log.Error("poll failed; will retry", "error", runErr)
+		}
+		// The window in force is the one the operator chose in the console, which the console
+		// writes to the settings table. The environment is only the fallback for an installation
+		// whose console has never been opened. Zero means "keep everything", and that is a
+		// choice too: the pass takes the tables' TTL off so nothing expires on its own (ADR-0053).
+		endpoint := os.Getenv("CARDO_CLICKHOUSE_URL")
+		user := envOr("CARDO_CLICKHOUSE_USER", "default")
+		pass := os.Getenv("CARDO_CLICKHOUSE_PASSWORD")
+		days, err := retention.EffectiveWindow(ctx, endpoint, user, pass, retentionFromEnv())
+		if err != nil {
+			log.Warn("could not read the chosen retention window", "error", err)
+		}
+		if days >= 0 && runErr == nil {
+			if rep, err := retention.Prune(ctx, endpoint, user, pass, days, false); err != nil {
+				log.Warn("retention pass failed", "error", err)
+			} else {
+				log.Info("retention pass", "days", days, "deleted", rep)
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(every):
+		}
+	}
+}
+
 // runMigrate applies the ClickHouse schema and exits.
 //
 // `poll` already migrates on every run, and while the poller was the only writer that was
@@ -189,9 +397,10 @@ func runPoll(args []string) error {
 // to handle.
 func runMigrate(args []string) error {
 	fs := flag.NewFlagSet("migrate", flag.ContinueOnError)
+	useSynopsis(fs, "migrate")
 	verbose := fs.Bool("v", false, "verbose logging")
 	if err := fs.Parse(args); err != nil {
-		return err
+		return parsed(err)
 	}
 	level := slog.LevelInfo
 	if *verbose {
@@ -272,7 +481,7 @@ func newHasher() (*pseudonym.Hasher, error) {
 	return h, nil
 }
 
-func newAdapter(name string, log *slog.Logger) (source.Adapter, error) {
+func newAdapter(name string, log *slog.Logger, base string) (source.Adapter, error) {
 	switch source.Name(name) {
 	case source.Console:
 		key := os.Getenv("CARDO_ADMIN_KEY")
@@ -282,6 +491,9 @@ func newAdapter(name string, log *slog.Logger) (source.Adapter, error) {
 					"  The Claude Code Analytics API needs an Admin API key (sk-ant-admin...),\n" +
 					"  provisioned by an organization admin in Console > Settings > Admin keys.\n" +
 					"  Individual accounts cannot reach this API; an organization is required")
+		}
+		if base != "" {
+			return console.New(key, log, console.WithBaseURL(base))
 		}
 		return console.New(key, log)
 	case source.Enterprise:
