@@ -200,7 +200,52 @@ deletion request.
 | Security (T0) | 1 year |
 | Fleet (T1) | 90 days by default; your organization may change it |
 | Personal (T2) | 30 days |
-| Aggregates with no pseudonym | indefinite |
+| Aggregates with no pseudonym, each describing at least five people | indefinite |
+
+## The deletion path, written down
+
+[ADR-0016](../adr/0016-retention.md) says a deletion request can be honoured because the salt
+exists, and that the procedure must be written down rather than improvised. This is that
+procedure, and each step names what it removes.
+
+**1. Everything that carries your pseudonym.** The salt turns your email into the pseudonym the
+views join on — `cardo pseudonym you@example.com` prints it. Deleting every row that carries it
+removes your sessions, prompts, edits, permission prompts and cost from the bronze tables. Every
+figure Cardo shows is computed from those rows at read time, so your absence changes the numbers
+rather than hiding inside them.
+
+```sql
+ALTER TABLE cardo.bronze_otel_logs
+    DELETE WHERE ResourceAttributes['user.pseudonym'] = '<pseudonym>' SETTINGS mutations_sync = 1;
+-- the same for bronze_hook_events, bronze_otel_metrics_sum and bronze_actor_day
+```
+
+**2. The trend rows are not part of the request.** The rows that outlive the window
+([ADR-0055](../adr/0055-trend-rows-outlive-the-rows.md)) carry no pseudonym, and each one describes
+at least five people. A line saying "five people, twelve sessions on 3 March" cannot be reduced to
+you, so it is not your record and it is left alone.
+
+**3. An organization that wants those periods gone anyway deletes the period, and the period is the
+unit.** One person cannot be subtracted from an aggregate: the rows that said which of the five was
+you expired with the window. So the deletion is the whole period, said out loud:
+
+```sql
+ALTER TABLE cardo.trend_day           DROP PARTITION tuple('2026-03-03');
+ALTER TABLE cardo.trend_day_cohort    DROP PARTITION tuple('2026-03-03');
+ALTER TABLE cardo.trend_week_artifact DROP PARTITION tuple('2026-03-01'); -- the week's Monday
+```
+
+That removes the day for the whole fleet, the day for every team that person was in, and the week
+for every artifact they used — not only their share of it. `cardo trend --from 2026-03-03 --to
+2026-03-03` then recomputes the day from whatever rows are still inside the window.
+
+**4. For a period whose rows have already expired, the person's share cannot even be located.**
+Nothing in a trend row says who was there. Your organization names the periods it wants removed, and
+they are removed whole, as in step 3.
+
+Deleting a person's rows does not shrink the trend rows for the days they worked: those counts were
+computed while their rows were there, and every one of them describes a group of at least five. That
+is the honest limit of an aggregate, and it is why the floor is applied before anything is written.
 
 ## What your administrator can do that Cardo cannot prevent
 

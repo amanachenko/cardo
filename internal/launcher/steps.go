@@ -120,7 +120,7 @@ var Steps = []Meta{
 	},
 	{
 		ID: "gold", Group: "Access", Name: "Leader access", Cmd: "cardo gold",
-		Title: "Summaries without personal rows",
+		Title: "Summaries without personal rows", Pilot: true,
 		Body: []string{
 			"Creates the gold-only ClickHouse user the leadership Grafana uses. It can read the nine gold views and nothing else: bronze and silver are refused, and the step proves that refusal live before it passes.",
 			"A refusal is the successful outcome. If the read-only user can read a raw table, this step fails and the login must not be handed out.",
@@ -159,8 +159,8 @@ var Steps = []Meta{
 		Action: "Check",
 	},
 	{
-		ID: "bundle", Group: "Engineers", Name: "Managed settings bundle", Cmd: "MDM: managed-settings.json",
-		Title: "One file, no installation", Pilot: true, Planned: true,
+		ID: "bundle", Group: "Engineers", Name: "Managed settings bundle", Cmd: "cardo bundle --dir deploy/compose",
+		Title: "One file, no installation", Pilot: true,
 		Body: []string{
 			"The same JSON as for a single engineer, with the collector address inside the organization's network. No daemon, no script and no extension. An engineer can read every line: this is the entire client.",
 		},
@@ -168,7 +168,7 @@ var Steps = []Meta{
 	},
 	{
 		ID: "notice", Group: "Engineers", Name: "Engineer notice", Cmd: "cardo notice --format md",
-		Title: "What the organization must disclose", Pilot: true, Planned: true,
+		Title: "What the organization must disclose", Pilot: true,
 		Body: []string{
 			"Who holds the salt. Which settings are enabled. That the data is not used for individual performance decisions. One page, without legal language, using the same terms as the settings file.",
 		},
@@ -217,8 +217,10 @@ func RunStep(ctx context.Context, opts Options, id string) (Result, error) {
 		return stepCollector(ctx, opts)
 	case "connect":
 		return stepConnect(opts)
-	case "grafana_ro", "bundle", "notice":
-		return Result{ID: id, Name: "PILOT", Value: "not implemented", Fix: "this row is described in docs/design/quickstart-launcher.md and is not built yet"}, nil
+	case "notice":
+		return stepNotice(opts)
+	case "bundle":
+		return stepBundle(opts)
 	}
 	return Result{}, fmt.Errorf("unknown step %q", id)
 }

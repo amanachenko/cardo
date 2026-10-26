@@ -42,8 +42,8 @@ them needs ([ADR-0030](../adr/0030-stakeholders-and-questions.md) to
 - an efficiency family replaces the friction index: its first version reads only what is already
   collected, with metrics pinned to delta, and its views are not built;
 - a coach page for each engineer;
-- repository identity, classified at the collector: collection is built (below), and no view
-  reads it yet;
+- repository identity, classified at the collector: collection is built (below), and the
+  repository and instructions views read it;
 - teams from a directory file;
 - service runs labelled apart from people;
 - policy evidence.
@@ -258,7 +258,29 @@ pattern makes every repository external. The URL is normalized first, so one pat
 form a git remote takes, and credentials in it are dropped with the scheme. The `vcs.*` attributes
 themselves are then deleted. A session outside any repository has neither key. The attributes have
 never been seen from a real Claude Code, so which records carry them, and in what URL form, is
-still to be confirmed. No view reads them yet.
+still to be confirmed.
+
+**Reading the repository ([ADR-0035](../adr/0035-repository-identity-classified.md)).** The
+classification is read by two views. `silver_session_repo` holds the repository of every session,
+joined from its OTel rows because a hook row carries none. `gold_repo_instructions` answers
+ADR-0035's own question: for each repository, whether sessions load project-level instructions,
+and how many loads, with the people beside them. The repository label is the organization's own
+name for its own repositories and the host alone for everything else; the full URL was never
+stored, so no view can show one.
+
+**Names of instruction files ([ADR-0035](../adr/0035-repository-identity-classified.md)).** Two
+names, and they mean different things. `instructions_name` is the organization's own artifact: a
+version in the name is how a stale copy shows up, so those names are kept whenever the file
+matches the organization's pattern ([ADR-0026](../adr/0026-stale-instructions-by-versioned-name.md)).
+`instructions_project_name` is a file of a repository — a team's own `CLAUDE.md`, its rules, its
+imports — and the collector keeps it only with `CARDO_INSTRUCTIONS_NAMES=project` and only at
+project scope, so a person's own files are never named. They are separate fields because a team's
+file is not the organization's artifact: one field for the two would put a team's file names into
+the artifact views, where they are shown whatever their count.
+
+Without the setting, the number of distinct files is absent rather than zero ([ADR-0008](../adr/0008-outcome-variable.md)'s
+rule: an absent number is honest, a zero is a lie), and `gold_repo_instruction_files` says nothing
+at all rather than listing a repository's files and omitting the rest.
 
 ## Target shape
 
@@ -306,6 +328,7 @@ developer machine                     organization's infrastructure
 | ClickHouse store + migration runner | `internal/store/clickhouse/` | **built**, verified against ClickHouse 26.6 | [0009](../adr/0009-storage-agnostic-clickhouse-reference.md), [0019](../adr/0019-sql-tooling.md), [0022](../adr/0022-clickhouse-access.md) |
 | SQL layers (DuckDB) | `sql/duckdb/` | **built**, verified against a generated store | [0010](../adr/0010-layered-schema.md) |
 | SQL layers (ClickHouse) | `sql/clickhouse/` | **built**, verified against a live server | [0010](../adr/0010-layered-schema.md), [0016](../adr/0016-retention.md) |
+| Trend rollup | `sql/clickhouse/016_trend.sql`, `internal/store/clickhouse/trend.go`, `cardo trend` | **built**, verified against ClickHouse 26.6 — the rows that outlive the retention window, refreshed on a schedule in the reference stack | [0055](../adr/0055-trend-rows-outlive-the-rows.md), [0016](../adr/0016-retention.md) |
 | Fixture corpus + contract tests | `test/fixtures/` | **built**. Console: from documentation. Hooks: field names observed from 2.1.281 with synthetic values, plus the documented shapes | [0014](../adr/0014-version-drift.md) |
 | Invariant tests | `test/invariants_test.go`, `test/deploy_test.go`, `test/collector_test.go`, `test/bundle_test.go` | **built** — INV-1 through INV-7 | `invariants.md` |
 | Reference stack | `deploy/compose/` | **built** — ClickHouse + Grafana + collector, loopback-bound; an opt-in overlay serves the collector's two ports over the network through a TLS proxy (Caddy), never run with a team | [0009](../adr/0009-storage-agnostic-clickhouse-reference.md) |
@@ -458,12 +481,15 @@ view, which the old pattern had never read.
   `--base-url` accepts `127.0.0.1`, `::1` or `localhost` and refuses anything else
   ([ADR-0047](../adr/0047-loopback-admin-stand-in.md)). Tests override the endpoint through an
   unexported option.
-- **No materialized gold marts, and therefore no trends older than 90 days.** ADR-0053 retains
-  tier-1 rows for 90 days by default and intends derived aggregates to survive indefinitely. The
-  gold marts are views over bronze, so when bronze expires the aggregates computed from it expire with it,
-  silently, on a background merge. The fix is a cohort-only rollup table written by the poller;
-  it is not built ([risks.md](../../risks.md) #10). The collector-path marts have the same limit,
-  and no poller runs on that path to write a rollup.
+- **No materialized gold marts.** The gold marts are views over bronze, and when bronze expires the
+  aggregates computed from it expire with them, silently, on a background merge. What is built
+  instead is the trend rollup ([ADR-0055](../adr/0055-trend-rows-outlive-the-rows.md)): `cardo trend`
+  writes `trend_day`, `trend_day_cohort` and `trend_week_artifact`, which carry no pseudonym, have
+  no TTL, and let a trend outlive the rows behind it. Every row in them describes at least five
+  people, and they publish no `other` bucket, because a fold cannot be recomputed from per-group
+  rows. Materializing the marts themselves is deliberately not built: a materialized table is a
+  migration each time the marts change ([risks.md](../../risks.md) #14), and the Admin API path's
+  own rollup is still unwritten ([risks.md](../../risks.md) #10).
 - **No session-grain views from this source.** The analytics APIs report a daily aggregate per actor
   and can never answer session-level questions. `silver_actor_day` is its own grain and does not
   pretend to be the session model in [data-model.md](data-model.md)

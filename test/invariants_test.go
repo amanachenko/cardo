@@ -387,7 +387,10 @@ func TestINV3_GoldViewsExposeNoPerPersonRows(t *testing.T) {
 		t.Skip("no sql/ directory yet")
 	}
 
-	goldView := regexp.MustCompile(`view\s+(cardo\.)?gold_`)
+	// The trend rollup's source views read silver exactly as the gold marts do, so the same rule
+	// governs them: a pseudonym may be counted, never selected. Matching only gold_ left them
+	// outside this check.
+	goldView := regexp.MustCompile(`view\s+(cardo\.)?(gold_|trend_)`)
 	var checked, checkedClickHouse int
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".sql") {
@@ -427,7 +430,7 @@ func TestINV3_GoldViewsExposeNoPerPersonRows(t *testing.T) {
 			if strings.Contains(lower, "count(distinct pseudonym)") {
 				continue
 			}
-			t.Errorf("INV-3 violated: %s:%d exposes a pseudonym in a gold view:\n  %s\n"+
+			t.Errorf("INV-3 violated: %s:%d exposes a pseudonym in a gold or trend view:\n  %s\n"+
 				"  Gold is cohort-only. A pseudonym may be counted, never selected — a per-person\n"+
 				"  row here is a ranking a manager can sort.", rel, n+1, trimmed)
 		}

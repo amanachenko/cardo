@@ -50,6 +50,9 @@ var hookAllowlist = []string{
 	"compaction_reason", "current_context_tokens", "target_tokens", "tokens_before", "tokens_after",
 	"load_reason", "memory_type", "content_hash", "instructions_file", "instructions_scope",
 	"instructions_name", // ADR-0026
+	// ADR-0035's optional mode: the names of a repository's own instruction files. A separate
+	// field from instructions_name, because a team's file is not the organization's artifact.
+	"instructions_project_name",
 	"from_model", "to_model",
 	"requested_model", "model_switch_source", "context_tokens", "prompt_cache_warm", "cache_ttl",
 	"estimated_cache_write_usd", // ADR-0027
@@ -210,6 +213,21 @@ func TestCollectorBlankOrgReposIsExternal(t *testing.T) {
 	}
 }
 
+// The instructions-names setting fails closed: only the literal "project" keeps a name, so a typo
+// in CARDO_INSTRUCTIONS_NAMES cannot quietly start keeping every file name.
+func TestCollectorInstructionsNamesFailClosed(t *testing.T) {
+	cfg := collectorConfig(t)
+	all := strings.Count(cfg, "${env:CARDO_INSTRUCTIONS_NAMES")
+	closed := strings.Count(cfg, `"${env:CARDO_INSTRUCTIONS_NAMES:-}" != "project"`)
+	if all == 0 {
+		t.Fatal("no statement reads CARDO_INSTRUCTIONS_NAMES; the setting is gone (ADR-0035)")
+	}
+	if all != closed {
+		t.Errorf("%d of %d uses of CARDO_INSTRUCTIONS_NAMES are not the fail-closed form "+
+			`"${env:CARDO_INSTRUCTIONS_NAMES:-}" != "project"`, all-closed, all)
+	}
+}
+
 // The hook receiver's own limit is 100 KiB, refused with a 400 and no log line on the collector.
 // Real payloads carry whole prompts and subagent replies and cross it, and the event is lost.
 func TestCollectorAcceptsRealisticHookBodies(t *testing.T) {
@@ -362,6 +380,9 @@ type liveStack struct {
 	orgArtifacts      *regexp.Regexp
 	strictNames       bool
 	orgRepos          *regexp.Regexp
+	// instructionsNames is ADR-0035's mode as the collector was started with it. It is the
+	// value the test mirrors, so a run with a typo in it proves the typo fails closed.
+	instructionsNames string
 }
 
 func liveCollector(t *testing.T) *liveStack {
@@ -388,6 +409,9 @@ func liveCollector(t *testing.T) *liveStack {
 	if pattern := os.Getenv("CARDO_ORG_REPOS"); pattern != "" {
 		s.orgRepos = regexp.MustCompile(pattern)
 	}
+	// ADR-0035's mode: only the literal "project" keeps the names of project-level instruction
+	// files. Any other value, a typo included, means the default.
+	s.instructionsNames = os.Getenv("CARDO_INSTRUCTIONS_NAMES")
 
 	c, err := clickhouse.NewClient(clickhouse.Config{
 		Endpoint: chURL,
@@ -604,24 +628,25 @@ func TestCollector_HookPayloadsReduceToTheAllowlist(t *testing.T) {
 			want["instructions_file"] = "" // a settings file is not an instructions file
 		case "2.1.281/InstructionsLoaded.user":
 			want["instructions_file"], want["memory_type"], want["load_reason"] = "CLAUDE.md", "User", "session_start"
-			want["instructions_name"] = ""
+			want["instructions_name"] = orgNameAsStored(s, "CLAUDE.md")
+			want["instructions_project_name"] = ""
 		case "2.1.281/InstructionsLoaded.nested":
 			want["instructions_file"], want["load_reason"] = "CLAUDE.md", "nested_traversal"
+			want["instructions_name"] = orgNameAsStored(s, "CLAUDE.md")
+			want["instructions_project_name"] = projectNameAsStored(s, "CLAUDE.md")
 		case "2.1.281/InstructionsLoaded.org-rule":
 			want["instructions_file"] = "rule"
-			want["instructions_name"] = ""
-			if s.orgArtifacts != nil && s.orgArtifacts.MatchString("acme-security-v3.md") {
-				want["instructions_name"] = "acme-security-v3.md"
-			}
+			want["instructions_name"] = orgNameAsStored(s, "acme-security-v3.md")
+			want["instructions_project_name"] = projectNameAsStored(s, "acme-security-v3.md")
 		case "2.1.281/InstructionsLoaded.include":
 			// A file a CLAUDE.md imports with @. Its parent's path goes the way of every path.
 			want["instructions_file"], want["memory_type"], want["load_reason"] = "other", "Project", "include"
-			want["instructions_name"] = ""
-			if s.orgArtifacts != nil && s.orgArtifacts.MatchString("acme-standards-v7.md") {
-				want["instructions_name"] = "acme-standards-v7.md"
-			}
+			want["instructions_name"] = orgNameAsStored(s, "acme-standards-v7.md")
+			want["instructions_project_name"] = projectNameAsStored(s, "acme-standards-v7.md")
 		case "2.1.281/InstructionsLoaded.managed-windows":
 			want["instructions_file"], want["instructions_scope"] = "CLAUDE.md", "managed"
+			want["instructions_name"] = orgNameAsStored(s, "CLAUDE.md")
+			want["instructions_project_name"] = ""
 		case "2.1.281/PermissionRequest":
 			want["tool_name"], want["effort_level"], want["tool_use_id"] = "Edit", "xhigh", ""
 		case "2.1.281/PermissionRequest.subagent":
@@ -786,6 +811,26 @@ func nameAsStored(s *liveStack, name string) string {
 		return name
 	}
 	return "custom"
+}
+
+// orgNameAsStored is what the collector should store for an instructions file's name as the
+// organization's own artifact: the name itself when it matches the organization's pattern, and
+// nothing otherwise (ADR-0026). A person's own files are never named (ADR-0035).
+func orgNameAsStored(s *liveStack, name string) string {
+	if s.orgArtifacts != nil && s.orgArtifacts.MatchString(name) {
+		return name
+	}
+	return ""
+}
+
+// projectNameAsStored is what the collector should store for an instructions file's name as a
+// file of a repository: the name itself only in the "project" mode, and never for a file at user
+// scope (ADR-0035). Any other value of the setting, a typo included, keeps nothing.
+func projectNameAsStored(s *liveStack, name string) string {
+	if s.instructionsNames != "project" {
+		return ""
+	}
+	return name
 }
 
 func mcpAsStored(s *liveStack, name string) string {

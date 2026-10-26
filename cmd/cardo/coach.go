@@ -98,7 +98,15 @@ func runCoach(args []string) error {
 	line("Prompts", itoa(now.Prompts), "prev "+itoa(prev.Prompts))
 	line("Cost", fmt.Sprintf("$%.2f", now.CostUSD), fmt.Sprintf("prev $%.2f", prev.CostUSD))
 	line("Peak context", fmt.Sprintf("%d", now.PeakContext), fmt.Sprintf("prev %d", prev.PeakContext))
-	line("Tool calls", fmt.Sprintf("%d (%d failed)", now.ToolCalls, now.FailedTools), fmt.Sprintf("prev %d", prev.ToolCalls))
+	// A window of imported history carries no tool decisions, so the figures were never looked
+	// for. Saying "0 failed" there would claim a measurement nobody made (ADR-0050).
+	tools := "not observed"
+	prevTools := ""
+	if now.ToolsObserved {
+		tools = fmt.Sprintf("%d (%d failed)", now.ToolCalls, now.FailedTools)
+		prevTools = fmt.Sprintf("prev %d", prev.ToolCalls)
+	}
+	line("Tool calls", tools, prevTools)
 	if len(arts) > 0 {
 		names := make([]string, 0, len(arts))
 		for _, a := range arts {

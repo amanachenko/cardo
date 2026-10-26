@@ -20,10 +20,13 @@ type Window struct {
 	CostUSD      float64 `json:"costUsd"`
 	OutputTokens uint64  `json:"outputTokens"`
 	PeakContext  int64   `json:"peakContext"`
-	Blocked      int     `json:"blocked"`
 	FailedTools  int     `json:"failedTools"`
 	ToolCalls    int     `json:"toolCalls"`
 	Edits        int     `json:"edits"`
+	// ToolsObserved says the tool figures were looked for and found. It is false when the window
+	// holds imported history and nothing else: a transcript carries no tool decisions, so a failure
+	// count of zero would say "no failures" where the truth is "not looked at" (ADR-0050).
+	ToolsObserved bool `json:"toolsObserved"`
 }
 
 // Artifact is one thing this person loaded, by name.
@@ -110,6 +113,21 @@ func Query(ctx context.Context, endpoint, user, pass, pseudonym string, from, to
 		return w, nil, err
 	}
 	_, _ = fmt.Sscanf(strings.TrimSpace(row), "%d\t%d\t%d", &w.FailedTools, &w.ToolCalls, &w.Edits)
+
+	// Were the tool figures looked for at all? A transcript carries no tool decisions, so a window
+	// of imported history reports no failures because nothing was observed, not because nothing
+	// failed. The cohort tells the two apart (ADR-0050).
+	sql = fmt.Sprintf(`SELECT countIf(cohort != 'imported') FROM cardo.silver_turn
+		WHERE pseudonym = '%s' AND day BETWEEN toDate('%s') AND toDate('%s')
+			AND session_id IN (SELECT session_id FROM cardo.silver_session WHERE actor_kind != 'service') FORMAT TSV`,
+		pseudonym, from.Format("2006-01-02"), to.Format("2006-01-02"))
+	row, err = q(sql)
+	if err != nil {
+		return w, nil, err
+	}
+	var liveSessions int
+	_, _ = fmt.Sscanf(strings.TrimSpace(row), "%d", &liveSessions)
+	w.ToolsObserved = liveSessions > 0
 
 	sql = fmt.Sprintf(`SELECT name, count() FROM cardo.silver_artifact_load
 		WHERE pseudonym = '%s' AND day BETWEEN toDate('%s') AND toDate('%s')

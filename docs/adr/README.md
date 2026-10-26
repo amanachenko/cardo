@@ -40,11 +40,11 @@ The hard rules that these decisions produce live in
 | [0028](0028-file-store-is-admin-api-only.md) | The file store serves the Admin API path only | Accepted | 2026-09-25 |
 | [0029](0029-minimum-group-size.md) | Views name a group only once five people are in it | Accepted | 2026-09-25 |
 | [0030](0030-stakeholders-and-questions.md) | Who Cardo serves, and the questions it will and will not answer | Accepted | 2026-09-25 |
-| [0031](0031-what-works-means.md) | What "works" means: spread, then efficiency, then delivery | Accepted | 2026-09-25 |
+| [0031](0031-what-works-means.md) | What "works" means: spread, then efficiency, then delivery | Superseded by ADR-0056 | 2026-09-25 |
 | [0032](0032-engineer-coach-by-shared-link.md) | The engineer's view is a coach, and in pilots it is a shared link | Accepted | 2026-09-25 |
 | [0033](0033-per-person-cost-for-budget-owners.md) | A budget owner may see cost per person, and nothing more | Accepted, not built | 2026-09-25 |
 | [0034](0034-identity-in-pilots.md) | In the pilots, pseudonyms stay, the operator holds the salt, and teams come from a directory | Accepted | 2026-09-25 |
-| [0035](0035-repository-identity-classified.md) | Repository identity is collected, classified at the collector | Accepted, collection built | 2026-09-25 |
+| [0035](0035-repository-identity-classified.md) | Repository identity is collected, classified at the collector | Accepted, collection and views built | 2026-09-25 |
 | [0036](0036-service-runs-are-not-people.md) | Service runs are labelled, and are never counted as people | Accepted, not built | 2026-09-25 |
 | [0037](0037-policy-evidence.md) | Policy evidence: conformance, coverage and other organizations | Accepted, not built | 2026-09-25 |
 | [0038](0038-public-under-a-collective-copyright.md) | Public, Apache-2.0, under a collective copyright | Accepted | 2026-09-30 |
@@ -61,6 +61,8 @@ The hard rules that these decisions produce live in
 | [0050](0050-local-transcript-import.md) | Cardo never reads transcripts on its own; `cardo import` is the one exception | Accepted | 2026-10-18 |
 | [0053](0053-retention-default-and-organization-choice.md) | Retention is 90 days by default, and the organization may change it | Accepted | 2026-10-25 |
 | [0054](0054-both-actor-types-are-people.md) | Both actor types are people, so a service run is labelled by the run itself | Accepted | 2026-10-25 |
+| [0055](0055-trend-rows-outlive-the-rows.md) | Trend rows outlive the rows behind them, and only when they describe five people | Accepted | 2026-10-25 |
+| [0056](0056-efficiency-compared-within-people.md) | Efficiency is compared within one person, over one week | Accepted | 2026-10-25 |
 
 ADR-0030 to ADR-0037 came out of one design review on 2026-09-25, which asked who Cardo is for and
 what each of them needs. Its evidence is
@@ -101,8 +103,10 @@ Recorded here so a future session knows these were considered and postponed, not
 - **Bedrock / Vertex / Foundry support** — out of scope for v1 (ADR-0018, upheld by ADR-0021).
 - **A file-store mode for the collector path** — until a team can run a collector but not
   ClickHouse (ADR-0028).
-- **Materialized collector-path views and rollups** — the views are plain views over 90-day bronze
-  (risks.md #10 and #14).
+- **Materialized collector-path views** — the silver and gold views stay plain views over 90-day
+  bronze, because a materialized table is a migration each time the marts change (risks.md #14).
+  The rollup that lets a trend outlive its rows is built
+  ([ADR-0055](0055-trend-rows-outlive-the-rows.md)); materializing the views themselves is not.
 - **The Claude Enterprise Analytics adapter** — built when an organization on Enterprise seats asks
   for it. The Console adapter went first because it could be tested without an organization
   (ADR-0021, ordered by ADR-0042).

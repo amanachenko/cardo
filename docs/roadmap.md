@@ -75,6 +75,11 @@ up:
 
 Nothing is taken today.
 
+**The next batch, in detail.** The items below say what each one is in a sentence. What each one
+needs, what proves it open, and what closing it looks like are in
+**[docs/next-batch-spec.md](next-batch-spec.md)**, and the work is split into pull requests in
+**[docs/next-batch-tasks.md](next-batch-tasks.md)**.
+
 ### Step 1: run it safely
 
 Two decisions are already possible with what is built: chasing the machines still on an old version
@@ -126,8 +131,10 @@ missing is an organization running Cardo safely, so this comes first.
 - **Teams from a directory file** ([identity in pilots](adr/0034-identity-in-pilots.md)). Who is
   in which team, from an export the organization already has, so that a rollout that missed two
   teams shows up. *Needs a decision:* the file's format, and how it is loaded. **Built:** the console
-  accepts `email,team`, hashes it on load (ADR-0046), and shows coverage and the group floor; a
-  `cardo teams` CLI check remains.
+  accepts `email,team`, hashes it on load (ADR-0046), and shows coverage and the group floor;
+  `cardo teams --file <directory.csv>` does the same from a shell, dry run first. **`gold_team_reach`
+  reads the result**: how far each artifact reached inside each team, against the whole organization
+  and never against another team (ADR-0030).
 
 #### The engineer's side: what does struggle look like, and how does a person find out?
 

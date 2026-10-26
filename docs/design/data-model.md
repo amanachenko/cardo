@@ -110,6 +110,8 @@ reports. Both are NULL or empty for a session that sent no OTel.
 | `silver_context_event` | one row per compaction or model switch | Compaction: OTel `claude_code.compaction` (`tokens_before`, `tokens_after`), or the `PreCompact` hook alone for a session that sent no OTel compaction. Switch: the `PostModelSwitch` or `PreModelSwitch` hook's fields, timed by its `hook_execution_start`, and `next_request_*`, the next main-thread request on the new model, which is what the switch cost. Both models are compared with the date and `[1m]` removed, since the switch's `to_model` may be dated. Not for a switch made before the session's first main-thread request: that request is the session starting, and the hook's `context_tokens` is 0 ([note](../research/2026-10-06-model-switch-observed.md)). Only switches someone asked for: a `PostModelSwitch` from a fallback (`auto`) or a resume is left out. Defined in `009`, which redefines `008`'s view |
 | `silver_artifact_load` | one row per artifact use | `instructions`: each `InstructionsLoaded`. `skill`: `UserPromptExpansion` and `skill.name` on API requests, one row per prompt and name. `subagent`: each `SubagentStart`, never `SubagentStop`. `mcp`: tool calls on `mcp__<server>__*`, one row per prompt and server. `is_org` applies the organization's pattern; an instructions file with a stored name is always the organization's. `is_builtin` marks Claude Code's own subagents and commands |
 | `silver_session_cohort` | one row per session | The cohort each session is reported under: its label, or `other` below the minimum group size that day ([ADR-0029](../adr/0029-minimum-group-size.md)) |
+| `silver_session_repo` | one row per session | The repository the session worked in, joined from its OTel rows because a hook row carries none: `org` with the owner and name, `external` with the host alone, or `none`. The full URL was never stored ([ADR-0035](../adr/0035-repository-identity-classified.md)). Defined in `015` |
+| `silver_instruction_load` | one row per instructions file that was loaded | Each `InstructionsLoaded`, with the scope Claude Code sent (`memory_type`), the file's name when the collector kept it, and the repository of the session. Two names, two meanings: `instructions_name` is the organization's own artifact (ADR-0026), `instructions_project_name` is a file of a repository, kept only with `CARDO_INSTRUCTIONS_NAMES=project` (ADR-0035). A service run is not a person, so its rows are left out. Defined in `015` |
 
 **`PermissionDenied` is not the end of a permission wait.** It fires only when auto mode denies a
 call. The end of a wait a person answered is the `tool_decision` event
@@ -145,6 +147,14 @@ size ([ADR-0029](../adr/0029-minimum-group-size.md)).
 | `gold_instructions_versions` | week, file family, version | Which version of each of the organization's instructions files people load, and how many are on a stale one |
 | `gold_friction_daily` | day, cohort | The friction index's three components: edit rejection rate, permission waits and compactions per session, each beside its volume ([ADR-0008](../adr/0008-outcome-variable.md)) |
 | `gold_context_daily` | day, cohort | The context each session starts from, the context each prompt grows to, spend, and model switches' measured cost beside Claude Code's estimate |
+| `gold_team_reach` | week, team, artifact | How far each artifact reached inside each team, against the whole organization ([ADR-0030](../adr/0030-stakeholders-and-questions.md)). Reach, never a ranking: the organization is the denominator for every team alike |
+| `gold_repo_instructions` | week, repository | Which repositories have instructions files, how many loads, and how many people ([ADR-0035](../adr/0035-repository-identity-classified.md)). The number of distinct files is absent without `CARDO_INSTRUCTIONS_NAMES=project`, because without the names it cannot be counted |
+| `gold_repo_instruction_files` | week, repository, file | Which instruction files a repository's sessions load, named, for the organization's own repositories only, and under the minimum group size ([ADR-0035](../adr/0035-repository-identity-classified.md), [ADR-0029](../adr/0029-minimum-group-size.md)). Empty without the setting |
+
+A team below the minimum group size is not rendered at all, and its rows are not counted as
+`other` — "1 person" is a person ([ADR-0046](../adr/0046-hashed-team-directory.md)). The join
+that puts a session in its team lives in the silver layer, `silver_team_artifact_use`, because a
+gold view may count a pseudonym but never compare one (INV-3).
 
 A cost-and-capacity mart with the model mix and effort distribution by cohort is not built.
 `gold_context_daily` has spend by cohort; the Admin API path has the model mix.
@@ -182,6 +192,32 @@ friction may be a session that accomplished nothing. This is a product constrain
 preference ([ADR-0008](../adr/0008-outcome-variable.md)). Each event is reported on the day its
 session started.
 
+## trend — the rows that outlive their rows
+
+The only tables with no TTL ([ADR-0055](../adr/0055-trend-rows-outlive-the-rows.md)). They carry no
+pseudonym and no content: counts, sums and quantiles only. A row is written only when its own group
+had at least `min_group_size` people in its own period, so nothing here describes fewer than five
+people, and the published views check the count again at read time against the floor in force now.
+
+| Table | Grain | Published as | Answers |
+|---|---|---|---|
+| `trend_day` | day | `gold_trend_day` | how much the fleet did, and what it cost it |
+| `trend_day_cohort` | day, cohort | `gold_trend_day_cohort` | how friction moved for a team |
+| `trend_week_artifact` | week, kind, artifact, file_kind | `gold_trend_artifact_usage` | how adoption moved |
+
+`cardo trend` writes them, one period at a time, swapping each in with `REPLACE PARTITION`. The
+`trend_*_source` views compute them from silver — the same definitions the gold marts publish — and
+they apply the floor when they run, so none of them can be read to see what the floor hides.
+
+**There is no `other` row here, and that is the one way this surface differs from the live marts.**
+The live marts fold every small group into `other`, and its distinct-people count and its wait-time
+quantiles are computed over the union, which cannot be recomputed from per-group rows. A stored
+`other` could not be re-folded when the floor is raised, and a recomputed one would disagree with
+the live marts. Named groups only; a bucket that is wrong is worse than a bucket that is absent.
+
+`is_org` and `is_builtin` are decided in `gold_trend_artifact_usage`, from the stored name, so a
+corrected `CARDO_ORG_ARTIFACTS` relabels the past. The label is never written into the table.
+
 ## Retention
 
 Enforced by ClickHouse TTL on every bronze table ([ADR-0016](../adr/0016-retention.md),
@@ -193,7 +229,7 @@ exists today:
 | T0 | 1 year | no tier-0 data is collected yet |
 | T1 | 90 days by default; the organization may change it | `bronze_actor_day` and all three collector tables |
 | T2 | 30 days | no tier-2 data is collected yet |
-| Gold marts carrying no pseudonym | indefinite | **not yet true**: the gold marts, on both paths, are views, so they expire with bronze ([risks.md](../../risks.md) #10) |
+| Aggregates carrying no pseudonym | indefinite | true for the trend rows: `trend_day`, `trend_day_cohort` and `trend_week_artifact` have no TTL, and every row in them describes at least five people ([ADR-0055](../adr/0055-trend-rows-outlive-the-rows.md)). The gold marts themselves are still views and expire with bronze ([risks.md](../../risks.md) #10) |
 | `cardo.settings` | none | configuration, not telemetry: the organization's pattern and the minimum group size |
 
 ## Future join point

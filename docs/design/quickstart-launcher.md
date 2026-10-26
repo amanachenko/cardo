@@ -117,6 +117,7 @@ resumes and updates.
 | `cardo probe [--dir]` | sends one OTLP log and one hook event, then reads them back |
 | `cardo session [--dir]` | checks whether a real session has reached the stack |
 | `cardo notice` | writes the engineer notice from the current `.env` |
+| `cardo bundle` | writes the managed-settings bundle for the machines you manage |
 | `cardo version` | exists today |
 
 `cardo check` is the contract: the board is a view over it, not a second implementation. Every row

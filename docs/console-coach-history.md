@@ -108,6 +108,25 @@ If validation refuses a file, the diff is not offered — fix the file, do not f
 
 Re-uploading the same file is safe; it produces a new generation and prunes the old one.
 
+**`cardo teams --file <directory.csv>`** does the same thing from a shell, for a machine where the
+board is not open. It shows the counts before anything is written and writes nothing without
+`--apply`:
+
+```sh
+cardo teams --file teams.csv            # dry run: rows, teams, how many are below the floor
+cardo teams --file teams.csv --apply    # store the mapping
+```
+
+A malformed line is reported with its line number and nothing is written, so a file with one bad row
+never half-loads. The output never contains an address: it is counts, the same counts the console
+shows (ADR-0046).
+
+**What the organization can now read.** `gold_team_reach` answers "how far did this reach inside
+that team", against the whole organization rather than against another team
+([ADR-0030](adr/0030-stakeholders-and-questions.md)). A team below the floor is not rendered at
+all. The view carries no pseudonym: the join that puts a session in its team lives in the silver
+layer, so a leader cannot read a person's row out of it (INV-3).
+
 ### 3.5 Coach
 
 The console page is the operator preview: type an email, get the same report the person would get,
@@ -160,7 +179,8 @@ what a salted SHA-256 looks like. A value that is not one is refused rather than
 - **Cost** is Anthropic's published list price, not an invoice (§13, gap 1).
 - **Peak context** is the largest `input + cache read + cache create` seen in one request.
 - **Tool calls** are only available for live-telemetry sessions. Imported transcripts carry no tool
-  decisions or durations, so the imported path reports `0` (§13, gap 2).
+  decisions or durations, so a window that holds imported history and nothing else says **not
+  observed** rather than `0 failed` — the figures were never looked for (§13, gap 2).
 
 ### 4.3 Pseudonyms
 
@@ -356,7 +376,7 @@ the console has never been opened.
 | `bronze_otel_logs` | MergeTree | Live telemetry **and** imported rows; imported ones carry `cardo.import=1`, `cardo.cohort=imported` |
 | `bronze_hook_events` | MergeTree | Reduced hook payloads (allowlist only) |
 | `silver_session`, `silver_turn`, `silver_api_request`, `silver_tool_call` | Views | Exclude `cardo-probe-%` sessions (migration 013) |
-| `gold_cost_daily`, `gold_fleet_adoption`, `gold_artifact_usage`, … | Views | `gold_artifact_usage` excludes service runs |
+| `gold_cost_daily`, `gold_fleet_adoption`, `gold_artifact_usage`, `gold_team_reach`, … | Views | `gold_artifact_usage` excludes service runs |
 | `settings`, `settings_effective`, `settings_changes` | Tables | Immutable versions; every write audited |
 | `settings_artifact_versions` | Table | Catalog metadata; files stay on disk |
 | `settings_teams`, `settings_teams_batches` | Tables | Hashed directory and commit markers |
@@ -459,7 +479,8 @@ counting `silver_session` rows with `session_id LIKE 'demo-%'` (expect 0).
 1. **Cost is Anthropic's published list price, not the invoice.** Discounts, credits and batch pricing
    are not modelled.
 2. **Imported history has no tool calls.** Transcripts contain no decisions or durations; only live
-   telemetry does.
+   telemetry does. The coach now says "not observed" for such a window rather than `0 failed`, so a
+   zero is never reported where nothing was looked at.
 3. Three of the 84 imported sessions have no prompts and therefore no turns (81 appear in
    `silver_turn`).
 4. **The import sees one machine.** Cross-machine history needs export/import (roadmap, Step 3,

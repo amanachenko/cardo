@@ -2,7 +2,6 @@ package launcher
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -10,7 +9,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/amanachenko/cardo/internal/directory"
 	"github.com/amanachenko/cardo/internal/pseudonym"
@@ -191,53 +189,28 @@ func (s *Server) handleTeamsPost(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	rnd := make([]byte, 4)
-	_, _ = rand.Read(rnd)
-	batch := time.Now().UTC().Format("20060102T150405") + "-" + hex.EncodeToString(rnd)
-	sum := sha256.Sum256([]byte(body.CSV))
-
-	// Rows first, the batch marker last: a crash between the two must not publish a partial mapping
-	// as the current one. The marker is what makes a batch visible (ADR-0046).
-	for start := 0; start < len(rows); start += 500 {
-		end := start + 500
-		if end > len(rows) {
-			end = len(rows)
-		}
-		var b strings.Builder
-		b.WriteString("INSERT INTO cardo.settings_teams (team, pseudonym, salt_version, batch) VALUES ")
-		for i, row := range rows[start:end] {
-			if i > 0 {
-				b.WriteString(",")
-			}
-			fmt.Fprintf(&b, "('%s','%s','%s','%s')", escapeSQL(row.Team), escapeSQL(row.Pseudonym), escapeSQL(version), batch)
-		}
-		if _, err := s.ch(ctx, b.String()); err != nil {
-			http.Error(w, err.Error(), http.StatusBadGateway)
-			return
-		}
+	pairs := make([][2]string, 0, len(rows))
+	for _, row := range rows {
+		pairs = append(pairs, [2]string{row.Pseudonym, row.Team})
 	}
-	if _, err := s.ch(ctx, fmt.Sprintf("INSERT INTO cardo.settings_teams_batches (batch, source_hash, rows, teams) VALUES ('%s','%s',%d,%d)",
-		batch, hex.EncodeToString(sum[:]), len(rows), preview.Teams)); err != nil {
+
+	// The console and `cardo teams --apply` write through the same code, so the two cannot
+	// differ in what they store (ADR-0046).
+	sum := sha256.Sum256([]byte(body.CSV))
+	written, err := WriteTeams(ctx, TeamsWrite{
+		Endpoint:    s.opts.url("8124", ""),
+		User:        env["CLICKHOUSE_USER"],
+		Password:    env["CLICKHOUSE_PASSWORD"],
+		SaltVersion: version,
+		Rows:        pairs,
+		SourceHash:  hex.EncodeToString(sum[:]),
+		Teams:       preview.Teams,
+	})
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-	// Keep the current and the previous generation; anything older is pruned so a weekly reload does
-	// not grow a directory forever.
-	if keep, err := s.ch(ctx, "SELECT batch FROM cardo.settings_teams_batches ORDER BY loaded_at DESC LIMIT 2 FORMAT TSV"); err == nil {
-		var ids []string
-		for _, line := range strings.Split(strings.TrimSpace(keep), "\n") {
-			if id := strings.TrimSpace(line); id != "" {
-				ids = append(ids, "'"+escapeSQL(id)+"'")
-			}
-		}
-		if len(ids) == 2 {
-			list := strings.Join(ids, ",")
-			_, _ = s.ch(ctx, "ALTER TABLE cardo.settings_teams DELETE WHERE batch NOT IN ("+list+") SETTINGS mutations_sync = 1")
-			_, _ = s.ch(ctx, "ALTER TABLE cardo.settings_teams_batches DELETE WHERE batch NOT IN ("+list+") SETTINGS mutations_sync = 1")
-		}
-	}
-	if err := s.audit(ctx, "teams", batch, len(rows), "", hex.EncodeToString(sum[:]), fmt.Sprintf("%d people, %d teams", len(rows), preview.Teams)); err != nil {
+	if err := s.audit(ctx, "teams", written.Batch, written.Rows, "", hex.EncodeToString(sum[:]), fmt.Sprintf("%d people, %d teams", written.Rows, preview.Teams)); err != nil {
 		http.Error(w, "the directory was loaded but the audit line failed: "+err.Error(), http.StatusBadGateway)
 		return
 	}
