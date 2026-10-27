@@ -1,6 +1,6 @@
 # ADR-0052 — The collector path's silver views are stored as tables ClickHouse rebuilds every 10 minutes
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-10-23
 **Revised:** 2026-10-27, before it was accepted, to say what migration 017 builds: each table is
 rebuilt from the raw tables alone (decision 2), and the readers that need an event at once read
