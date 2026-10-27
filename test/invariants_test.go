@@ -345,6 +345,10 @@ func TestINV7_NoUnexpectedOutboundHosts(t *testing.T) {
 		"https://api.anthropic.com": true,
 		// Module identity, never contacted at runtime.
 		"https://github.com": true,
+		// The made-up stack's collector, on loopback: cmd/cardo-madeup's only destination, and never
+		// another machine (ADR-0051). test/madeup_test.go holds both to the ports that stack publishes.
+		"http://127.0.0.1:8090": true,
+		"http://127.0.0.1:4320": true,
 	}
 
 	replacer := strings.NewReplacer(`"`, " ", "`", " ", ",", " ", ")", " ", "(", " ")

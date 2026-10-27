@@ -22,6 +22,14 @@ it, `cardo check` for a read-only pass, and `cardo check --proof` to require one
 the fields the views read. The diagnostic probe (`cardo probe`) proves the pipeline and deletes its
 own rows, so no synthetic session ever reaches `silver_session`.
 
+A made-up organization is built, so a view can be seen before any organization's data exists
+([ADR-0051](adr/0051-a-made-up-organization.md)). It is 60 invented engineers in six teams, sent
+through the collector on a stack of its own, with stories planted in their sessions. For example,
+one engineer's `/deploy-check` command reaches a fifth person in week 5, and `check` confirms that
+the enablement views show it as "other" until then and by name after. Nothing seen there is a
+finding about real engineers, and what no view shows yet is listed in [the made-up
+organization](made-up-organization.md#what-no-view-shows-yet).
+
 [ADR-0030](adr/0030-stakeholders-and-questions.md) to [ADR-0037](adr/0037-policy-evidence.md)
 decided who Cardo is for and what each of them needs, and
 [the North Star decision (ADR-0042)](adr/0042-the-north-star.md) says what all of it is for. This

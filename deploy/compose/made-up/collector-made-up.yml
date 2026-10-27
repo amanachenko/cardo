@@ -1,0 +1,40 @@
+# The made-up organization's one addition to the collector (ADR-0051).
+#
+# Only the stack in deploy/compose/docker-compose.made-up.yml reads this file. Its collector is
+# started with deploy/collector/config.yaml first and this file second, and the collector merges
+# the two: a map here adds to the shipped one, and a list here replaces the shipped list.
+#
+# It adds one thing. A hook payload carries no time of its own, so the shipped collector stamps
+# each hook event with the moment it arrives (the last statement of transform/hooks). Twelve weeks
+# of invented history, loaded in ten minutes, would all land on the day it was loaded. The
+# generator therefore sends each hook event's invented time in the X-Cardo-Made-Up-Time header, as
+# nanoseconds since 1970, and transform/made_up_time below sets the event's time from it and
+# removes it. OTel records carry their own time and need nothing.
+#
+# This must never reach the shipped file. There, anyone who can reach the collector could backdate
+# events, and invented history would pass for real (risks.md #19). test/madeup_test.go fails if the
+# shipped file mentions the header, and if this file does anything but the above.
+#
+# The header goes through the receiver's header_attribute_regex rather than the JSON body, so the
+# body is exactly what Claude Code sends and cardo.received_keys stays the same as on a real stack.
+# The receiver names the attribute "header." plus the header's canonical name, as Go's HTTP server
+# writes it whatever case was sent, and stores its values as a list, since a header may repeat
+# (both seen on 0.161.0): header.X-Cardo-Made-Up-Time = ["1790110551123456789"].
+
+receivers:
+  webhook_event:
+    header_attribute_regex: "(?i)^x-cardo-made-up-time$"
+
+processors:
+  transform/made_up_time:
+    error_mode: propagate
+    log_statements:
+      - context: log
+        statements:
+          - 'set(log.time_unix_nano, Int(log.attributes["header.X-Cardo-Made-Up-Time"][0])) where IsList(log.attributes["header.X-Cardo-Made-Up-Time"])'
+          - 'delete_key(log.attributes, "header.X-Cardo-Made-Up-Time")'
+
+service:
+  pipelines:
+    logs/hooks:
+      processors: [transform/hooks, transform/made_up_time, transform/tag, transform/inv2_tripwire]

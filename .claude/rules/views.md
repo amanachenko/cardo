@@ -24,6 +24,10 @@ The views read the organization's artifact pattern and the minimum group size fr
   function found inside another". Aggregate in a subquery with a `_total` suffix and rename
   outside, so the published names still match. Run a new panel's query through Grafana, not only
   through ClickHouse directly: the macros are Grafana's.
+- Checking a view's rounded figure against `math.Round` in Go. ClickHouse's `round()` takes a
+  float's half to the even neighbour, so 1,014.65 s of permission waits is 1014.6 in
+  `gold_friction_daily`, and Go's `math.Round` makes it 1014.7. The made-up organization's check
+  failed on 2 of 330 days for that alone. Use `math.RoundToEven`, or compare the unrounded column.
 - Adding up `people` or `active_people` across weeks or days. They are distinct counts; the same
   engineer on five days is one person, not five. A panel over a range shows the busiest week or
   day. Sessions, uses and prompts add up.

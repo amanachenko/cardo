@@ -1,0 +1,16 @@
+# The made-up organization's Grafana loads the same dashboards as every other stack, into a folder
+# whose name says what they show. The folder is in the path at the top of every dashboard, so a
+# screenshot of one says it is not real data (ADR-0051). Mounted over grafana/provisioning's
+# dashboards/cardo.yml by docker-compose.made-up.yml; otherwise the same as that file.
+apiVersion: 1
+
+providers:
+  - name: cardo
+    folder: "MADE-UP ORGANIZATION - not real data"
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

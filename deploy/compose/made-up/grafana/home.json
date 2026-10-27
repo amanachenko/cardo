@@ -1,0 +1,19 @@
+{
+  "title": "Made-up organization",
+  "uid": "cardo-made-up-home",
+  "editable": false,
+  "schemaVersion": 41,
+  "time": { "from": "now-90d", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 9 },
+      "options": {
+        "mode": "markdown",
+        "content": "# Made-up organization: not real data\n\nEvery engineer, team and session in this Grafana was invented by `scripts/made-up.sh`, to see and check Cardo's views on an organization's worth of data ([ADR-0051](https://github.com/amanachenko/cardo/blob/main/docs/adr/0051-a-made-up-organization.md)).\n\n- It shows whether a chart shows what was planted. It cannot show whether a signal means anything with real people.\n- Nothing seen here is a finding about Claude Code, about engineers or about any organization.\n- The dashboards are in the folder **MADE-UP ORGANIZATION - not real data**. Open them from **Dashboards**."
+      }
+    }
+  ]
+}
