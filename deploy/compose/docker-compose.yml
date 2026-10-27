@@ -1,4 +1,4 @@
-# Cardo reference stack (ADR-0009): ClickHouse + Grafana + the org-edge collector, single node,
+# Cardo reference stack (ADR-0057): ClickHouse + Grafana + the org-edge collector, single node,
 # self-hosted.
 #
 # This is the evaluation and reference deployment, not a production topology. It exists so a

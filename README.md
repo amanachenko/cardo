@@ -191,50 +191,23 @@ it ([measurement](docs/research/2026-09-23-admin-api-individual-account.md)).
 | Phase | Contents | Status |
 |---|---|---|
 | 0 | ADRs, invariants, research snapshots, risks | **done** |
-| 1 | `cardo` poller, pseudonymizer, both storage targets, SQL layers, dashboard, invariant tests | **done except verification** — no live API run |
+| 1 | `cardo` poller, pseudonymizer, ClickHouse store, SQL layers, dashboard, invariant tests | **done except verification** — no live API run |
 | 2 | Managed settings, hook pack, collector config, artifact dashboard | **done**: collection checked against a real Claude Code, views and dashboard against those sessions; no fleet yet |
 | 3 | The coach page, the efficiency family, repository identity, service-run labels, the board report, the evidence report — **teams from a directory is built** in the console (hashed loader, coverage, floors) | decided 2026-09-25 ([ADR-0030 to 0037](docs/adr/README.md)); built in the order of the [work items](docs/roadmap.md#work-items) |
 
-### Try it without a key
+### With the reference stack and an Admin API key
 
-The SQL layer can be exercised against a generated store, with no credential and nothing deployed:
-
-```bash
-make sql
-```
-
-Or by hand. Note the script goes in on **stdin**: `.read` is a CLI input-loop command, and
-`duckdb -c` parses its argument as SQL, so the `-c` form fails on the leading dot.
-
-```bash
-CARDO_SAMPLE_DIR=.sample go test ./test/ -run TestGenerateSampleStore
-printf '%s\n' \
-  "SET VARIABLE cardo_root = '.sample';" \
-  ".read sql/duckdb/010_bronze.sql" \
-  ".read sql/duckdb/020_silver.sql" \
-  ".read sql/duckdb/030_gold.sql" \
-  "SELECT * FROM gold_fleet_adoption ORDER BY day;" \
-| duckdb -init /dev/null
-```
-
-### With an Admin API key
-
-```bash
-export CARDO_SALT=$(openssl rand -hex 32)   # custody belongs with your security team
-export CARDO_ADMIN_KEY=sk-ant-admin-...     # Console > Settings > Admin keys
-go build -o bin/cardo ./cmd/cardo
-./bin/cardo poll -days 30 -out ./data
-```
-
-### With the reference stack
-
-ClickHouse and Grafana, loopback-bound, on one machine:
+ClickHouse and Grafana, loopback-bound, on one machine. The poller writes to the stack's
+ClickHouse, the only store Cardo has ([ADR-0057](docs/adr/0057-clickhouse-is-the-only-store.md)):
 
 ```bash
 cd deploy/compose && cp .env.example .env    # change both passwords
 docker compose up -d
 cd ../..
 
+export CARDO_SALT=$(openssl rand -hex 32)   # custody belongs with your security team
+export CARDO_ADMIN_KEY=sk-ant-admin-...     # Console > Settings > Admin keys
+go build -o bin/cardo ./cmd/cardo
 export CARDO_CLICKHOUSE_URL=http://127.0.0.1:8124
 export CARDO_CLICKHOUSE_USER=cardo CARDO_CLICKHOUSE_PASSWORD=...
 ./bin/cardo poll -store clickhouse -days 30

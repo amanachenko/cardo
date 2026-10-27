@@ -18,7 +18,7 @@ The hard rules that these decisions produce live in
 | [0006](0006-pseudonymization.md) | Pseudonymize at the org-edge collector; stable salt in v0.1 | Accepted | 2026-09-22 |
 | [0007](0007-enrollment-posture.md) | Thin mandatory core plus opt-in depth | Accepted | 2026-09-22 |
 | [0008](0008-outcome-variable.md) | The outcome variable is a friction index | Superseded by 0031 | 2026-09-22 |
-| [0009](0009-storage-agnostic-clickhouse-reference.md) | Storage-agnostic semantic layer; ClickHouse + Grafana reference stack | Accepted | 2026-09-22 |
+| [0009](0009-storage-agnostic-clickhouse-reference.md) | Storage-agnostic semantic layer; ClickHouse + Grafana reference stack | Superseded by 0057 | 2026-09-22 |
 | [0010](0010-layered-schema.md) | Layered schema: raw verbatim, thin canonical views, marts | Superseded by 0023 | 2026-09-22 |
 | [0011](0011-hook-transport-http.md) | Hook transport is native async HTTP; zero local binary | Superseded by 0024 | 2026-09-22 |
 | [0012](0012-ingest-implementation.md) | Hook path stays pure collector config; one Go binary for the Admin API | Accepted | 2026-09-22 |
@@ -37,7 +37,7 @@ The hard rules that these decisions produce live in
 | [0025](0025-artifact-names-kept-with-guardrails.md) | Artifact names are kept; the views decide who sees them | Accepted | 2026-09-24 |
 | [0026](0026-stale-instructions-by-versioned-name.md) | Stale instructions are detected by versioned file names, not content hashes | Accepted | 2026-09-24 |
 | [0027](0027-model-switch-cost.md) | The cost of a model switch joins the mandatory tier | Superseded by 0039 | 2026-09-24 |
-| [0028](0028-file-store-is-admin-api-only.md) | The file store serves the Admin API path only | Accepted | 2026-09-25 |
+| [0028](0028-file-store-is-admin-api-only.md) | The file store serves the Admin API path only | Superseded by 0057 | 2026-09-25 |
 | [0029](0029-minimum-group-size.md) | Views name a group only once five people are in it | Accepted | 2026-09-25 |
 | [0030](0030-stakeholders-and-questions.md) | Who Cardo serves, and the questions it will and will not answer | Accepted | 2026-09-25 |
 | [0031](0031-what-works-means.md) | What "works" means: spread, then efficiency, then delivery | Accepted | 2026-09-25 |
@@ -63,6 +63,7 @@ The hard rules that these decisions produce live in
 | [0052](0052-silver-is-stored-and-rebuilt-every-10-minutes.md) | The collector path's silver views are stored as tables ClickHouse rebuilds every 10 minutes | Accepted | 2026-10-23 |
 | [0053](0053-retention-default-and-organization-choice.md) | Retention is 90 days by default, and the organization may change it | Accepted | 2026-10-25 |
 | [0054](0054-both-actor-types-are-people.md) | Both actor types are people, so a service run is labelled by the run itself | Accepted | 2026-10-25 |
+| [0057](0057-clickhouse-is-the-only-store.md) | ClickHouse is the only store; the file store and its DuckDB views are removed | Accepted | 2026-10-27 |
 
 ADR-0030 to ADR-0037 came out of one design review on 2026-09-25, which asked who Cardo is for and
 what each of them needs. Its evidence is
@@ -101,8 +102,8 @@ Recorded here so a future session knows these were considered and postponed, not
 - **Cross-org benchmark feed** — never inside Cardo. If one ever exists, it is a separate opt-in
   product with its own consent story (ADR-0013).
 - **Bedrock / Vertex / Foundry support** — out of scope for v1 (ADR-0018, upheld by ADR-0021).
-- **A file-store mode for the collector path** — until a team can run a collector but not
-  ClickHouse (ADR-0028).
+- **Another storage engine** — the views are written for ClickHouse only. A port is a new record,
+  written when an organization that cannot run ClickHouse asks for one (ADR-0057).
 - **Rollups that outlive the raw rows** — silver is stored, but rebuilt from 90-day bronze every
   10 minutes, so nothing outlives the raw rows (risks.md #10, ADR-0052).
 - **The Claude Enterprise Analytics adapter** — built when an organization on Enterprise seats asks

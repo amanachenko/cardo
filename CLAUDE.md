@@ -103,13 +103,12 @@ Template and full rules: [docs/adr/0000-adr-process.md](docs/adr/0000-adr-proces
 - **The managed-settings bundle is `env` and `hooks`, nothing else, and each hook waits at most a
   second** ([ADR-0039](docs/adr/0039-hooks-wait-at-most-one-second.md)). `test/bundle_test.go`
   enforces the shape.
-- **SQL is numbered plain `.sql` files**, not dbt ([ADR-0019](docs/adr/0019-sql-tooling.md)): DuckDB
-  views in `sql/duckdb/`, ClickHouse migrations in `sql/clickhouse/`, embedded in the binary and
-  applied on every poll. **Migrations are immutable once shipped** — the runner checksums them. Add a
-  new number.
-- **Two storage targets on the Admin API path**, ClickHouse (reference) and the file store DuckDB
-  reads, with the same columns and view names; a change to one belongs in both or in neither. **The
-  collector path is ClickHouse only** ([ADR-0028](docs/adr/0028-file-store-is-admin-api-only.md)).
+- **SQL is numbered plain `.sql` files**, not dbt ([ADR-0019](docs/adr/0019-sql-tooling.md)):
+  ClickHouse migrations in `sql/clickhouse/`, embedded in the binary and applied on every poll.
+  **Migrations are immutable once shipped** — the runner checksums them. Add a new number.
+- **ClickHouse is the only store**, on both paths ([ADR-0057](docs/adr/0057-clickhouse-is-the-only-store.md)). The views are
+  written in its dialect alone. The file store and its DuckDB views were removed; bringing back a
+  second engine needs a new record.
 - **The poller's endpoint is pinned**, so the binary cannot be aimed at an arbitrary host (INV-7).
   The one exception is a loopback-only stand-in for verification: `--base-url` accepts
   `127.0.0.1`, `::1` or `localhost` and refuses anything else

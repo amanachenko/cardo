@@ -15,17 +15,20 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/amanachenko/cardo/internal/poll"
 	"github.com/amanachenko/cardo/internal/pseudonym"
 	"github.com/amanachenko/cardo/internal/source"
-	"github.com/amanachenko/cardo/internal/store/jsonl"
+	"github.com/amanachenko/cardo/internal/store/clickhouse"
 )
 
 const testSalt = "0123456789abcdef0123456789abcdef"
@@ -125,19 +128,13 @@ func TestINV1_NoTranscriptAccess(t *testing.T) {
 // INV-2 — user.email is never persisted. Pseudonymization happens before storage, always.
 //
 // Behavioural rather than static: the whole pipeline runs against a payload containing an email
-// address, and every byte that reaches disk is searched for it. A static check could be satisfied
-// by renaming a variable; this one cannot.
-func TestINV2_NoEmailReachesDisk(t *testing.T) {
+// address, and every byte sent to the store is searched for it. A static check could be satisfied
+// by renaming a variable; this one cannot. TestINV2_NoEmailReachesClickHouse searches a real
+// server's rows the same way, when one is running.
+func TestINV2_NoEmailReachesTheStore(t *testing.T) {
 	const email = "veryspecific.person@example-corp.com"
 
-	dir := t.TempDir()
-	st, err := jsonl.New(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := st.Migrate(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	st, sent := recordingStore(t)
 	h, err := pseudonym.New(testSalt, "v1")
 	if err != nil {
 		t.Fatal(err)
@@ -162,10 +159,10 @@ func TestINV2_NoEmailReachesDisk(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	scanned := scanOutput(t, dir, email)
-	if scanned == 0 {
-		t.Fatal("nothing was written, so this test proved nothing")
+	if len(sent.inserts()) == 0 {
+		t.Fatal("nothing was inserted, so this test proved nothing")
 	}
+	scanSent(t, sent, email)
 }
 
 // INV-2, the poller's tripwire. An email address in a field the adapter does not model, someone
@@ -174,14 +171,7 @@ func TestINV2_NoEmailReachesDisk(t *testing.T) {
 func TestINV2_PollerStopsOnAnEmailItDidNotModel(t *testing.T) {
 	const actor, other = "veryspecific.person@example-corp.com", "a.reviewer@example-corp.com"
 
-	dir := t.TempDir()
-	st, err := jsonl.New(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := st.Migrate(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	st, sent := recordingStore(t)
 	h, err := pseudonym.New(testSalt, "v1")
 	if err != nil {
 		t.Fatal(err)
@@ -204,8 +194,8 @@ func TestINV2_PollerStopsOnAnEmailItDidNotModel(t *testing.T) {
 		Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 	_, err = runner.Run(context.Background(), source.Window{From: day, To: day})
-	scanOutput(t, dir, other)
-	scanOutput(t, dir, actor)
+	scanSent(t, sent, other)
+	scanSent(t, sent, actor)
 	var leak pseudonym.ErrIdentityLeak
 	if !errors.As(err, &leak) {
 		t.Fatalf("Run() error = %v, want ErrIdentityLeak.\n"+
@@ -213,43 +203,73 @@ func TestINV2_PollerStopsOnAnEmailItDidNotModel(t *testing.T) {
 	}
 }
 
-// scanOutput searches every file under dir for the identifier and for any 'email' key, and
-// returns how many files it checked.
-func scanOutput(t *testing.T, dir, email string) int {
+// sentRequests is what a recording server was sent: each request's query string and body.
+type sentRequests struct {
+	mu   sync.Mutex
+	reqs []sentRequest
+}
+
+type sentRequest struct{ query, body string }
+
+// inserts returns the bodies of the INSERT requests, the rows a real server would store.
+func (s *sentRequests) inserts() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []string
+	for _, r := range s.reqs {
+		if strings.Contains(r.query, "INSERT") {
+			out = append(out, r.body)
+		}
+	}
+	return out
+}
+
+// recordingStore is the ClickHouse store pointed at a server on loopback that answers every
+// request with an empty success and keeps what it was sent. Put runs exactly as it would against
+// a real ClickHouse; nothing is stored anywhere.
+func recordingStore(t *testing.T) (*clickhouse.Store, *sentRequests) {
 	t.Helper()
-	var scanned int
-	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return err
-		}
-		b, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		scanned++
-		rel, _ := filepath.Rel(dir, path)
-		if strings.Contains(strings.ToLower(string(b)), strings.ToLower(email)) {
-			t.Errorf("INV-2 violated: %s contains a real email address.\n"+
-				"  Pseudonymization must happen before storage, always.", rel)
-		}
-		if strings.Contains(string(b), "email") {
-			t.Errorf("INV-2 violated: %s contains an 'email' key.\n"+
-				"  No field that could hold one may reach storage.", rel)
-		}
-		return nil
-	})
+	sent := &sentRequests{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		sent.mu.Lock()
+		sent.reqs = append(sent.reqs, sentRequest{query: r.URL.RawQuery, body: string(b)})
+		sent.mu.Unlock()
+	}))
+	t.Cleanup(srv.Close)
+	st, err := clickhouse.New(clickhouse.Config{Endpoint: srv.URL},
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return scanned
+	t.Cleanup(func() { st.Close() })
+	return st, sent
+}
+
+// scanSent searches every request the store sent for the identifier and for any 'email' key.
+func scanSent(t *testing.T, sent *sentRequests, email string) {
+	t.Helper()
+	sent.mu.Lock()
+	defer sent.mu.Unlock()
+	for i, r := range sent.reqs {
+		b := r.query + "\n" + r.body
+		if strings.Contains(strings.ToLower(b), strings.ToLower(email)) {
+			t.Errorf("INV-2 violated: request %d to the store contains a real email address.\n"+
+				"  Pseudonymization must happen before storage, always.", i+1)
+		}
+		if strings.Contains(b, "email") {
+			t.Errorf("INV-2 violated: request %d to the store contains an 'email' key.\n"+
+				"  No field that could hold one may reach storage.", i+1)
+		}
+	}
 }
 
 // INV-5 — No content in tiers 0 or 1: no prompt text, no code, no file paths, no tool parameters.
 //
 // Enforced as an allowlist over the bronze column set, so adding a column is a deliberate act
 // that fails here first. That is the point: INV-4 requires an ADR before the mandatory set grows.
-// bronzeColumns is the tier-1 column set. It is declared once and checked against every place
-// bronze is written, so the JSONL store, the ClickHouse table and this list cannot drift apart.
+// bronzeColumns is the tier-1 column set. It is declared once and checked against both places
+// bronze is defined, the row the store sends and the ClickHouse table, so neither can drift from it.
 var bronzeColumns = []string{
 	"source", "day", "pseudonym", "salt_version", "tier", "actor_type",
 	"org_id", "customer_type", "terminal_type", "payload", "unknown_fields",
@@ -266,11 +286,7 @@ func allowedBronzeColumns() map[string]bool {
 func TestINV5_BronzeColumnsAreAllowlisted(t *testing.T) {
 	allowed := allowedBronzeColumns()
 
-	dir := t.TempDir()
-	st, _ := jsonl.New(dir)
-	if err := st.Migrate(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	st, sent := recordingStore(t)
 	h, _ := pseudonym.New(testSalt, "v1")
 
 	day, _ := time.Parse("2006-01-02", "2026-09-08")
@@ -286,12 +302,12 @@ func TestINV5_BronzeColumnsAreAllowlisted(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	b, err := os.ReadFile(filepath.Join(dir, "bronze", "source=console", "2026-09-08.jsonl"))
-	if err != nil {
-		t.Fatal(err)
+	rows := sent.inserts()
+	if len(rows) != 1 {
+		t.Fatalf("the store sent %d inserts, want 1", len(rows))
 	}
 	var row map[string]any
-	if err := json.Unmarshal([]byte(strings.SplitN(string(b), "\n", 2)[0]), &row); err != nil {
+	if err := json.Unmarshal([]byte(strings.SplitN(rows[0], "\n", 2)[0]), &row); err != nil {
 		t.Fatal(err)
 	}
 	for col := range row {
@@ -409,8 +425,8 @@ func TestINV3_GoldViewsExposeNoPerPersonRows(t *testing.T) {
 			lower := strings.ToLower(trimmed)
 
 			if strings.Contains(lower, "create or replace view") {
-				// ClickHouse qualifies every view with the database, DuckDB does not. Matching
-				// only the unqualified form once let every ClickHouse gold view go unchecked.
+				// ClickHouse qualifies every view with the database. Matching only the
+				// unqualified form once let every ClickHouse gold view go unchecked.
 				inGoldView = goldView.MatchString(lower)
 				if inGoldView {
 					checked++
@@ -450,12 +466,11 @@ func TestINV3_GoldViewsExposeNoPerPersonRows(t *testing.T) {
 	}
 }
 
-// INV-5, third place: the ClickHouse bronze table.
+// INV-5, second place: the ClickHouse bronze table.
 //
-// ADR-0009 requires both storage targets to work, which means both can leak. The column set is one
-// list checked against three things -- this test, the JSONL row written to disk, and the DDL below
-// -- so a column added to one store and not the other fails here rather than producing two
-// installs that disagree about what Cardo collects.
+// The column set is one list checked against the row the store sends (above) and the DDL below,
+// so a column added to the table and not the row, or the other way round, fails here rather than
+// at the first insert.
 func TestINV5_ClickHouseBronzeMatchesTheAllowlist(t *testing.T) {
 	path := filepath.Join(repoRoot(t), "sql", "clickhouse", "001_bronze.sql")
 	b, err := os.ReadFile(path)
@@ -496,8 +511,8 @@ func TestINV5_ClickHouseBronzeMatchesTheAllowlist(t *testing.T) {
 	for _, col := range bronzeColumns {
 		if !found[col] {
 			t.Errorf("ClickHouse bronze is missing the column %q.\n"+
-				"  The two storage targets must hold the same columns, or the same query returns\n"+
-				"  different answers depending on which one an organization deployed.", col)
+				"  The store sends it on every row, and an insert with a column the table lacks\n"+
+				"  is refused.", col)
 		}
 	}
 }

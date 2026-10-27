@@ -1,7 +1,7 @@
 // Package store defines where scrubbed records are persisted.
 //
-// ADR-0009 makes the semantic layer storage-agnostic: ClickHouse is the reference stack and a
-// no-infrastructure mode exists so a small pilot needs nothing approved. Both must work.
+// ClickHouse is the one implementation (ADR-0057). The interface stays because it is the line
+// INV-2 is drawn on, and because the poller's tests stand a recording store behind it.
 //
 // Every implementation accepts pseudonym.Scrubbed and nothing else. That is not a style choice —
 // it is how INV-2 is enforced. A record carrying a real identity cannot be passed to a store

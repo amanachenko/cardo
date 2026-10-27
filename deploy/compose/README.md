@@ -1,6 +1,6 @@
 # Reference stack — ClickHouse + Grafana + collector
 
-The evaluation deployment from [ADR-0009](../../docs/adr/0009-storage-agnostic-clickhouse-reference.md):
+The reference stack, Cardo's only store ([ADR-0057](../../docs/adr/0057-clickhouse-is-the-only-store.md)):
 one ClickHouse, one Grafana, one org-edge collector, one machine. It exists so a platform team can
 see the whole pipeline working before being asked to approve anything, so one engineer can point
 their own Claude Code at it without asking anyone, and so the SQL in `sql/clickhouse/` and the

@@ -25,7 +25,6 @@ import (
 	"github.com/amanachenko/cardo/internal/source/console"
 	"github.com/amanachenko/cardo/internal/store"
 	"github.com/amanachenko/cardo/internal/store/clickhouse"
-	"github.com/amanachenko/cardo/internal/store/jsonl"
 )
 
 var version = "0.1.0-dev"
@@ -51,7 +50,7 @@ Check
 
 Data
   import      Preview, then with -write store, your own past sessions (one time)
-  poll        Poll an analytics source into a local store
+  poll        Poll an analytics source into ClickHouse
   mock-admin  Serve the Analytics API shape on loopback, for verification
   prune       Delete raw rows older than the retention window
   migrate     Apply the ClickHouse schema and exit
@@ -120,7 +119,7 @@ var synopsis = map[string][2]string{
 	"import":     {"cardo import [flags]", "Count your past sessions from Claude Code's local transcripts; -write stores the counts, never the text."},
 	"prune":      {"cardo prune [flags]", "Delete raw rows older than the retention window."},
 	"mock-admin": {"cardo mock-admin [flags]", "Serve the Analytics API shape on loopback, for verification."},
-	"poll":       {"cardo poll [flags]", "Poll an analytics source into a local store."},
+	"poll":       {"cardo poll [flags]", "Poll an analytics source into ClickHouse."},
 	"migrate":    {"cardo migrate [-v]", "Apply the ClickHouse schema and exit."},
 	"version":    {"cardo version [--long|--short]", "Print the version; --long adds platform and toolchain, --short prints the bare version."},
 }
@@ -242,8 +241,7 @@ func runPoll(args []string) error {
 	useSynopsis(fs, "poll")
 	var (
 		srcName   = fs.String("source", "console", "analytics source: console")
-		storeKind = fs.String("store", "file", "storage target: file | clickhouse")
-		out       = fs.String("out", "./data", "directory for the local store (-store file)")
+		storeKind = fs.String("store", "clickhouse", "storage target: clickhouse, the only one")
 		days      = fs.Int("days", 30, "number of days to poll, ending at -to")
 		from      = fs.String("from", "", "first day to poll, YYYY-MM-DD (overrides -days)")
 		to        = fs.String("to", "", "last day to poll, YYYY-MM-DD (defaults to yesterday)")
@@ -290,7 +288,7 @@ func runPoll(args []string) error {
 		return err
 	}
 
-	st, err := newStore(*storeKind, *out, log)
+	st, err := newStore(*storeKind, log)
 	if err != nil {
 		return err
 	}
@@ -308,11 +306,11 @@ func runPoll(args []string) error {
 		"from", window.From.Format("2006-01-02"),
 		"to", window.To.Format("2006-01-02"),
 		"store", *storeKind,
-		"destination", destination(st, *out))
+		"destination", destination(st))
 
 	runner := &poll.Runner{Adapter: adapter, Hasher: hasher, Store: st, Log: log}
 	if *every > 0 {
-		return pollLoop(ctx, runner, st, log, *every, *days, *out, *storeKind)
+		return pollLoop(ctx, runner, st, log, *every, *days)
 	}
 	res, runErr := runner.Run(ctx, window)
 
@@ -328,21 +326,15 @@ func runPoll(args []string) error {
 	}
 
 	fmt.Printf("\nStored %d records across %d days (%d distinct actors) in %s\n",
-		res.Records, res.DaysWithData, len(res.Actors), destination(st, *out))
-	if _, ok := st.(*clickhouse.Store); ok {
-		fmt.Printf("Query it:\n"+
-			"  SELECT * FROM %s.gold_fleet_adoption ORDER BY day\n", clickhouse.Database)
-	} else {
-		fmt.Printf("Query it with DuckDB:\n"+
-			"  duckdb -c \"SELECT * FROM read_json_auto('%s/bronze/*/*.jsonl', hive_partitioning => true) LIMIT 5\"\n",
-			strings.TrimRight(*out, "/\\"))
-	}
+		res.Records, res.DaysWithData, len(res.Actors), destination(st))
+	fmt.Printf("Query it:\n"+
+		"  SELECT * FROM %s.gold_fleet_adoption ORDER BY day\n", clickhouse.Database)
 	return nil
 }
 
 // pollLoop is the service mode: poll the last two days (late rows are common), then sleep. The
 // window is recomputed every time so a long-running container does not drift.
-func pollLoop(ctx context.Context, runner *poll.Runner, st store.Store, log *slog.Logger, every time.Duration, days int, out, storeKind string) error {
+func pollLoop(ctx context.Context, runner *poll.Runner, st store.Store, log *slog.Logger, every time.Duration, days int) error {
 	if days < 2 {
 		days = 2
 	}
@@ -408,7 +400,7 @@ func runMigrate(args []string) error {
 	}
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 
-	st, err := newStore("clickhouse", "", log)
+	st, err := newStore("clickhouse", log)
 	if err != nil {
 		return err
 	}
@@ -420,25 +412,21 @@ func runMigrate(args []string) error {
 	if err := st.Migrate(ctx); err != nil {
 		return fmt.Errorf("applying schema: %w", err)
 	}
-	fmt.Printf("Schema is current in %s\n", destination(st, ""))
+	fmt.Printf("Schema is current in %s\n", destination(st))
 
 	// The views over the collector's data read two deployment choices when they run (ADR-0029).
 	// They are written here, not in a migration, because migrations are immutable and these are
 	// not. An unset variable leaves the stored value alone, so running migrate by hand without
 	// them changes nothing; a variable set to "" resets its setting to the default. The poller
 	// never writes them.
-	ch, ok := st.(*clickhouse.Store)
-	if !ok {
-		return errors.New("migrate needs the ClickHouse store")
-	}
 	vs := clickhouse.ViewSettings{
 		OrgArtifacts: lookupEnv("CARDO_ORG_ARTIFACTS"),
 		MinGroupSize: lookupEnv("CARDO_MIN_GROUP_SIZE"),
 	}
-	if err := ch.ApplyViewSettings(ctx, vs); err != nil {
+	if err := st.ApplyViewSettings(ctx, vs); err != nil {
 		return err
 	}
-	org, size, err := ch.EffectiveViewSettings(ctx)
+	org, size, err := st.EffectiveViewSettings(ctx)
 	if err != nil {
 		return err
 	}
@@ -537,20 +525,14 @@ func resolveWindow(now time.Time, from, to string, days int) (source.Window, err
 	return source.Window{From: end.AddDate(0, 0, -(days - 1)), To: end}, nil
 }
 
-var (
-	_ store.Store = (*jsonl.Store)(nil)
-	_ store.Store = (*clickhouse.Store)(nil)
-)
+var _ store.Store = (*clickhouse.Store)(nil)
 
-// newStore builds the storage target.
-//
-// ADR-0009 requires both to work. ClickHouse is the reference stack for a real deployment; the
-// file store exists so that a five-engineer pilot can see the whole pipeline without asking
-// anyone to approve infrastructure. Neither is a second-class path.
-func newStore(kind, dir string, log *slog.Logger) (store.Store, error) {
+// newStore builds the storage target. ClickHouse is the only one (ADR-0057): the file store that
+// DuckDB read served the Admin API path alone, and every view since has been written for
+// ClickHouse. -store stays so that a script passing "-store clickhouse" keeps working, and "file"
+// is refused by name rather than as an unknown flag.
+func newStore(kind string, log *slog.Logger) (*clickhouse.Store, error) {
 	switch kind {
-	case "file":
-		return jsonl.New(dir)
 	case "clickhouse":
 		st, err := clickhouse.New(clickhouse.Config{
 			Endpoint: os.Getenv("CARDO_CLICKHOUSE_URL"),
@@ -575,8 +557,11 @@ func newStore(kind, dir string, log *slog.Logger) (store.Store, error) {
 					"confirm this is inside your own network (INV-7)")
 		}
 		return st, nil
+	case "file":
+		return nil, errors.New("the file store was removed (ADR-0057); cardo writes to ClickHouse " +
+			"only. Set CARDO_CLICKHOUSE_URL and pass -store clickhouse, or leave -store out")
 	default:
-		return nil, fmt.Errorf("unknown store %q; known stores: file, clickhouse", kind)
+		return nil, fmt.Errorf("unknown store %q; the only store is clickhouse", kind)
 	}
 }
 
@@ -590,9 +575,6 @@ func envOr(key, fallback string) string {
 // destination describes where a store writes, for the log line and the closing summary. An
 // operator should be able to read the destination of their engineering telemetry off the first
 // line of output rather than inferring it from flags.
-func destination(st store.Store, dir string) string {
-	if ch, ok := st.(*clickhouse.Store); ok {
-		return "clickhouse://" + ch.Host() + "/" + clickhouse.Database
-	}
-	return dir
+func destination(st *clickhouse.Store) string {
+	return "clickhouse://" + st.Host() + "/" + clickhouse.Database
 }
