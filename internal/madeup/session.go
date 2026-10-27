@@ -58,6 +58,8 @@ type session struct {
 	editBoost bool   // Edit and Write are likelier: the session used /deploy-check
 	callJira  bool   // the session calls the Jira connector once
 	inRetry   bool   // the requests being sent are the flaky test command's reruns
+	runTool   string // the tool of the failed calls in a row so far
+	runFails  int    // how many failed calls in a row so far
 
 	allowed              map[string]bool // tools a "don't ask again" answer allowed for the rest of the session
 	usedInPrompt         map[string]bool
@@ -97,18 +99,37 @@ type sessionTally struct {
 	permissionWaitMs              int64
 	compactions, autoCompactions  int
 
+	// What the weekly views count by release, model and tool.
+	release string
+	models  map[string]*spendCount
+	tools   map[string]*toolCount
+
 	// What the stories' figures need.
 	kind                   sessionKind
 	week                   int
 	first                  string
 	buggy                  bool
-	standards              int // the version of example-standards it loaded, if any
+	standards              int // the version of example-engineering-standards it loaded, if any
 	retryLoops, failedRuns int
+	longRetryLoops         int // of them, those with at least failedInARow failed runs
 	retryRequests          int
 	retryCost              float64
 	bugCost                float64 // what the caching bug added
 	end                    time.Time
 }
+
+type spendCount struct {
+	requests int
+	cost     float64
+}
+
+type toolCount struct {
+	calls, loops, failedInLoops int
+}
+
+// failedInARow is how many failed calls of one tool, one after another, gold_tool_loops_weekly
+// counts as a loop.
+const failedInARow = 3
 
 type use struct {
 	at                   time.Time
@@ -164,6 +185,8 @@ func writeSession(o *Org, p *Person, r *rand.Rand, kind sessionKind, start time.
 		s.model = expensiveModel
 	}
 	s.tally.id, s.tally.kind, s.tally.week, s.tally.buggy = s.id, kind, s.week, s.buggy
+	s.tally.release = s.version
+	s.tally.models, s.tally.tools = map[string]*spendCount{}, map[string]*toolCount{}
 	s.compactAt = s.nextCompaction()
 	s.pickRepo()
 	s.paths = p.pathsFor(s.repo, s.id)
@@ -213,6 +236,7 @@ func writeSession(o *Org, p *Person, r *rand.Rand, kind sessionKind, start time.
 	s.t = s.t.Add(time.Duration(logNormal(r, float64(20*time.Second), 0.8)))
 	s.hook(s.t, "SessionEnd", field{"prompt_id", s.promptID}, field{"reason", pick(r, endReasons)})
 	s.writeMetrics(start)
+	s.endRun()
 	s.tally.end = s.last
 	return s
 }
@@ -346,7 +370,7 @@ func (s *session) loadInstructions() {
 		if st.InstructionsV3 > 0 && s.week >= st.InstructionsV3 && !onTeam(st.StayOnV2, s.p.Team.Name) {
 			version = 3
 		}
-		name := fmt.Sprintf("example-standards-v%d.md", version)
+		name := fmt.Sprintf("example-engineering-standards-v%d.md", version)
 		s.hook(next(), "InstructionsLoaded",
 			field{"memory_type", "Project"}, field{"parent_file_path", project},
 			field{"file_path", s.join(s.paths.cwd, name)}, field{"load_reason", "include"})
@@ -602,6 +626,13 @@ func (s *session) request(c *conv, query, model, agent string, add, out int, dur
 		s.tally.retryCost += cost
 	}
 	s.costByModel[model] += cost
+	m := s.tally.models[model]
+	if m == nil {
+		m = &spendCount{}
+		s.tally.models[model] = m
+	}
+	m.requests++
+	m.cost += cost
 	tk := s.tokensByModel[model]
 	if tk == nil {
 		tk = &[4]int{}
@@ -739,10 +770,40 @@ func (s *session) callTool(in *subagentRun, tool, outcome string) {
 	}
 	s.log(done, "tool_result", "tool_name", tool, "tool_use_id", id, "success", success,
 		"duration_ms", itoa(int(done.Sub(decided)/time.Millisecond)))
+	s.ran(tool, success == "true")
 	if tool == "Read" || tool == "Edit" {
 		s.loadOnRead(done)
 	}
 	s.t = done.Add(ms(20))
+}
+
+// ran counts a call that ran, in the order the loops view takes the calls: by when Claude Code
+// decided to run them. A call refused before it ran is not among them, and does not end a loop.
+func (s *session) ran(tool string, ok bool) {
+	c := s.tally.tools[tool]
+	if c == nil {
+		c = &toolCount{}
+		s.tally.tools[tool] = c
+	}
+	c.calls++
+	if !ok && s.runFails > 0 && s.runTool == tool {
+		s.runFails++
+		return
+	}
+	s.endRun()
+	if !ok {
+		s.runTool, s.runFails = tool, 1
+	}
+}
+
+// endRun ends the failed calls in a row so far, counting them as a loop if there are enough.
+func (s *session) endRun() {
+	if s.runFails >= failedInARow {
+		c := s.tally.tools[s.runTool]
+		c.loops++
+		c.failedInLoops += s.runFails
+	}
+	s.runTool, s.runFails = "", 0
 }
 
 // retryLoop is the flaky team's test command failing: the model runs it, reads the failure, and
@@ -750,6 +811,9 @@ func (s *session) callTool(in *subagentRun, tool, outcome string) {
 func (s *session) retryLoop() {
 	runs := 3 + s.r.IntN(5)
 	s.tally.retryLoops++
+	if runs-1 >= failedInARow {
+		s.tally.longRetryLoops++
+	}
 	for i := range runs {
 		if i == runs-1 {
 			s.callTool(nil, "Bash", "pass")
@@ -828,6 +892,9 @@ func (s *session) subagent() {
 	taskID := toolUseID(r)
 	start := s.t.Add(ms(10))
 	s.log(start, "tool_decision", "tool_name", "Task", "tool_use_id", taskID, "decision", "accept", "source", "config")
+	// Its result comes after the subagent's own calls, but the loops view orders calls by their
+	// decision, so it counts here, before them.
+	s.ran("Task", true)
 	s.hook(start.Add(ms(5)), "SubagentStart",
 		field{"prompt_id", s.promptID}, field{"agent_id", run.id}, field{"agent_type", kind})
 	s.use(start.Add(ms(5)), "subagent", kind, "", orgName(kind), builtin)

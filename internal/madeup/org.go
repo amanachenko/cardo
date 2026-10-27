@@ -12,7 +12,7 @@ import (
 // OrgArtifacts is the made-up organization's CARDO_ORG_ARTIFACTS: the names of what it ships
 // itself. docker-compose.made-up.yml gives the collector and the views the same pattern, and
 // test/madeup_test.go holds the two together.
-const OrgArtifacts = `^(review|onboarding|test-fixer|jira|api-guidelines|perf-budget|example-standards-v[0-9]+[.]md)$`
+const OrgArtifacts = `^(review|onboarding|test-fixer|jira|api-guidelines|perf-budget|example-engineering-standards-v[0-9]+[.]md)$`
 
 // OrgRepos is its CARDO_ORG_REPOS: every repository on its own git host.
 const OrgRepos = `^git[.]example[.]com/`

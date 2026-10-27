@@ -139,7 +139,7 @@ what the console shows, and each engineer sees their own position first.
 | Verification: the pipeline is proved by a probe that deletes its own rows, and the install is verified by the engineer's own session | **Built** |
 | The Admin API path runs inside the stack as an optional poller, configured once from the board | **Built**; not yet run against a live Anthropic response |
 | A leadership login that can read gold views and nothing else | **Partly built**: `cardo gold` creates a database user that reads gold only, proved refused on bronze and silver. Its data source sits in the same Grafana as the full-access one, and a login can query either, so only the operator logs in for now ([risks.md](../risks.md) #15) |
-| Artifact usage, instructions versions, context and model-switch cost, and a dashboard | **Built**, and checked against those sessions |
+| Artifact usage, instructions versions, spend by model, team and Claude Code release, failing calls repeated in a row, and a dashboard ([what each chart is for](design/dashboards.md)) | **Built**, checked against those sessions, and reviewed on a made-up organization |
 | Reading Anthropic's usage data | **Built**; not yet run against a live organization |
 | Service runs (CI, agents) are labelled and kept out of people counts | **Built**: `actor_kind`/`workflow`, filters in the gold views, GitHub Actions block |
 | An operator console: overview, versioned artifact catalog, team directory, settings | **Built**: four surfaces; approval and rollback; hashed directory with a floor |

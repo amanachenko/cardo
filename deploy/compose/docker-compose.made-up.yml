@@ -31,14 +31,14 @@ services:
   migrate:
     image: cardo-madeup:dev
     environment:
-      CARDO_ORG_ARTIFACTS: "^(review|onboarding|test-fixer|jira|api-guidelines|perf-budget|example-standards-v[0-9]+[.]md)$$"
+      CARDO_ORG_ARTIFACTS: "^(review|onboarding|test-fixer|jira|api-guidelines|perf-budget|example-engineering-standards-v[0-9]+[.]md)$$"
 
   collector:
     command:
       - "--config=/etc/otelcol-contrib/config.yaml"
       - "--config=/etc/otelcol-contrib/made-up.yaml"
     environment:
-      CARDO_ORG_ARTIFACTS: "^(review|onboarding|test-fixer|jira|api-guidelines|perf-budget|example-standards-v[0-9]+[.]md)$$"
+      CARDO_ORG_ARTIFACTS: "^(review|onboarding|test-fixer|jira|api-guidelines|perf-budget|example-engineering-standards-v[0-9]+[.]md)$$"
       CARDO_ORG_REPOS: "^git[.]example[.]com/"
     ports: !override
       - "127.0.0.1:4320:4318"

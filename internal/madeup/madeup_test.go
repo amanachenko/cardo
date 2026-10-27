@@ -276,6 +276,48 @@ func TestAnswerKeyMatchesWhatWasSent(t *testing.T) {
 			t.Errorf("week of %s: the key's names under the minimum add up differently from what was "+
 				"sent.\n key: %+v\nsent: %+v", kw.Week, kw.Other, gw.Other)
 		}
+		if kw.SessionsWithRequests != gw.SessionsWithRequests || kw.StartContextP50 != gw.StartContextP50 ||
+			kw.StartContextP90 != gw.StartContextP90 {
+			t.Errorf("week of %s: the key has %d sessions starting from %d tokens at the median and %d at "+
+				"the 90th percentile; sent %d, %d and %d", kw.Week, kw.SessionsWithRequests, kw.StartContextP50,
+				kw.StartContextP90, gw.SessionsWithRequests, gw.StartContextP50, gw.StartContextP90)
+		}
+		if !slices.EqualFunc(kw.Teams, gw.Teams, func(a, b madeup.KeyTeamWeek) bool {
+			return a.Team == b.Team && a.People == b.People && a.Sessions == b.Sessions && a.Requests == b.Requests &&
+				near(a.CostUSD, b.CostUSD) && slices.Equal(a.Instructions, b.Instructions)
+		}) {
+			t.Errorf("week of %s: the key's teams differ from what was sent.\n key: %+v\nsent: %+v", kw.Week, kw.Teams, gw.Teams)
+		}
+		if !slices.EqualFunc(kw.Models, gw.Models, func(a, b madeup.KeyModelWeek) bool {
+			return a.Model == b.Model && a.People == b.People && a.Requests == b.Requests && near(a.CostUSD, b.CostUSD)
+		}) {
+			t.Errorf("week of %s: the key's models differ from what was sent.\n key: %+v\nsent: %+v", kw.Week, kw.Models, gw.Models)
+		}
+		// Which releases have the bug is planted, not sent: the key's word is taken for it.
+		for i := range gw.Releases {
+			if i < len(kw.Releases) && kw.Releases[i].Version == gw.Releases[i].Version {
+				gw.Releases[i].Buggy = kw.Releases[i].Buggy
+			}
+		}
+		if !slices.Equal(kw.Releases, gw.Releases) {
+			t.Errorf("week of %s: the key's releases differ from what was sent.\n key: %+v\nsent: %+v", kw.Week, kw.Releases, gw.Releases)
+		}
+		if !slices.Equal(kw.Tools, gw.Tools) {
+			t.Errorf("week of %s: the key's tools differ from what was sent.\n key: %+v\nsent: %+v", kw.Week, kw.Tools, gw.Tools)
+		}
+	}
+
+	// The story the loops view is for shows in what was sent: the flaky team's Bash loops.
+	loops := 0
+	for _, kw := range k.Weeks {
+		for _, tw := range kw.Tools {
+			if tw.Tool == "Bash" {
+				loops += tw.Loops
+			}
+		}
+	}
+	if loops == 0 {
+		t.Error("no Bash loop of three or more failed runs was sent, so the flaky-tests story cannot show")
 	}
 }
 
@@ -329,16 +371,31 @@ func (discard) Metrics([]byte) error         { return nil }
 var orgPattern = regexp.MustCompile(madeup.OrgArtifacts)
 
 type wireSession struct {
-	email, cohort string
-	first         time.Time
-	requests      int
-	cost          float64
+	email, cohort, version string
+	first                  time.Time
+	requests               int
+	cost                   float64
+	models                 map[string]*wireSpend
+	calls                  map[string]*wireCall
 
 	mainRequests                  int
 	firstMain                     time.Time
 	startContext                  int
 	editProposals, editRejections int
 	compactions, autoCompactions  int
+}
+
+type wireSpend struct {
+	requests int
+	cost     float64
+}
+
+// A tool call as silver_tool_call has it: decided when its first decision was, and run if it has a
+// result.
+type wireCall struct {
+	id, tool    string
+	decided     time.Time
+	ran, failed bool
 }
 
 // A permission prompt's start, or a person's answer to one, as silver_policy_decision pairs them.
@@ -378,7 +435,7 @@ func newWireSink() *wireSink {
 func (w *wireSink) session(id string) *wireSession {
 	s := w.sessions[id]
 	if s == nil {
-		s = &wireSession{}
+		s = &wireSession{models: map[string]*wireSpend{}, calls: map[string]*wireCall{}}
 		w.sessions[id] = s
 	}
 	return s
@@ -477,7 +534,7 @@ func (w *wireSink) Logs(body []byte) error {
 				w.saw(at)
 				sid, pid := a["session.id"], a["prompt.id"]
 				s := w.session(sid)
-				s.email, s.cohort = a["user.email"], res["cardo.cohort"]
+				s.email, s.cohort, s.version = a["user.email"], res["cardo.cohort"], a["app.version"]
 				if s.first.IsZero() || at.Before(s.first) {
 					s.first = at
 				}
@@ -487,6 +544,13 @@ func (w *wireSink) Logs(body []byte) error {
 					s.requests++
 					c, _ := strconv.ParseFloat(a["cost_usd"], 64)
 					s.cost += c
+					m := s.models[a["model"]]
+					if m == nil {
+						m = &wireSpend{}
+						s.models[a["model"]] = m
+					}
+					m.requests++
+					m.cost += c
 					if a["skill.name"] != "" {
 						w.uses = append(w.uses, wireUse{sid, pid, "skill", a["skill.name"], "", at, false})
 					}
@@ -501,6 +565,10 @@ func (w *wireSink) Logs(body []byte) error {
 					w.prompts[[2]string{sid, pid}] = a["command_source"] == "builtin"
 				case "tool_decision":
 					tool := a["tool_name"]
+					call := s.call(a["tool_use_id"], tool)
+					if call.decided.IsZero() || at.Before(call.decided) {
+						call.decided = at
+					}
 					if strings.HasPrefix(tool, "mcp__") {
 						w.uses = append(w.uses, wireUse{sid, pid, "mcp", strings.Split(tool, "__")[1], "", at, false})
 					}
@@ -513,6 +581,9 @@ func (w *wireSink) Logs(body []byte) error {
 					if strings.HasPrefix(a["source"], "user") {
 						w.answered = append(w.answered, wirePermission{sid, pid, tool, at})
 					}
+				case "tool_result":
+					call := s.call(a["tool_use_id"], a["tool_name"])
+					call.ran, call.failed = true, a["success"] != "true"
 				case "hook_execution_start":
 					if a["hook_event"] == "PermissionRequest" {
 						tool := strings.TrimPrefix(a["hook_name"], "PermissionRequest:")
@@ -528,6 +599,55 @@ func (w *wireSink) Logs(body []byte) error {
 		}
 	}
 	return nil
+}
+
+func (s *wireSession) call(id, tool string) *wireCall {
+	c := s.calls[id]
+	if c == nil {
+		c = &wireCall{id: id, tool: tool}
+		s.calls[id] = c
+	}
+	return c
+}
+
+// loops counts, per tool, the calls that ran and the runs of three or more failed calls of the
+// tool one after another among them, ordered by decision, as gold_tool_loops_weekly does.
+func (s *wireSession) loops() map[string]*madeup.KeyToolWeek {
+	var calls []*wireCall
+	for _, c := range s.calls {
+		if c.ran {
+			calls = append(calls, c)
+		}
+	}
+	slices.SortFunc(calls, func(a, b *wireCall) int { return cmp.Or(a.decided.Compare(b.decided), cmp.Compare(a.id, b.id)) })
+	out := map[string]*madeup.KeyToolWeek{}
+	run := 0
+	for i, c := range calls {
+		t := out[c.tool]
+		if t == nil {
+			t = &madeup.KeyToolWeek{Tool: c.tool}
+			out[c.tool] = t
+		}
+		t.Calls++
+		if !c.failed {
+			continue
+		}
+		run++
+		if i+1 < len(calls) && calls[i+1].failed && calls[i+1].tool == c.tool {
+			continue
+		}
+		if run >= 3 {
+			t.Loops++
+			t.FailedInLoops += run
+		}
+		run = 0
+	}
+	for _, t := range out {
+		if t.Loops > 0 {
+			t.SessionsWithLoops = 1
+		}
+	}
+	return out
 }
 
 func (w *wireSink) Metrics(body []byte) error {
@@ -599,12 +719,32 @@ type wireKeyView struct {
 	Weeks  map[string]madeup.KeyWeek
 }
 
+// quantile is ClickHouse's quantileExact, as madeup's is.
+func quantile(sorted []int, level float64) int {
+	if len(sorted) == 0 {
+		return 0
+	}
+	return sorted[min(len(sorted)-1, int(level*float64(len(sorted))))]
+}
+
 // key counts what was sent the way the views do: see madeup.Key.
 func (w *wireSink) key() wireKeyView {
 	v := wireKeyView{People: map[string]madeup.KeyPerson{}, Days: map[string]madeup.KeyDay{}, Weeks: map[string]madeup.KeyWeek{}}
 	type set = map[string]bool
 	dayPeople, weekPeople := map[string]set{}, map[string]set{}
-	contexts := map[string][]int{}
+	contexts, weekContexts := map[string][]int{}, map[string][]int{}
+	type weekName struct{ week, name string }
+	teams := map[weekName]*madeup.KeyTeamWeek{}
+	teamPeople, modelPeople, releasePeople, toolPeople := map[weekName]set{}, map[weekName]set{}, map[weekName]set{}, map[weekName]set{}
+	models := map[weekName]*madeup.KeyModelWeek{}
+	releases := map[weekName]*madeup.KeyReleaseWeek{}
+	tools := map[weekName]*madeup.KeyToolWeek{}
+	addTo := func(m map[weekName]set, k weekName, v string) {
+		if m[k] == nil {
+			m[k] = set{}
+		}
+		m[k][v] = true
+	}
 	add := func(m map[string]set, k, v string) {
 		if m[k] == nil {
 			m[k] = set{}
@@ -630,6 +770,49 @@ func (w *wireSink) key() wireKeyView {
 		if s.mainRequests > 0 {
 			d.SessionsWithRequests++
 			contexts[day+"|"+s.cohort] = append(contexts[day+"|"+s.cohort], s.startContext)
+			weekContexts[week] = append(weekContexts[week], s.startContext)
+		}
+		tk := weekName{week, s.cohort}
+		tw := teams[tk]
+		if tw == nil {
+			tw = &madeup.KeyTeamWeek{Team: s.cohort}
+			teams[tk] = tw
+		}
+		tw.Sessions++
+		tw.Requests += s.requests
+		tw.CostUSD += s.cost
+		addTo(teamPeople, tk, s.email)
+		for model, sp := range s.models {
+			m := models[weekName{week, model}]
+			if m == nil {
+				m = &madeup.KeyModelWeek{Model: model}
+				models[weekName{week, model}] = m
+			}
+			m.Requests += sp.requests
+			m.CostUSD += sp.cost
+			addTo(modelPeople, weekName{week, model}, s.email)
+		}
+		if s.requests > 0 {
+			r := releases[weekName{week, s.version}]
+			if r == nil {
+				r = &madeup.KeyReleaseWeek{Version: s.version}
+				releases[weekName{week, s.version}] = r
+			}
+			r.Sessions++
+			r.Requests += s.requests
+			addTo(releasePeople, weekName{week, s.version}, s.email)
+		}
+		for tool, l := range s.loops() {
+			x := tools[weekName{week, tool}]
+			if x == nil {
+				x = &madeup.KeyToolWeek{Tool: tool}
+				tools[weekName{week, tool}] = x
+			}
+			x.Calls += l.Calls
+			x.Loops += l.Loops
+			x.FailedInLoops += l.FailedInLoops
+			x.SessionsWithLoops += l.SessionsWithLoops
+			addTo(toolPeople, weekName{week, tool}, s.email)
 		}
 		v.Days[day+"|"+s.cohort] = d
 		add(dayPeople, day+"|"+s.cohort, s.email)
@@ -710,22 +893,35 @@ func (w *wireSink) key() wireKeyView {
 	}
 	type artKey struct{ week, kind, name, fileKind string }
 	type artCount struct {
-		builtin          bool
-		people, sessions set
-		uses             int
+		builtin                 bool
+		people, sessions, teams set
+		uses                    int
 	}
 	arts := map[artKey]*artCount{}
+	loaded := map[weekName]map[string]set{} // sessions loading each named instructions file, by team
 	for _, u := range rows {
 		k := artKey{monday(u.at), u.kind, u.name, u.fileKind}
 		a := arts[k]
 		if a == nil {
-			a = &artCount{people: set{}, sessions: set{}}
+			a = &artCount{people: set{}, sessions: set{}, teams: set{}}
 			arts[k] = a
 		}
+		s := w.sessions[u.session]
 		a.builtin = a.builtin || u.builtin
-		a.people[w.sessions[u.session].email] = true
+		a.people[s.email] = true
 		a.sessions[u.session] = true
+		a.teams[s.cohort] = true
 		a.uses++
+		if u.kind == "instructions" && u.name != "" {
+			tk := weekName{monday(s.first), s.cohort}
+			if loaded[tk] == nil {
+				loaded[tk] = map[string]set{}
+			}
+			if loaded[tk][u.name] == nil {
+				loaded[tk][u.name] = set{}
+			}
+			loaded[tk][u.name][u.session] = true
+		}
 	}
 	for k, a := range arts {
 		org := k.name != "" && (k.kind == "instructions" || orgPattern.MatchString(k.name) ||
@@ -734,15 +930,15 @@ func (w *wireSink) key() wireKeyView {
 		wk.Week = k.week
 		wk.Artifacts = append(wk.Artifacts, madeup.KeyArtifact{
 			Kind: k.kind, Name: k.name, FileKind: k.fileKind, Org: org, Builtin: a.builtin,
-			People: len(a.people), Sessions: len(a.sessions), Uses: a.uses,
+			People: len(a.people), Sessions: len(a.sessions), Uses: a.uses, Teams: len(a.teams),
 		})
 		v.Weeks[k.week] = wk
 	}
 	// The names fewer than five people used in a week, added up per kind with each person and
 	// session counted once.
 	other := map[[2]string]*struct {
-		people, sessions set
-		uses             int
+		people, sessions, teams set
+		uses                    int
 	}{}
 	for k, a := range arts {
 		org := k.name != "" && (k.kind == "instructions" || orgPattern.MatchString(k.name))
@@ -752,24 +948,61 @@ func (w *wireSink) key() wireKeyView {
 		o := other[[2]string{k.week, k.kind}]
 		if o == nil {
 			o = &struct {
-				people, sessions set
-				uses             int
-			}{people: set{}, sessions: set{}}
+				people, sessions, teams set
+				uses                    int
+			}{people: set{}, sessions: set{}, teams: set{}}
 			other[[2]string{k.week, k.kind}] = o
 		}
 		maps.Copy(o.people, a.people)
 		maps.Copy(o.sessions, a.sessions)
+		maps.Copy(o.teams, a.teams)
 		o.uses += a.uses
 	}
 	for wk, o := range other {
 		w := v.Weeks[wk[0]]
 		w.Other = append(w.Other, madeup.KeyArtifact{
 			Kind: wk[1], Name: "other", People: len(o.people), Sessions: len(o.sessions), Uses: o.uses,
+			Teams: len(o.teams),
 		})
 		v.Weeks[wk[0]] = w
 	}
+	for tk, tw := range teams {
+		wk := v.Weeks[tk.week]
+		tw.People = len(teamPeople[tk])
+		for _, name := range slices.Sorted(maps.Keys(loaded[tk])) {
+			tw.Instructions = append(tw.Instructions, madeup.KeyLoad{Name: name, Sessions: len(loaded[tk][name])})
+		}
+		wk.Teams = append(wk.Teams, *tw)
+		v.Weeks[tk.week] = wk
+	}
+	for k, m := range models {
+		wk := v.Weeks[k.week]
+		m.People = len(modelPeople[k])
+		wk.Models = append(wk.Models, *m)
+		v.Weeks[k.week] = wk
+	}
+	for k, r := range releases {
+		wk := v.Weeks[k.week]
+		r.People = len(releasePeople[k])
+		wk.Releases = append(wk.Releases, *r)
+		v.Weeks[k.week] = wk
+	}
+	for k, x := range tools {
+		wk := v.Weeks[k.week]
+		x.People = len(toolPeople[k])
+		wk.Tools = append(wk.Tools, *x)
+		v.Weeks[k.week] = wk
+	}
 	for week, wk := range v.Weeks {
 		slices.SortFunc(wk.Other, func(a, b madeup.KeyArtifact) int { return cmp.Compare(a.Kind, b.Kind) })
+		slices.SortFunc(wk.Teams, func(a, b madeup.KeyTeamWeek) int { return cmp.Compare(a.Team, b.Team) })
+		slices.SortFunc(wk.Models, func(a, b madeup.KeyModelWeek) int { return cmp.Compare(a.Model, b.Model) })
+		slices.SortFunc(wk.Releases, func(a, b madeup.KeyReleaseWeek) int { return cmp.Compare(a.Version, b.Version) })
+		slices.SortFunc(wk.Tools, func(a, b madeup.KeyToolWeek) int { return cmp.Compare(a.Tool, b.Tool) })
+		c := weekContexts[week]
+		slices.Sort(c)
+		wk.SessionsWithRequests = len(c)
+		wk.StartContextP50, wk.StartContextP90 = quantile(c, 0.5), quantile(c, 0.9)
 		wk.ActivePeople = len(weekPeople[week])
 		sort.Slice(wk.Artifacts, func(i, j int) bool {
 			a, b := wk.Artifacts[i], wk.Artifacts[j]

@@ -72,9 +72,10 @@ everyone. Three rules come with it:
   name that is not the organization's own is recorded as `custom`.
 
 **About your team.** The same rule covers the team name in the bundle. A team with fewer than five
-people working on a given day is shown as "other" that day, so a chart of a small team is never
-two or three people's numbers. Totals for the whole organization are always shown. A team from
-the directory with fewer than five people is not named either.
+people working in a chart's period, a day on a daily chart and a week on a weekly one, is shown as
+"other" for that day or week, so a chart of a small team is never two or three people's numbers.
+Totals for the whole organization are always shown. A team from the directory with fewer than
+five people is not named either.
 
 The exact list is the allowlist in
 [`deploy/collector/config.yaml`](../../deploy/collector/config.yaml), and a CI test fails if it

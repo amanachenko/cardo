@@ -35,6 +35,11 @@ type seed struct {
 	day   time.Time
 	logs  bytes.Buffer
 	hooks bytes.Buffer
+	// release is the Claude Code version person p runs, when it is not 2.1.281.
+	release map[int]string
+	// workflow names person p's job when p is a service run (ADR-0036), labelled as the CI
+	// settings block labels it.
+	workflow map[int]string
 }
 
 func newSeed(t *testing.T, st *Store, weeksBack int) *seed {
@@ -76,12 +81,19 @@ func (s *seed) otel(p int, at time.Time, event, prompt string, kv ...string) {
 		"event.name": event, "session.id": s.session(p), "prompt.id": prompt,
 		"user.pseudonym": s.person(p), "cardo.cohort": s.cohort(p), "app.version": "2.1.281",
 	}
+	if v := s.release[p]; v != "" {
+		attrs["app.version"] = v
+	}
 	for i := 0; i+1 < len(kv); i += 2 {
 		attrs[kv[i]] = kv[i+1]
 	}
+	resource := map[string]string{"cardo.tier": "1", "cardo.salt_version": "v1", "cardo.cohort": s.cohort(p)}
+	if wf := s.workflow[p]; wf != "" {
+		resource["cardo.actor"], resource["cardo.workflow"] = "service", wf
+	}
 	json.NewEncoder(&s.logs).Encode(map[string]any{
 		"Timestamp": stamp(at), "EventName": "claude_code." + event, "LogAttributes": attrs,
-		"ResourceAttributes": map[string]string{"cardo.tier": "1", "cardo.salt_version": "v1", "cardo.cohort": s.cohort(p)},
+		"ResourceAttributes": resource,
 	})
 }
 
@@ -112,11 +124,55 @@ func (s *seed) write() {
 	if err := s.st.c.Insert(ctx, hooksTable, s.hooks.Bytes()); err != nil {
 		s.t.Fatal(err)
 	}
+	s.logs.Reset()
+	s.hooks.Reset()
 	// Silver is stored and rebuilt every 10 minutes (ADR-0052): rebuild it now, or the views read
 	// the tables as they were before these rows.
 	if err := RebuildSilver(ctx, s.st.c); err != nil {
 		s.t.Fatal(err)
 	}
+}
+
+// call adds a tool call that ran for person p: Claude Code's decision, then its result.
+func (s *seed) call(p int, at time.Time, id, tool string, ok bool) {
+	q := s.prompt(p, "1")
+	s.otel(p, at, "tool_decision", q, "tool_name", tool, "tool_use_id", id, "decision", "accept", "source", "config")
+	s.otel(p, at.Add(time.Second), "tool_result", q, "tool_name", tool, "tool_use_id", id, "success", fmt.Sprint(ok))
+}
+
+// seedWeek adds to seedFleet's week what only a weekly view can see, each part for one claim:
+//
+//   - persons 8 to 10, in the small cohort, one a day from Tuesday to Thursday. With 6 and 7 that
+//     cohort has five people in the week and never more than two on a day: named weekly, "other"
+//     daily.
+//   - person 8 on a Claude Code release nobody else runs, which is "other releases".
+//   - person 9's MCP tool failing three times in a row, a loop on a tool one person calls, which
+//     is "other tools"; person 10's Bash failing three times and then passing, a loop on a tool
+//     that is always named; and two failures in a row from person 8, which are not a loop.
+//   - the week before, a session loading only v1 of the rules file, when v1 was the newest anyone
+//     had loaded: current that week, stale in the next.
+func seedWeek(s *seed) {
+	s.release = map[int]string{8: "2.1.282"}
+	for p := 8; p <= 10; p++ {
+		start := s.at(time.Duration(p-7)*24*time.Hour + time.Duration(p)*time.Minute)
+		q := s.prompt(p, "1")
+		s.otel(p, start, "user_prompt", q, "prompt_length", "10")
+		s.request(p, start.Add(5*time.Second), q, "m1", 100, 800, 100, "0.01")
+	}
+	tu := func(n string) string { return "tu-" + s.run + "-" + n }
+	day := func(p int) time.Time { return s.at(time.Duration(p-7)*24*time.Hour + 30*time.Minute) }
+	s.call(8, day(8), tu("r1"), "Read", false)
+	s.call(8, day(8).Add(time.Minute), tu("r2"), "Read", false)
+	s.call(8, day(8).Add(2*time.Minute), tu("r3"), "Read", true)
+	for i := range 3 {
+		s.call(9, day(9).Add(time.Duration(i)*time.Minute), tu(fmt.Sprint("m", i)), "mcp__"+s.run+"-db__query", false)
+		s.call(10, day(10).Add(time.Duration(i)*time.Minute), tu(fmt.Sprint("b", i)), "Bash", false)
+	}
+	s.call(10, day(10).Add(3*time.Minute), tu("b3"), "Bash", true)
+
+	s.hook(11, s.at(-7*24*time.Hour), "InstructionsLoaded", "", "instructions_name", "acme-"+s.run+"-rules-v1.md",
+		"instructions_file", "rule", "load_reason", "session_start", "memory_type", "Project")
+	s.write()
 }
 
 // seedFleet writes the whole scenario. Each comment says what the scenario is there to prove.
@@ -459,6 +515,88 @@ func TestCollectorGoldAppliesTheMinimumGroupSize(t *testing.T) {
 		"session_start_context_p50": "1000", "turn_peak_context_max": "3000",
 	})
 
+	// The weekly views (018). The daily views above saw seedFleet's Monday alone; the rest of the
+	// week arrives now.
+	seedWeek(s)
+	prev := s.day.AddDate(0, 0, -7).Format("2006-01-02")
+
+	spend := func() map[string]map[string]string {
+		out := map[string]map[string]string{}
+		for _, r := range rowsOf(t, st, fmt.Sprintf("SELECT cohort, sessions, cost_usd FROM cardo.gold_spend_weekly WHERE week = '%s'", week)) {
+			out[r["cohort"]] = r
+		}
+		return out
+	}
+	w := spend()
+	expect(t, "weekly spend, big cohort", w[s.run+"-big"], map[string]string{"sessions": "5", "cost_usd": "1.11"})
+	// Two people on Monday and one on each of three other days: never five on a day, five in the week.
+	expect(t, "weekly spend, small cohort", w[s.run+"-small"], map[string]string{"sessions": "5", "cost_usd": "0.35"})
+	if r := rowsOf(t, st, fmt.Sprintf("SELECT cohort FROM cardo.gold_friction_daily WHERE day > '%s' AND day < toMonday(toDate('%s') + 7) AND cohort = '%s-small'", week, week, s.run)); len(r) != 0 {
+		t.Errorf("a cohort of one a day is named on a daily view: %v", r)
+	}
+	ctxWeek := oneRow(t, st, "weekly context", fmt.Sprintf(
+		"SELECT active_people, sessions, model_switches FROM cardo.gold_context_weekly WHERE week = '%s' AND cohort = '%s-small'", week, s.run))
+	expect(t, "gold_context_weekly, small cohort", ctxWeek, map[string]string{"active_people": "5", "sessions": "5", "model_switches": "1"})
+
+	models := map[string]map[string]string{}
+	for _, r := range rowsOf(t, st, fmt.Sprintf("SELECT model, people, cost_usd FROM cardo.gold_model_spend_weekly WHERE week = '%s'", week)) {
+		models[r["model"]] = r
+	}
+	// m2 and m3 each had one person: what they cost is that person's spend.
+	expect(t, "model spend, m1", models["m1"], map[string]string{"people": "10", "cost_usd": "1.11"})
+	expect(t, "model spend, other models", models["other models"], map[string]string{"people": "2", "cost_usd": "0.35"})
+	if models["m2"] != nil || models["m3"] != nil {
+		t.Errorf("INV-3 / ADR-0029: a model one person used is named: %v", models)
+	}
+
+	releases := map[string]map[string]string{}
+	for _, r := range rowsOf(t, st, fmt.Sprintf("SELECT app_version, people, requests, cache_read_share FROM cardo.gold_release_cache_weekly WHERE week = '%s'", week)) {
+		releases[r["app_version"]] = r
+	}
+	expect(t, "release 2.1.281", releases["2.1.281"], map[string]string{"people": "9"})
+	// 800 of 1,000 input tokens read from the cache.
+	expect(t, "other releases", releases["other releases"], map[string]string{"people": "1", "requests": "1", "cache_read_share": "0.8"})
+	if releases["2.1.282"] != nil {
+		t.Errorf("INV-3 / ADR-0029: a release one person runs is named: %v", releases["2.1.282"])
+	}
+
+	loops := map[string]map[string]string{}
+	for _, r := range rowsOf(t, st, fmt.Sprintf("SELECT tool_name, calls, loops, failed_in_loops, sessions_with_loops FROM cardo.gold_tool_loops_weekly WHERE week = '%s'", week)) {
+		loops[r["tool_name"]] = r
+	}
+	expect(t, "loops, Bash", loops["Bash"], map[string]string{"calls": "4", "loops": "1", "failed_in_loops": "3", "sessions_with_loops": "1"})
+	expect(t, "loops, other tools", loops["other tools"], map[string]string{"calls": "3", "loops": "1", "failed_in_loops": "3"})
+	expect(t, "two failures in a row are not a loop", loops["Read"], map[string]string{"calls": "3", "loops": "0"})
+	if loops["mcp__"+s.run+"-db__query"] != nil {
+		t.Errorf("INV-3 / ADR-0029: an MCP tool one person calls is named: %v", loops)
+	}
+
+	setup := oneRow(t, st, "setup context", fmt.Sprintf(
+		"SELECT sessions_with_requests, session_start_context_p50 FROM cardo.gold_setup_context_weekly WHERE week = '%s'", week))
+	expect(t, "gold_setup_context_weekly", setup, map[string]string{"sessions_with_requests": "10", "session_start_context_p50": "1000"})
+
+	// Current is judged by the end of each week: v1 was current the week before v2 appeared.
+	byWeek := map[string]map[string]string{}
+	for _, r := range rowsOf(t, st, fmt.Sprintf(
+		"SELECT toString(week) AS week, version, is_current, current_version, toString(first_week) AS first_week FROM cardo.gold_instructions_versions WHERE family = 'acme-%s-rules'", s.run)) {
+		byWeek[r["week"]+"/v"+r["version"]] = r
+	}
+	expect(t, "v1 the week before v2", byWeek[prev+"/v1"], map[string]string{"is_current": "1", "current_version": "1", "first_week": prev})
+	expect(t, "v1 once v2 is loaded", byWeek[week+"/v1"], map[string]string{"is_current": "0", "current_version": "2", "first_week": prev})
+	expect(t, "v2", byWeek[week+"/v2"], map[string]string{"is_current": "1", "first_week": week})
+
+	team := oneRow(t, st, "instructions by team", fmt.Sprintf(
+		"SELECT sessions, sessions_current, current_share FROM cardo.gold_instructions_by_team_weekly WHERE week = '%s' AND cohort = '%s-big' AND family = 'acme-%s-rules'", week, s.run, s.run))
+	expect(t, "gold_instructions_by_team_weekly, big cohort", team, map[string]string{"sessions": "5", "sessions_current": "4", "current_share": "0.8"})
+
+	spread := map[string]map[string]string{}
+	for _, r := range rowsOf(t, st, fmt.Sprintf(
+		"SELECT kind, artifact, teams, toString(first_week) AS first_week FROM cardo.gold_artifact_usage WHERE week = '%s' AND kind = 'skill'", week)) {
+		spread[r["artifact"]] = r
+	}
+	expect(t, "teams and first week, shared command", spread[s.run+"-shared"], map[string]string{"teams": "1", "first_week": week})
+	expect(t, "first week of \"other\"", spread["other"], map[string]string{"first_week": "NULL"})
+
 	// Raised to six: the command five people use, and the cohort of five, become "other".
 	if err := st.ApplyViewSettings(context.Background(), ViewSettings{MinGroupSize: strPtr("6")}); err != nil {
 		t.Fatal(err)
@@ -468,6 +606,9 @@ func TestCollectorGoldAppliesTheMinimumGroupSize(t *testing.T) {
 	}
 	if f := cohorts(); f[s.run+"-big"] != nil {
 		t.Errorf("with a minimum of 6, a cohort of five is still named")
+	}
+	if w := spend(); w[s.run+"-small"] != nil || w[s.run+"-big"] != nil {
+		t.Errorf("with a minimum of 6, a cohort of five is still named weekly: %v", w)
 	}
 
 	// A value below the floor, written straight into the table as nothing but a hand could, is
@@ -482,6 +623,90 @@ func TestCollectorGoldAppliesTheMinimumGroupSize(t *testing.T) {
 	if u := usage(); u["skill/"+s.run+"-rare/"] != nil {
 		t.Errorf("a stored minimum of 2 named a command two people use")
 	}
+}
+
+// Service runs are not people (ADR-0036). A nightly job with a pseudonym of its own runs in a team
+// beside four engineers. Counted as a person, it would make the team five, so the team would be
+// named, and its model, its release, its command and the newer instructions file only it loaded
+// would each show. Left out, as every weekly view and both artifact views must leave it, the week
+// holds four people and nothing of the job.
+func TestWeeklyViewsLeaveServiceRunsOut(t *testing.T) {
+	st := testStore(t)
+	setViewSettings(t, st, ViewSettings{OrgArtifacts: strPtr(testOrgPattern), MinGroupSize: strPtr("")})
+	s := newSeed(t, st, 11)
+	s.release = map[int]string{5: "2.1.299"}
+	s.workflow = map[int]string{5: "nightly-" + s.run}
+	week := s.day.Format("2006-01-02")
+	for p := 1; p <= 5; p++ {
+		start := s.at(time.Duration(p) * time.Minute)
+		q := s.prompt(p, "1")
+		model, cost := "m1", "0.01"
+		file, command := "acme-"+s.run+"-rules-v2.md", "acme-"+s.run+"-tool"
+		if p == 5 {
+			model, cost = "m9-"+s.run, "5"
+			file, command = "acme-"+s.run+"-rules-v3.md", s.run+"-ci"
+		}
+		s.otel(p, start, "user_prompt", q, "prompt_length", "10")
+		s.request(p, start.Add(5*time.Second), q, model, 100, 800, 100, cost)
+		s.hook(p, start, "InstructionsLoaded", "", "instructions_name", file,
+			"instructions_file", "rule", "load_reason", "session_start", "memory_type", "Project")
+		s.hook(p, start, "UserPromptExpansion", q, "command_name", command, "command_source", "projectSettings")
+	}
+	s.call(1, s.at(10*time.Minute), "tu-"+s.run+"-ok", "Bash", true)
+	for i := range 3 {
+		s.call(5, s.at(20*time.Minute+time.Duration(i)*time.Minute), fmt.Sprint("tu-", s.run, "-ci", i), "Bash", false)
+	}
+	s.write()
+
+	job := oneRow(t, st, "the job's session", fmt.Sprintf(
+		"SELECT actor_kind, workflow FROM cardo.silver_session WHERE session_id = '%s'", s.session(5)))
+	if job["actor_kind"] != "service" {
+		t.Fatalf("the seeded job is not a service run, so this test proves nothing: %v", job)
+	}
+	if r := rowsOf(t, st, fmt.Sprintf(
+		"SELECT cohort FROM cardo.silver_session_cohort_week WHERE session_id = '%s'", s.session(5))); len(r) != 0 {
+		t.Errorf("silver_session_cohort_week puts the job in a team, so every weekly view reads it: %v", r)
+	}
+
+	// Each weekly view holds one row: four people are fewer than five, so the team, the model and
+	// the release are all "other", and the job's $5, its model and its release are in none of them.
+	only := func(what, q string, want map[string]string) {
+		t.Helper()
+		rows := rowsOf(t, st, fmt.Sprintf(q, week))
+		if len(rows) != 1 {
+			t.Errorf("%s: got %d rows, want 1: %v", what, len(rows), rows)
+			return
+		}
+		expect(t, what, rows[0], want)
+	}
+	only("gold_spend_weekly", "SELECT cohort, sessions, cost_usd FROM cardo.gold_spend_weekly WHERE week = '%s'",
+		map[string]string{"cohort": "other", "sessions": "4", "cost_usd": "0.04"})
+	only("gold_model_spend_weekly", "SELECT model, people, cost_usd FROM cardo.gold_model_spend_weekly WHERE week = '%s'",
+		map[string]string{"model": "other models", "people": "4", "cost_usd": "0.04"})
+	only("gold_release_cache_weekly", "SELECT app_version, people, requests FROM cardo.gold_release_cache_weekly WHERE week = '%s'",
+		map[string]string{"app_version": "other releases", "people": "4", "requests": "4"})
+	only("gold_context_weekly", "SELECT cohort, active_people, sessions FROM cardo.gold_context_weekly WHERE week = '%s'",
+		map[string]string{"cohort": "other", "active_people": "4", "sessions": "4"})
+	only("gold_setup_context_weekly", "SELECT sessions_with_requests FROM cardo.gold_setup_context_weekly WHERE week = '%s'",
+		map[string]string{"sessions_with_requests": "4"})
+	only("gold_tool_loops_weekly", "SELECT tool_name, calls, loops FROM cardo.gold_tool_loops_weekly WHERE week = '%s'",
+		map[string]string{"tool_name": "Bash", "calls": "1", "loops": "0"})
+	only("gold_instructions_by_team_weekly", "SELECT cohort, sessions, sessions_current FROM cardo.gold_instructions_by_team_weekly WHERE week = '%s'",
+		map[string]string{"cohort": "other", "sessions": "4", "sessions_current": "4"})
+	// v3 is the organization's file, so even one person loading it would show it, and make v2 stale.
+	only("gold_instructions_versions", "SELECT version, is_current, people FROM cardo.gold_instructions_versions WHERE week = '%s'",
+		map[string]string{"version": "2", "is_current": "1", "people": "4"})
+
+	usage := map[string]map[string]string{}
+	for _, r := range rowsOf(t, st, fmt.Sprintf(
+		"SELECT kind, artifact, file_kind, people, active_people FROM cardo.gold_artifact_usage WHERE week = '%s'", week)) {
+		usage[r["kind"]+"/"+r["artifact"]+"/"+r["file_kind"]] = r
+	}
+	if len(usage) != 2 {
+		t.Errorf("gold_artifact_usage: want the organization's command and its v2 file and nothing of the job, got %v", usage)
+	}
+	expect(t, "the organization's command", usage["skill/acme-"+s.run+"-tool/"], map[string]string{"people": "4", "active_people": "4"})
+	expect(t, "the organization's v2 file", usage["instructions/acme-"+s.run+"-rules-v2.md/rule"], map[string]string{"people": "4", "active_people": "4"})
 }
 
 // migrate refuses a group size below the floor before writing anything.

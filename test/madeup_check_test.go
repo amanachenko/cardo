@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"net/url"
 	"os"
@@ -163,6 +164,86 @@ func (c *madeUpCheck) expectedDays() map[string]*cohortDay {
 	return out
 }
 
+// expectedTeamWeeks is the rows the weekly team views should hold: a team that had at least the
+// minimum of people that week, or every smaller team that week added up as "other".
+func (c *madeUpCheck) expectedTeamWeeks() map[string]*cohortWeek {
+	out := map[string]*cohortWeek{}
+	for _, w := range c.key.Weeks {
+		for _, x := range w.Teams {
+			cohort := x.Team
+			if x.People < c.key.MinGroupSize {
+				cohort = "other"
+			}
+			e := out[w.Week+"|"+cohort]
+			if e == nil {
+				e = &cohortWeek{}
+				out[w.Week+"|"+cohort] = e
+			}
+			e.teams++
+			e.People += x.People
+			e.Sessions += x.Sessions
+			e.Requests += x.Requests
+			e.CostUSD += x.CostUSD
+			e.Instructions = append(e.Instructions, x.Instructions...)
+		}
+	}
+	return out
+}
+
+type cohortWeek struct {
+	madeup.KeyTeamWeek
+	teams int
+}
+
+// currentVersions is, by week and file, the highest version anyone had loaded by the end of
+// that week: the version the views call current. names is the files a week loaded: by the week
+// of the load in gold_instructions_versions, and of the session in the view by team.
+func (c *madeUpCheck) currentVersions(names func(madeup.KeyWeek) []string) map[string]int {
+	out := map[string]int{}
+	highest := map[string]int{}
+	for _, w := range c.key.Weeks { // in order
+		for _, name := range names(w) {
+			family, v := splitVersion(name)
+			highest[family] = max(highest[family], v)
+		}
+		for family, v := range highest {
+			out[w.Week+"|"+family] = v
+		}
+	}
+	return out
+}
+
+func loadedThatWeek(w madeup.KeyWeek) (names []string) {
+	for _, a := range w.Artifacts {
+		if a.Kind == "instructions" && a.Name != "" {
+			names = append(names, a.Name)
+		}
+	}
+	return names
+}
+
+func loadedBySessionsThatWeek(w madeup.KeyWeek) (names []string) {
+	for _, x := range w.Teams {
+		for _, l := range x.Instructions {
+			names = append(names, l.Name)
+		}
+	}
+	return names
+}
+
+var versioned = regexp.MustCompile(`^(.*)-v([0-9]+)([.][A-Za-z0-9]+)?$`)
+
+// splitVersion reads a file's name as the views do: example-engineering-standards-v3.md is
+// version 3 of example-engineering-standards. A name with no version is version 0 of itself.
+func splitVersion(name string) (family string, version int) {
+	m := versioned.FindStringSubmatch(name)
+	if m == nil {
+		return name, 0
+	}
+	v, _ := strconv.Atoi(m[2])
+	return m[1], v
+}
+
 // report gathers a view's differences from the key, and fails once with the first few of them.
 type report struct {
 	t       *testing.T
@@ -266,7 +347,16 @@ func TestMadeUpViewsMatchTheAnswerKey(t *testing.T) {
 	t.Run("gold_artifact_usage", func(t *testing.T) {
 		r := &report{t: t, view: "gold_artifact_usage"}
 		type row struct {
-			people, sessions, uses, active int
+			people, sessions, uses, active, teams int
+			first                                 string
+		}
+		first := map[[2]string]string{}
+		for _, w := range c.key.Weeks {
+			for _, a := range w.Artifacts {
+				if f, ok := first[[2]string{a.Kind, a.Name}]; !ok || w.Week < f {
+					first[[2]string{a.Kind, a.Name}] = w.Week
+				}
+			}
 		}
 		want := map[string]row{}
 		for _, w := range c.key.Weeks {
@@ -276,16 +366,17 @@ func TestMadeUpViewsMatchTheAnswerKey(t *testing.T) {
 			}
 			for _, a := range w.Artifacts {
 				if a.Org || a.Builtin || a.Name == "" || names[[2]string{a.Kind, a.Name}] >= c.key.MinGroupSize {
-					want[strings.Join([]string{w.Week, a.Kind, a.Name, a.FileKind}, "|")] = row{a.People, a.Sessions, a.Uses, w.ActivePeople}
+					want[strings.Join([]string{w.Week, a.Kind, a.Name, a.FileKind}, "|")] = row{a.People, a.Sessions, a.Uses,
+						w.ActivePeople, a.Teams, first[[2]string{a.Kind, a.Name}]}
 				}
 			}
 			for _, a := range w.Other {
-				want[strings.Join([]string{w.Week, a.Kind, "other", ""}, "|")] = row{a.People, a.Sessions, a.Uses, w.ActivePeople}
+				want[strings.Join([]string{w.Week, a.Kind, "other", ""}, "|")] = row{a.People, a.Sessions, a.Uses, w.ActivePeople, a.Teams, "0"}
 			}
 		}
 		seen := map[string]bool{}
-		for _, got := range c.rows(t, "SELECT week, kind, artifact, file_kind, people, sessions, uses, active_people "+
-			"FROM cardo.gold_artifact_usage ORDER BY week, kind, artifact, file_kind") {
+		for _, got := range c.rows(t, "SELECT week, kind, artifact, file_kind, people, sessions, uses, active_people, "+
+			"teams, first_week FROM cardo.gold_artifact_usage ORDER BY week, kind, artifact, file_kind") {
 			k := strings.Join([]string{got["week"], got["kind"], got["artifact"], got["file_kind"]}, "|")
 			seen[k] = true
 			e, ok := want[k]
@@ -294,9 +385,11 @@ func TestMadeUpViewsMatchTheAnswerKey(t *testing.T) {
 				continue
 			}
 			r.checked++
-			if g := fmt.Sprintf("%s people, %s sessions, %s uses, %s active", got["people"], got["sessions"], got["uses"], got["active_people"]); g !=
-				fmt.Sprintf("%d people, %d sessions, %d uses, %d active", e.people, e.sessions, e.uses, e.active) {
-				r.diff("%s: %s; the key has %d people, %d sessions, %d uses, %d active", k, g, e.people, e.sessions, e.uses, e.active)
+			g := fmt.Sprintf("%s people, %s sessions, %s uses, %s active, %s teams, first used %s", got["people"],
+				got["sessions"], got["uses"], got["active_people"], got["teams"], got["first_week"])
+			if w := fmt.Sprintf("%d people, %d sessions, %d uses, %d active, %d teams, first used %s", e.people,
+				e.sessions, e.uses, e.active, e.teams, e.first); g != w {
+				r.diff("%s: %s;\n      the key has %s", k, g, w)
 			}
 		}
 		for k := range want {
@@ -310,20 +403,21 @@ func TestMadeUpViewsMatchTheAnswerKey(t *testing.T) {
 	t.Run("gold_instructions_versions", func(t *testing.T) {
 		r := &report{t: t, view: "gold_instructions_versions"}
 		want := map[string]string{}
-		current := 0
+		first := map[string]string{}
+		current := c.currentVersions(loadedThatWeek)
 		for _, w := range c.key.Weeks {
 			for _, a := range w.Artifacts {
 				if a.Kind == "instructions" && a.Name != "" {
 					want[w.Week+"|"+a.Name] = fmt.Sprintf("%d people, %d sessions, %d loads", a.People, a.Sessions, a.Uses)
-					if v, _ := strconv.Atoi(regexp.MustCompile(`-v(\d+)\.`).FindStringSubmatch(a.Name + ".")[1]); v > current {
-						current = v
+					if _, ok := first[a.Name]; !ok {
+						first[a.Name] = w.Week
 					}
 				}
 			}
 		}
 		seen := map[string]bool{}
-		for _, got := range c.rows(t, "SELECT week, instructions_name, version, is_current, people, sessions, loads "+
-			"FROM cardo.gold_instructions_versions ORDER BY week, instructions_name") {
+		for _, got := range c.rows(t, "SELECT week, family, instructions_name, version, is_current, people, sessions, "+
+			"loads, first_week FROM cardo.gold_instructions_versions ORDER BY week, instructions_name") {
 			k := got["week"] + "|" + got["instructions_name"]
 			seen[k] = true
 			e, ok := want[k]
@@ -335,8 +429,306 @@ func TestMadeUpViewsMatchTheAnswerKey(t *testing.T) {
 			if g := fmt.Sprintf("%s people, %s sessions, %s loads", got["people"], got["sessions"], got["loads"]); g != e {
 				r.diff("%s: %s; the key has %s", k, g, e)
 			}
-			if isCurrent := got["version"] == strconv.Itoa(current); (got["is_current"] == "1") != isCurrent {
-				r.diff("%s: is_current is %s; the highest version loaded is %d", k, got["is_current"], current)
+			cur := current[got["week"]+"|"+got["family"]]
+			if isCurrent := got["version"] == strconv.Itoa(cur); (got["is_current"] == "1") != isCurrent {
+				r.diff("%s: is_current is %s; the highest version loaded by that week is %d", k, got["is_current"], cur)
+			}
+			if got["first_week"] != first[got["instructions_name"]] {
+				r.diff("%s: first loaded %s; the key has %s", k, got["first_week"], first[got["instructions_name"]])
+			}
+		}
+		for k := range want {
+			if !seen[k] {
+				r.diff("%s: missing", k)
+			}
+		}
+		r.done()
+	})
+
+	teams := c.expectedTeamWeeks()
+
+	t.Run("gold_spend_weekly and gold_context_weekly", func(t *testing.T) {
+		r := &report{t: t, view: "gold_spend_weekly and gold_context_weekly"}
+		rows := map[string]map[string]string{}
+		for _, row := range c.rows(t, "SELECT week, cohort, sessions AS spend_sessions, requests, cost_usd FROM cardo.gold_spend_weekly") {
+			rows[row["week"]+"|"+row["cohort"]] = row
+		}
+		for _, row := range c.rows(t, "SELECT week, cohort, active_people, sessions FROM cardo.gold_context_weekly") {
+			k := row["week"] + "|" + row["cohort"]
+			if rows[k] == nil {
+				rows[k] = map[string]string{"spend_sessions": "none", "requests": "none", "cost_usd": "0"}
+			}
+			maps.Copy(rows[k], row)
+		}
+		seen := map[string]bool{}
+		for _, k := range slices.Sorted(maps.Keys(rows)) {
+			row := rows[k]
+			seen[k] = true
+			e := teams[k]
+			if e == nil {
+				r.diff("%s: a row the key has no people for", k)
+				continue
+			}
+			r.checked++
+			got := fmt.Sprintf("%s people, %s sessions, %s with requests, %s requests", row["active_people"],
+				row["sessions"], row["spend_sessions"], row["requests"])
+			want := fmt.Sprintf("%d people, %d sessions, %d with requests, %d requests", e.People, e.Sessions, e.Sessions, e.Requests)
+			if got != want {
+				r.diff("%s: %s; the key has %s", k, got, want)
+			}
+			if math.Abs(num(row["cost_usd"])-e.CostUSD) > 0.0001*float64(e.teams)+1e-6 {
+				r.diff("%s: $%s; the key has $%.6f", k, row["cost_usd"], e.CostUSD)
+			}
+		}
+		for k := range teams {
+			if !seen[k] {
+				r.diff("%s: missing", k)
+			}
+		}
+		r.done()
+	})
+
+	t.Run("gold_instructions_by_team_weekly", func(t *testing.T) {
+		r := &report{t: t, view: "gold_instructions_by_team_weekly"}
+		current := c.currentVersions(loadedBySessionsThatWeek)
+		want := map[string][2]int{}
+		for wc, e := range teams {
+			for _, l := range e.Instructions {
+				family, version := splitVersion(l.Name)
+				k := wc + "|" + family
+				v := want[k]
+				v[0] += l.Sessions
+				if version == current[strings.SplitN(wc, "|", 2)[0]+"|"+family] {
+					v[1] += l.Sessions
+				}
+				want[k] = v
+			}
+		}
+		seen := map[string]bool{}
+		for _, row := range c.rows(t, "SELECT week, cohort, family, sessions, sessions_current "+
+			"FROM cardo.gold_instructions_by_team_weekly ORDER BY week, family, cohort") {
+			k := row["week"] + "|" + row["cohort"] + "|" + row["family"]
+			seen[k] = true
+			e, ok := want[k]
+			if !ok {
+				r.diff("%s: a row the key does not have", k)
+				continue
+			}
+			r.checked++
+			if got, w := row["sessions"]+" sessions, "+row["sessions_current"]+" on the current version",
+				fmt.Sprintf("%d sessions, %d on the current version", e[0], e[1]); got != w {
+				r.diff("%s: %s; the key has %s", k, got, w)
+			}
+		}
+		for k := range want {
+			if !seen[k] {
+				r.diff("%s: missing", k)
+			}
+		}
+		r.done()
+	})
+
+	t.Run("gold_setup_context_weekly", func(t *testing.T) {
+		r := &report{t: t, view: "gold_setup_context_weekly"}
+		want := map[string]string{}
+		for _, w := range c.key.Weeks {
+			if w.SessionsWithRequests > 0 {
+				want[w.Week] = fmt.Sprintf("%d sessions, %d tokens at the median, %d at the 90th percentile",
+					w.SessionsWithRequests, w.StartContextP50, w.StartContextP90)
+			}
+		}
+		seen := map[string]bool{}
+		for _, row := range c.rows(t, "SELECT week, sessions_with_requests, session_start_context_p50, "+
+			"session_start_context_p90 FROM cardo.gold_setup_context_weekly ORDER BY week") {
+			seen[row["week"]] = true
+			e, ok := want[row["week"]]
+			if !ok {
+				r.diff("%s: a row the key does not have", row["week"])
+				continue
+			}
+			r.checked++
+			if got := fmt.Sprintf("%s sessions, %s tokens at the median, %s at the 90th percentile", row["sessions_with_requests"],
+				row["session_start_context_p50"], row["session_start_context_p90"]); got != e {
+				r.diff("%s: %s; the key has %s", row["week"], got, e)
+			}
+		}
+		for k := range want {
+			if !seen[k] {
+				r.diff("%s: missing", k)
+			}
+		}
+		r.done()
+	})
+
+	// A model, release or MCP tool fewer than the minimum of people used in a week is folded into
+	// one row. Its people are compared only when one name alone is folded: a person can be in two.
+	type folded struct {
+		people, sessions, requests, calls, loops, failed, loopSessions, names int
+		cost                                                                  float64
+		buggy                                                                 bool
+	}
+	fold := func(m map[string]*folded, week, name, other string, people int, f folded) {
+		if people < c.key.MinGroupSize {
+			name = other
+		}
+		e := m[week+"|"+name]
+		if e == nil {
+			e = &folded{buggy: f.buggy}
+			m[week+"|"+name] = e
+		}
+		e.names++
+		e.people += people
+		e.sessions += f.sessions
+		e.requests += f.requests
+		e.calls += f.calls
+		e.loops += f.loops
+		e.failed += f.failed
+		e.loopSessions += f.loopSessions
+		e.cost += f.cost
+		e.buggy = e.buggy && f.buggy
+	}
+	people := func(e *folded) string {
+		if e.names > 1 {
+			return "-"
+		}
+		return strconv.Itoa(e.people)
+	}
+
+	t.Run("gold_model_spend_weekly", func(t *testing.T) {
+		r := &report{t: t, view: "gold_model_spend_weekly"}
+		want := map[string]*folded{}
+		for _, w := range c.key.Weeks {
+			for _, m := range w.Models {
+				fold(want, w.Week, m.Model, "other models", m.People, folded{requests: m.Requests, cost: m.CostUSD})
+			}
+		}
+		seen := map[string]bool{}
+		for _, row := range c.rows(t, "SELECT week, model, people, requests, cost_usd FROM cardo.gold_model_spend_weekly ORDER BY week, model") {
+			k := row["week"] + "|" + row["model"]
+			seen[k] = true
+			e := want[k]
+			if e == nil {
+				r.diff("%s: a row the key does not have", k)
+				continue
+			}
+			r.checked++
+			gotPeople := row["people"]
+			if e.names > 1 {
+				gotPeople = "-"
+			}
+			if got, w := gotPeople+" people, "+row["requests"]+" requests", people(e)+" people, "+strconv.Itoa(e.requests)+" requests"; got != w {
+				r.diff("%s: %s; the key has %s", k, got, w)
+			}
+			if math.Abs(num(row["cost_usd"])-e.cost) > 0.0001*float64(e.names)+1e-6 {
+				r.diff("%s: $%s; the key has $%.6f", k, row["cost_usd"], e.cost)
+			}
+		}
+		for k := range want {
+			if !seen[k] {
+				r.diff("%s: missing", k)
+			}
+		}
+		r.done()
+	})
+
+	t.Run("gold_release_cache_weekly", func(t *testing.T) {
+		r := &report{t: t, view: "gold_release_cache_weekly"}
+		want := map[string]*folded{}
+		for _, w := range c.key.Weeks {
+			for _, x := range w.Releases {
+				fold(want, w.Week, x.Version, "other releases", x.People, folded{sessions: x.Sessions, requests: x.Requests, buggy: x.Buggy})
+			}
+		}
+		seen := map[string]bool{}
+		type share struct {
+			release string
+			share   float64
+		}
+		buggy, fixed := map[string][]share{}, map[string][]share{}
+		for _, row := range c.rows(t, "SELECT week, app_version, people, sessions, requests, cache_read_share "+
+			"FROM cardo.gold_release_cache_weekly ORDER BY week, app_version") {
+			k := row["week"] + "|" + row["app_version"]
+			seen[k] = true
+			e := want[k]
+			if e == nil {
+				r.diff("%s: a row the key does not have", k)
+				continue
+			}
+			r.checked++
+			gotPeople := row["people"]
+			if e.names > 1 {
+				gotPeople = "-"
+			}
+			got := fmt.Sprintf("%s people, %s sessions, %s requests", gotPeople, row["sessions"], row["requests"])
+			if w := fmt.Sprintf("%s people, %d sessions, %d requests", people(e), e.sessions, e.requests); got != w {
+				r.diff("%s: %s; the key has %s", k, got, w)
+			}
+			if row["app_version"] == "other releases" {
+				continue
+			}
+			sh := share{row["app_version"], num(row["cache_read_share"])}
+			if e.buggy {
+				buggy[row["week"]] = append(buggy[row["week"]], sh)
+			} else {
+				fixed[row["week"]] = append(fixed[row["week"]], sh)
+			}
+		}
+		for k := range want {
+			if !seen[k] {
+				r.diff("%s: missing", k)
+			}
+		}
+		// The caching-bug story, as the release table should show it: in every week, each named
+		// release with the bug reads less of its context from the cache than each without it.
+		for week, bs := range buggy {
+			for _, b := range bs {
+				for _, f := range fixed[week] {
+					if b.share >= f.share {
+						r.diff("week of %s: %s, with the caching bug, reads %.4f of its context from the cache, "+
+							"and %s, without it, %.4f", week, b.release, b.share, f.release, f.share)
+					}
+				}
+			}
+		}
+		if len(buggy) == 0 {
+			r.diff("no release with the caching bug is named in any week")
+		}
+		r.done()
+	})
+
+	t.Run("gold_tool_loops_weekly", func(t *testing.T) {
+		r := &report{t: t, view: "gold_tool_loops_weekly"}
+		want := map[string]*folded{}
+		for _, w := range c.key.Weeks {
+			for _, x := range w.Tools {
+				n := x.People
+				if !strings.HasPrefix(x.Tool, "mcp__") {
+					n = c.key.MinGroupSize // Claude Code's own tools are always named
+				}
+				fold(want, w.Week, x.Tool, "other tools", n, folded{calls: x.Calls, loops: x.Loops, failed: x.FailedInLoops,
+					loopSessions: x.SessionsWithLoops})
+			}
+		}
+		seen := map[string]bool{}
+		for _, row := range c.rows(t, "SELECT week, tool_name, calls, loops, failed_in_loops, sessions_with_loops "+
+			"FROM cardo.gold_tool_loops_weekly ORDER BY week, tool_name") {
+			k := row["week"] + "|" + row["tool_name"]
+			seen[k] = true
+			e := want[k]
+			if e == nil {
+				r.diff("%s: a row the key does not have", k)
+				continue
+			}
+			r.checked++
+			// A session with loops in two folded tools is one session in the view.
+			sessions, gotSessions := strconv.Itoa(e.loopSessions), row["sessions_with_loops"]
+			if e.names > 1 {
+				sessions, gotSessions = "-", "-"
+			}
+			got := fmt.Sprintf("%s calls, %s loops, %s failed in them, in %s sessions", row["calls"], row["loops"],
+				row["failed_in_loops"], gotSessions)
+			if w := fmt.Sprintf("%d calls, %d loops, %d failed in them, in %s sessions", e.calls, e.loops, e.failed, sessions); got != w {
+				r.diff("%s: %s; the key has %s", k, got, w)
 			}
 		}
 		for k := range want {
@@ -377,6 +769,45 @@ func TestMadeUpViewsMatchTheAnswerKey(t *testing.T) {
 				t.Errorf("the daily views name the team %q, which has %d people", team.Name, team.People)
 			}
 		}
+
+		// The weekly views: a team, model, release or MCP tool fewer than the minimum used in every
+		// week is named in none of them.
+		weekly := map[string]int{}
+		for _, w := range c.key.Weeks {
+			for _, x := range w.Teams {
+				weekly["team|"+x.Team] = max(weekly["team|"+x.Team], x.People)
+			}
+			for _, x := range w.Models {
+				weekly["model|"+x.Model] = max(weekly["model|"+x.Model], x.People)
+			}
+			for _, x := range w.Releases {
+				weekly["release|"+x.Version] = max(weekly["release|"+x.Version], x.People)
+			}
+			for _, x := range w.Tools {
+				if strings.HasPrefix(x.Tool, "mcp__") {
+					weekly["tool|"+x.Tool] = max(weekly["tool|"+x.Tool], x.People)
+				}
+			}
+		}
+		named = map[string]bool{}
+		for _, row := range c.rows(t, "SELECT DISTINCT concat('team|', cohort) AS name FROM cardo.gold_spend_weekly UNION DISTINCT "+
+			"SELECT DISTINCT concat('team|', cohort) FROM cardo.gold_context_weekly UNION DISTINCT "+
+			"SELECT DISTINCT concat('team|', cohort) FROM cardo.gold_instructions_by_team_weekly UNION DISTINCT "+
+			"SELECT DISTINCT concat('model|', model) FROM cardo.gold_model_spend_weekly UNION DISTINCT "+
+			"SELECT DISTINCT concat('release|', app_version) FROM cardo.gold_release_cache_weekly UNION DISTINCT "+
+			"SELECT DISTINCT concat('tool|', tool_name) FROM cardo.gold_tool_loops_weekly") {
+			named[row["name"]] = true
+		}
+		hidden := 0
+		for name, n := range weekly {
+			if n < c.key.MinGroupSize {
+				hidden++
+				if named[name] {
+					t.Errorf("a weekly view names %q, which at most %d people used in a week", name, n)
+				}
+			}
+		}
+		t.Logf("weekly views: %d teams, models, releases and connector tools under the minimum in every week, named nowhere", hidden)
 	})
 
 	// Where each story should show, and what no view shows yet: the list to read the dashboards

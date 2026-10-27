@@ -38,6 +38,13 @@ stored tables; `cardo check`, the console and the coach read the `_live` views.
   it, `TestCollectorSilverViews` read 0 sessions.
 - Reading the stored tables from something that must show an event at once. `cardo check` looks for
   the session started a minute ago, so it reads `silver_session_live`.
+- Redefining a view whole from the migration that first defined it. A later one may have changed
+  it since: the review's draft of `gold_artifact_usage` started from 007's and dropped 012's
+  service filter, so every service run counted as a person again, and the test guarding the filter
+  read 012 alone. Start from the view's last definition. `TestServiceRunsStayOutOfPeopleCounts`
+  now reads every migration from 012 on. A new weekly view joins `silver_session_cohort_week`,
+  which holds no service run; one that reads `silver_session` directly filters
+  `actor_kind != 'service'` itself.
 - Reading `estimated_cost.amount` as dollars. **It is cents**, on both analytics APIs. Silver divides
   once and names the column `cost_usd`; nothing downstream should divide again.
 - `sum(x) AS x` in a ClickHouse view, or in a dashboard panel. Legal in DuckDB, an error here as
@@ -53,6 +60,24 @@ stored tables; `cardo check`, the console and the coach read the `_live` views.
 - Adding up `people` or `active_people` across weeks or days. They are distinct counts; the same
   engineer on five days is one person, not five. A panel over a range shows the busiest week or
   day. Sessions, uses and prompts add up.
+- Sizing a cohort per day in a view that reports per week. `silver_session_cohort` counts a team's
+  people per day, so at weekends teams seldom reached five and every team's line broke: on the
+  made-up organization the data team, eight people, was named on 39 of 84 days and on no weekend.
+  Count people over the view's own period
+  ([ADR-0029](../../docs/adr/0029-minimum-group-size.md)): a weekly view reads
+  `silver_session_cohort_week`. The same goes for a model, a release or a tool folded below five:
+  count its people in the view's week.
+- Joining two subqueries without an alias. ClickHouse refuses it (`ALIAS_REQUIRED`: "no alias for
+  subquery"), and a panel such as the rollout table, which sets each artifact beside the fleet's
+  total, needs `(...) AS u CROSS JOIN (...) AS f`.
+- Giving an annotation its data source only beside its target. Grafana's query endpoint refuses a
+  query with no data source in it ("Query does not contain a valid data source identifier"), and
+  `TestMadeUpDashboardsAnswer` sends each target as the dashboard stores it. Put the `datasource`
+  inside `target`, beside its `rawSql`, as a panel's targets carry theirs.
+- Charting a new share or a figure per request and leaving `rateVolumes` in `test/deploy_test.go`
+  alone. The test checks only the rates it lists, so a new name goes unchecked. Add its pair: a
+  share of sessions with `sessions`, `cache_read_share` and anything `_per_request` with
+  `requests`, an artifact's `people_share` with `active_people`.
 - Reading a dashboard's queries from its top-level `panels`. A collapsed row keeps its panels
   inside it, and query variables and annotations send SQL through the same data source. The
   dashboard tests read every query through `dashboardQueries` in `test/deploy_test.go`, and a new

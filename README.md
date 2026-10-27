@@ -171,11 +171,14 @@ The collector path runs end to end too. It has three parts:
   written;
 - views and an enablement dashboard over what it stores.
 
-The dashboard shows whether what the organization shipped is used, who is on a stale version of
-its instructions files, what engineers built that several now use, and the friction and context
-costs around it. It names a home-grown artifact or a team only once enough people are in it (five by
-default; the organization may raise that). CI runs
-the real collector against a real ClickHouse on every push, and the views against seeded data.
+The dashboard shows, week by week, whether what the organization shipped is used, how many people
+are still on an older version of its instructions files, what engineers brought in that several now
+use, which tool keeps failing several times in a row, and where the money goes: by model, by team
+and by Claude Code release. It names a home-grown artifact or a team only in a week with enough
+people in it (five by default; the organization may raise that).
+[What each chart is for](docs/design/dashboards.md) lists every chart, who it is for, and what it
+cannot show. CI runs the real collector against a real ClickHouse on every push, and the views
+against seeded data.
 
 **The collector path has seen a real Claude Code; the Admin API path has not.** One engineer ran
 Claude Code 2.1.281 against the reference stack with a single `--settings` flag

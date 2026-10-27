@@ -24,12 +24,16 @@ against those two real sessions.
   account. **Claude Code waits for every HTTP hook**, so each one gives up after one second
   ([ADR-0039](../adr/0039-hooks-wait-at-most-one-second.md)).
 - **Collector path (Phase 2, analysis).** Seven silver views, stored as tables ClickHouse rebuilds
-  every 10 minutes ([ADR-0052](../adr/0052-silver-is-stored-and-rebuilt-every-10-minutes.md)), four gold marts over the collector's bronze,
-  and an enablement dashboard. They are verified three ways:
+  every 10 minutes ([ADR-0052](../adr/0052-silver-is-stored-and-rebuilt-every-10-minutes.md)),
+  eleven gold marts over the collector's bronze, and an enablement dashboard. The dashboard was
+  reviewed on the made-up organization on 2026-10-23 and rebuilt on weekly views;
+  [what each chart is for](dashboards.md) lists every panel. The views are verified four ways:
   - against a live ClickHouse with seeded rows, including each rule broken on purpose;
   - against the collector's fixture corpus, run through the real collector;
   - against the two real sessions, whose permission waits, model-switch costs and context sizes
-    match the research notes.
+    match the research notes;
+  - against [the made-up organization](../made-up-organization.md): 60 invented engineers' twelve
+    weeks, sent through the collector, where every view matches an answer key row by row.
 
   A view names a home-grown artifact or a cohort only once enough people are in it (five by
   default; the organization may raise that) ([ADR-0029](../adr/0029-minimum-group-size.md)). The
@@ -199,7 +203,10 @@ Every write goes through `settings_changes`, and the leadership Grafana reads `l
                                      each a table rebuilt every 10 minutes from its _live view
                                                                      |
                                      gold views, sql/clickhouse/007: artifact_usage,
-                                     instructions_versions, friction_daily, context_daily
+                                     instructions_versions, friction_daily, context_daily;
+                                     018, weekly: spend, model_spend, release_cache,
+                                     setup_context, context, instructions_by_team, tool_loops,
+                                     and artifact_usage and instructions_versions redefined
                                        reading cardo.settings (005): the org pattern and the
                                        minimum group size, written by `cardo migrate`
                                                                      |
@@ -209,8 +216,9 @@ Every write goes through `settings_changes`, and the leadership Grafana reads `l
 
 The silver views are stored ([ADR-0052](../adr/0052-silver-is-stored-and-rebuilt-every-10-minutes.md)). Each is a table ClickHouse
 rebuilds every 10 minutes from a plain view of the same name with `_live` added, such as
-`silver_session_live`. So the dashboards run up to 10 minutes behind, and the enablement dashboard
-draws in 1.4 seconds on the made-up organization rather than 95.7 ([risks.md](../../risks.md) #14).
+`silver_session_live`. So the dashboards run up to 10 minutes behind. On the made-up organization
+the enablement dashboard as it was before its review drew in 1.4 seconds rather than 95.7; the
+reviewed one has not been timed on the stored tables yet ([risks.md](../../risks.md) #14).
 `cardo check`, the console and the coach read the `_live` views, so they see a session at once.
 The gold views, and `silver_session_cohort`, stay plain views, so a changed setting takes effect on
 the next read. The enablement dashboard shows when silver was last rebuilt (`gold_data_as_of`).
@@ -230,11 +238,16 @@ from a real session:
 - **Every attribute is a string**, cast in silver.
 
 **What a view may name ([ADR-0029](../adr/0029-minimum-group-size.md)).** The minimum group size
-applies to two kinds of label:
+applies to three kinds of label:
 
 - **Home-grown artifacts.** A command, skill, subagent or MCP server that does not match the
   organization's pattern is named only once that many people used it that week.
-- **Cohorts.** A cohort is named only on a day at least that many people had sessions in it.
+- **Cohorts.** A cohort is named only in a period in which at least that many people had sessions
+  in it: a day in the daily views, a week in the weekly ones. Counted per day, a team of eight was
+  named on 39 of the made-up organization's 84 days and on no weekend; counted per week, every week.
+- **Models, Claude Code releases and connectors' tools,** in the weekly views of spend, cache use
+  and failing calls. Each is named only in a week that many people used it, and below that is
+  `other models`, `other releases` or `other tools`. Claude Code's own tools are always named.
 
 Everything below the threshold is counted as `other`. The minimum is five, and an operator may
 raise it but not lower it. The organization's own names, Claude Code's built-in subagents and
@@ -256,9 +269,12 @@ batches with a log line saying why, rather than storing reversible pseudonyms.
 - The label comes from the run, not from the actor type: the Analytics API's two types,
   `user_actor` and `api_actor`, are both people, so neither can decide this.
 - `gold_fleet_adoption` counts both documented actor types as people, with
-  `countDistinctIf(pseudonym, pseudonym != '')`; `gold_artifact_usage` excludes sessions whose
-  `actor_kind` is `service` from both its fleet and its per-name people counts. The coach does the
-  same ([ADR-0048](../adr/0048-coach-in-the-console.md)).
+  `countDistinctIf(pseudonym, pseudonym != '')`; `gold_artifact_usage` and
+  `gold_instructions_versions` exclude sessions whose `actor_kind` is `service` from every count.
+  So do the weekly views (018): `silver_session_cohort_week` puts a service run in no team, and the
+  two that read `silver_session` directly filter it themselves. The daily views from 007, which no
+  panel reads now, still count service runs. The coach leaves them out too
+  ([ADR-0048](../adr/0048-coach-in-the-console.md)).
 - `deploy/ci/github-actions.card.yaml` is the ready-made block: telemetry on, `cardo.actor=service`,
   `cardo.workflow=${{ github.workflow }}`, and the instruction to run with an API key, never a
   person's login.
@@ -308,7 +324,7 @@ developer machine                     organization's infrastructure
 | Collector config | `deploy/collector/` | **built**, verified against a running collector 0.161.0 and two real Claude Code sessions; repository classification verified against the collector only | [0006](../adr/0006-pseudonymization.md), [0012](../adr/0012-ingest-implementation.md), [0025](../adr/0025-artifact-names-kept-with-guardrails.md), [0026](../adr/0026-stale-instructions-by-versioned-name.md), [0035](../adr/0035-repository-identity-classified.md), [0039](../adr/0039-hooks-wait-at-most-one-second.md) |
 | Collector bronze tables | `sql/clickhouse/004_bronze_collector.sql` | **built** | [0016](../adr/0016-retention.md), [0025](../adr/0025-artifact-names-kept-with-guardrails.md) |
 | Silver views over collector data | `sql/clickhouse/006_silver_collector.sql`, `008_silver_model_switch.sql`, `009_silver_model_switch_cost.sql`, `017_stored_silver.sql` | **built** — seven views, stored as tables rebuilt every 10 minutes; verified against seeded rows, the fixture corpus through the collector, two real sessions and the made-up organization's answer key | [0025](../adr/0025-artifact-names-kept-with-guardrails.md), [0028](../adr/0028-file-store-is-admin-api-only.md), [0052](../adr/0052-silver-is-stored-and-rebuilt-every-10-minutes.md) |
-| Gold marts over collector data | `sql/clickhouse/007_gold_collector.sql` | **built** — artifact usage, instructions versions, friction, context; the minimum group size applied | [0008](../adr/0008-outcome-variable.md), [0026](../adr/0026-stale-instructions-by-versioned-name.md), [0029](../adr/0029-minimum-group-size.md), [0039](../adr/0039-hooks-wait-at-most-one-second.md) |
+| Gold marts over collector data | `sql/clickhouse/007_gold_collector.sql`, `018_gold_enablement_review.sql` | **built** — artifact usage and instructions versions by week; friction and context by day (007). By week (018): spend by team and by model, cache use by Claude Code release, the context sessions start with, context by team, instructions versions by team, and failing calls repeated in a row by tool. The minimum group size applied over each view's own period | [0008](../adr/0008-outcome-variable.md), [0026](../adr/0026-stale-instructions-by-versioned-name.md), [0029](../adr/0029-minimum-group-size.md), [0030](../adr/0030-stakeholders-and-questions.md), [0039](../adr/0039-hooks-wait-at-most-one-second.md) |
 | View settings | `sql/clickhouse/005_settings.sql`, `internal/store/clickhouse/settings.go` | **built** — the org pattern and the minimum group size, written by `cardo migrate` | [0029](../adr/0029-minimum-group-size.md) |
 | `cardo poll` CLI | `cmd/cardo/` | **built** | [0017](../adr/0017-v01-scope.md) |
 | `cardo migrate` CLI | `cmd/cardo/` | **built** — the schema, and the two view settings; the collector path needs it because the exporter never creates tables | [0019](../adr/0019-sql-tooling.md), [0029](../adr/0029-minimum-group-size.md) |
@@ -322,7 +338,8 @@ developer machine                     organization's infrastructure
 | Fixture corpus + contract tests | `test/fixtures/` | **built**. Console: from documentation. Hooks: field names observed from 2.1.281 with synthetic values, plus the documented shapes | [0014](../adr/0014-version-drift.md) |
 | Invariant tests | `test/invariants_test.go`, `test/deploy_test.go`, `test/collector_test.go`, `test/bundle_test.go` | **built** — INV-1 through INV-7 | `invariants.md` |
 | Reference stack | `deploy/compose/` | **built** — ClickHouse + Grafana + collector, loopback-bound; an opt-in overlay serves the collector's two ports over the network through a TLS proxy (Caddy), never run with a team | [0009](../adr/0009-storage-agnostic-clickhouse-reference.md) |
-| Dashboards | `dashboards/` | **built** — the fleet dashboard (Admin API, 9 panels) and the enablement dashboard (collector, 13 panels) | [0009](../adr/0009-storage-agnostic-clickhouse-reference.md), [0008](../adr/0008-outcome-variable.md), [0029](../adr/0029-minimum-group-size.md) |
+| Dashboards | `dashboards/` | **built** — the fleet dashboard (Admin API, 9 panels, not reviewed) and the enablement dashboard (collector, 14 panels, one of them text, reviewed on the made-up organization). Each panel is described in [`dashboards.md`](dashboards.md), and a test fails when a panel and its entry disagree | [0009](../adr/0009-storage-agnostic-clickhouse-reference.md), [0008](../adr/0008-outcome-variable.md), [0029](../adr/0029-minimum-group-size.md) |
+| Made-up organization | `internal/madeup/`, `cmd/cardo-madeup/`, `scripts/made-up.sh`, `deploy/compose/docker-compose.made-up.yml` | **built** — invented engineers in teams, sent through the collector to a stack of its own, with an answer key that every collector-path view is checked against. Its figures are not evidence about anyone | [0051](../adr/0051-a-made-up-organization.md) |
 
 ## The hook pack
 
@@ -404,7 +421,7 @@ busy running two other hooks, and Claude Code showed "socket hang up" under the 
 | **INV-7** no phone-home | CI scans for outbound hosts and allows only `api.anthropic.com` |
 | **INV-3** on dashboards | CI parses every panel query in `dashboards/`. A panel may not name a pseudonym, and may not read bronze or silver directly — that is where "just one per-person panel" would actually be added, and it touches no SQL. It governs what a dashboard shows, not what a Grafana login can query: that is bounded only by the data source's database user ([risks.md](../../risks.md) #15) |
 | **INV-5** across both stores | The bronze column set is one list checked against three things: the test itself, a real row written by the JSONL store, and the ClickHouse DDL. A column added to one store and not the other fails here |
-| **ADR-0008** volume denominator (carried into [ADR-0031](../adr/0031-what-works-means.md)) | CI fails any dashboard panel charting a rate without its volume as an output column beside it. It covers the acceptance and edit rejection rates with proposals, permission waits with the prompts answered, compactions per session with sessions, and an artifact's share with the active people. A name elsewhere in the SQL does not count, because each rate is computed from its volume. The constraint is a product decision, so it is enforced like one |
+| **ADR-0008** volume denominator (carried into [ADR-0031](../adr/0031-what-works-means.md)) | CI fails any dashboard panel charting a rate without its volume as an output column beside it. It covers the acceptance and edit rejection rates with proposals, permission waits with the prompts answered, compactions per session with sessions, an artifact's share with the active people, a share of sessions with the sessions, and the share of context read from the cache and any figure per request with the requests. The friction pairs stay although no panel charts them now, so a friction panel that comes back brings its volume. A name elsewhere in the SQL does not count, because each rate is computed from its volume. The constraint is a product decision, so it is enforced like one |
 | **INV-2** on the collector path | CI runs the real collector (`collector` job), sends OTel carrying a mixed-case email on the resource, the record and the data point, and requires the stored pseudonym to equal the poller's for the same salt. A second test puts an email in an attribute nothing knows about, on a log record beside a clean one and on a data point, and requires the tripwire to refuse each request and store nothing from either, while a clean request sent after them is stored |
 | **INV-5** on hook payloads | Every observed and documented hook shape goes through the running collector carrying marker strings in each content field, including one past 100 KiB; CI byte-searches what reached ClickHouse for the markers. The allowlist itself is pinned in a test, so adding a field is a two-place change |
 | **INV-5** on generic hook fields | A statement that reads `reason`, `trigger`, `source`, `prompt`, `message` or `error` must name the event it applies to. Prose under an enum's name, and text under a numeric name, are dropped, and live fixtures check both |
@@ -439,8 +456,9 @@ each broken rule failed a test:
 
 The volume check was run against each friction panel and the fleet panel with its volume removed.
 It first passed them all, because each rate is computed from its own volume. That is why it now
-requires an output column. The INV-3 check was run against a pseudonym planted in a ClickHouse gold
-view, which the old pattern had never read.
+requires an output column. When the enablement dashboard was rebuilt, three of its new panels
+failed it with their volume removed. The INV-3 check was run against a pseudonym planted in a
+ClickHouse gold view, which the old pattern had never read.
 
 ## What deliberately does not exist
 

@@ -524,4 +524,75 @@ func TestServiceRunsStayOutOfPeopleCounts(t *testing.T) {
 	if n := strings.Count(sql, "actor_kind != 'service'"); n < 2 {
 		t.Errorf("gold views filter service sessions %d times, want at least 2", n)
 	}
+
+	// 012 is not the last word. A later migration that redefines a view whole can drop the filter,
+	// as the enablement review's first draft of gold_artifact_usage did. So from 012 on, every gold
+	// view that counts people in the collector path's silver leaves service runs out, by itself or
+	// by reading silver_session_cohort_week, and that view holds none.
+	paths, err := filepath.Glob(filepath.Join(repoRoot(t), "sql", "clickhouse", "*.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	create := regexp.MustCompile(`(?i)create\s+or\s+replace\s+view\s+cardo\.(\w+)`)
+	checked := 0
+	for _, path := range paths {
+		name := filepath.Base(path)
+		if name < "012" {
+			continue
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, stmt := range strings.Split(withoutLineComments(string(b)), ";") {
+			m := create.FindStringSubmatch(stmt)
+			if m == nil {
+				continue
+			}
+			view, filtered := m[1], strings.Contains(stmt, "actor_kind != 'service'")
+			switch {
+			case view == "silver_session_cohort_week":
+				checked++
+				if !filtered {
+					t.Errorf("%s: silver_session_cohort_week puts service runs in teams, so every weekly "+
+						"view that reads it counts them as people (ADR-0036)", name)
+				}
+			case strings.HasPrefix(view, "gold_") && strings.Contains(stmt, "pseudonym") && readsCollectorSilver(stmt):
+				checked++
+				if !filtered && !strings.Contains(stmt, "cardo.silver_session_cohort_week") {
+					t.Errorf("%s: %s counts people with service runs among them (ADR-0036). Leave them "+
+						"out with actor_kind != 'service', as 012 does, or read silver_session_cohort_week", name, view)
+				}
+			}
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no view from 012 on was checked; this test would pass vacuously")
+	}
+}
+
+// withoutLineComments drops each line's `--` comment, as the migration runner does, so a comment
+// that mentions a filter does not count as the filter.
+func withoutLineComments(sql string) string {
+	var b strings.Builder
+	for _, line := range strings.Split(sql, "\n") {
+		if i := strings.Index(line, "--"); i >= 0 {
+			line = line[:i]
+		}
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
+// readsCollectorSilver reports whether a statement reads one of the collector path's silver views,
+// where service runs are labelled. The Admin API's silver has no such label.
+func readsCollectorSilver(stmt string) bool {
+	for _, v := range []string{"silver_session", "silver_api_request", "silver_turn", "silver_tool_call",
+		"silver_policy_decision", "silver_context_event", "silver_artifact_load"} {
+		if strings.Contains(stmt, "cardo."+v) {
+			return true
+		}
+	}
+	return false
 }
