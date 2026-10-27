@@ -121,6 +121,11 @@ organization's 60 people it took about 70 seconds to draw while silver was plain
 recompute everything on every read ([risks.md](../../risks.md) #14). It has not been timed on
 stored silver yet.
 
+Service runs, Claude Code run by a job with nobody at the keyboard and labelled as one
+([service runs are not people, ADR-0036](../adr/0036-service-runs-are-not-people.md)), are on no
+panel here. A nightly job is in no people count and makes no team five, and what it spent is in
+neither spend chart. No view shows service runs on their own yet.
+
 #### Data as of
 
 - **Asks:** how old is what the other panels show?
@@ -267,7 +272,7 @@ stored silver yet.
   used that week is "other models", because what one person spent on a model is that person's
   spend. The cost is Claude Code's own estimate for each request, not the invoice.
 - **Cannot show:** who changed the default: read it beside spend by team. Nor whether the dearer
-  model did better work.
+  model did better work. Nor what service runs spent: they are left out.
 - **On the made-up organization:** `claude-fable-5-1` appears in week 8, and weekly spend goes from
   about $10,000 to about $18,000.
 - **Status:** reviewed on the made-up organization, 2026-10-23.
@@ -279,7 +284,7 @@ stored silver yet.
   model appears is the team that changed its default.
 - **Reads:** `gold_spend_weekly`: the cost per week and team, stacked, teams listed alphabetically.
 - **Cannot show:** whether a team spends well. Spend is never divided by headcount, so a large team
-  spends more, and that is all it says.
+  spends more, and that is all it says. Nor what service runs spent: they are in no team.
 - **On the made-up organization:** the platform team's spend rises about three times in week 8,
   the week `claude-fable-5-1` appears in spend by model.
 - **Status:** reviewed on the made-up organization, 2026-10-23. It replaced daily spend by team.

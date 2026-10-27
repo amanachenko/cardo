@@ -19,8 +19,15 @@
 --   - Failing calls repeated in a row are counted: the cost of a flaky command was in silver and
 --     no view read it.
 --
--- 007 is immutable once shipped, so gold_artifact_usage and gold_instructions_versions are
--- redefined here whole; everything not named above is 007's. gold_friction_daily and
+-- Service runs are not people (ADR-0036): every view here leaves them out, as 012 leaves them out
+-- of gold_artifact_usage. The weekly views do it through silver_session_cohort_week, which puts a
+-- service run in no team. The two that read silver_session directly, and the two artifact views,
+-- say actor_kind != 'service' themselves. So a job's spend is in none of them, as the dashboard
+-- says. The views of agent runs that would show it wait (ADR-0036, decision 4).
+--
+-- Migrations are immutable once shipped, so gold_artifact_usage (012's) and
+-- gold_instructions_versions (007's) are redefined here whole. Everything not named above is as
+-- they were. gold_friction_daily and
 -- gold_context_daily are unchanged, and no panel reads them now.
 --
 -- Same dialect rule as 003 and 007: aggregate in a CTE under a `_total` name, rename outside.
@@ -30,7 +37,8 @@
 -- with no cohort label is "unassigned".
 --
 -- Session grain, beside silver_session_cohort for the same reason: dashboards may not read it
--- (INV-3). The weekly views report a session's events in the week the session started.
+-- (INV-3). The weekly views report a session's events in the week the session started. A service
+-- run has no row, so it neither makes a team five nor reaches any weekly view that joins this one.
 CREATE OR REPLACE VIEW cardo.silver_session_cohort_week AS
 WITH
     (SELECT min_group_size FROM cardo.settings_effective) AS min_group,
@@ -38,6 +46,7 @@ WITH
     (
         SELECT toMonday(day) AS week, cohort, count(DISTINCT pseudonym) AS cohort_people
         FROM cardo.silver_session
+        WHERE actor_kind != 'service'
         GROUP BY week, cohort
     )
 SELECT
@@ -45,9 +54,10 @@ SELECT
     toMonday(s.day)                                                                AS week,
     if(z.cohort_people >= min_group, if(s.cohort = '', 'unassigned', s.cohort), 'other') AS cohort
 FROM cardo.silver_session AS s
-INNER JOIN sizes AS z ON z.week = toMonday(s.day) AND z.cohort = s.cohort;
+INNER JOIN sizes AS z ON z.week = toMonday(s.day) AND z.cohort = s.cohort
+WHERE s.actor_kind != 'service';
 
--- 007's view, with two columns more:
+-- 012's view, with two columns more. As in 012, service runs are left out of every count:
 --
 --   teams        how many team labels the people using it carry that week. A count, never which
 --                teams: spread across teams is the vote for what teams chose (ADR-0040). Every
@@ -61,18 +71,21 @@ WITH
     (
         SELECT toMonday(day) AS week, count(DISTINCT pseudonym) AS active_people
         FROM cardo.silver_session
+        WHERE actor_kind != 'service'
         GROUP BY week
     ),
     per_name AS
     (
         SELECT toMonday(day) AS week, kind, name, count(DISTINCT pseudonym) AS name_people
         FROM cardo.silver_artifact_load
+        WHERE session_id IN (SELECT session_id FROM cardo.silver_session WHERE actor_kind != 'service')
         GROUP BY week, kind, name
     ),
     first_seen AS
     (
         SELECT kind, name, min(toMonday(day)) AS first_week
         FROM cardo.silver_artifact_load
+        WHERE session_id IN (SELECT session_id FROM cardo.silver_session WHERE actor_kind != 'service')
         GROUP BY kind, name
     ),
     usage AS
@@ -93,6 +106,7 @@ WITH
         FROM cardo.silver_artifact_load AS a
         INNER JOIN per_name AS n ON n.week = toMonday(a.day) AND n.kind = a.kind AND n.name = a.name
         INNER JOIN first_seen AS f ON f.kind = a.kind AND f.name = a.name
+        WHERE a.session_id IN (SELECT session_id FROM cardo.silver_session WHERE actor_kind != 'service')
         GROUP BY week, kind, artifact, file_kind, org, builtin
     )
 SELECT
@@ -116,7 +130,7 @@ ORDER BY week ASC, kind ASC, people DESC;
 -- 007's view, except for what "current" means. `current_version` is now the highest version
 -- anyone had loaded by the end of that week, so a week before v3 shipped judges v2 current. A
 -- version shipped and not yet loaded by anybody still cannot be seen. `first_week` is the first
--- week anyone loaded that file.
+-- week anyone loaded that file. A service run loading a file is not anyone: it is left out.
 CREATE OR REPLACE VIEW cardo.gold_instructions_versions AS
 WITH
     versions AS
@@ -131,6 +145,7 @@ WITH
             count()                                                                AS loads_total
         FROM cardo.silver_artifact_load
         WHERE kind = 'instructions' AND name != ''
+          AND session_id IN (SELECT session_id FROM cardo.silver_session WHERE actor_kind != 'service')
         GROUP BY week, family, version, file_name
     ),
     weekly_top AS
@@ -220,7 +235,8 @@ ORDER BY week ASC, family ASC, cohort ASC;
 
 -- Spend per week and team. Teams are sized per week, listed and never ranked (ADR-0030), and the
 -- spend is never divided by headcount: a large team spends more, and that is all it says.
--- cost_usd is Claude Code's own per-request cost, main thread, subagents and helpers together.
+-- cost_usd is Claude Code's own per-request cost, main thread, subagents and helpers together,
+-- in people's sessions: a service run's spend is in no team.
 CREATE OR REPLACE VIEW cardo.gold_spend_weekly AS
 WITH
     spend AS
@@ -296,7 +312,8 @@ WITH
     (
         SELECT s.week AS week, s.app_version AS app_version, count(DISTINCT pseudonym) AS release_people
         FROM cardo.silver_api_request AS r
-        INNER JOIN (SELECT session_id, toMonday(day) AS week, app_version FROM cardo.silver_session) AS s
+        INNER JOIN (SELECT session_id, toMonday(day) AS week, app_version FROM cardo.silver_session
+                    WHERE actor_kind != 'service') AS s
             ON s.session_id = r.session_id
         GROUP BY week, app_version
     ),
@@ -313,7 +330,8 @@ WITH
             sum(r.cache_creation_tokens)                                           AS cache_write_total,
             sum(r.cost_usd)                                                        AS cost_usd_total
         FROM cardo.silver_api_request AS r
-        INNER JOIN (SELECT session_id, toMonday(day) AS week, app_version FROM cardo.silver_session) AS s
+        INNER JOIN (SELECT session_id, toMonday(day) AS week, app_version FROM cardo.silver_session
+                    WHERE actor_kind != 'service') AS s
             ON s.session_id = r.session_id
         INNER JOIN per_release AS p ON p.week = s.week AND p.app_version = s.app_version
         GROUP BY week, app_version
@@ -355,7 +373,8 @@ WITH
             quantileExact(0.5)(f.start_context)           AS start_p50,
             quantileExact(0.9)(f.start_context)           AS start_p90
         FROM starts AS f
-        INNER JOIN (SELECT session_id, toMonday(day) AS week FROM cardo.silver_session) AS s
+        INNER JOIN (SELECT session_id, toMonday(day) AS week FROM cardo.silver_session
+                    WHERE actor_kind != 'service') AS s
             ON s.session_id = f.session_id
         GROUP BY week
     )

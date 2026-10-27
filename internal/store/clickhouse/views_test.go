@@ -37,6 +37,9 @@ type seed struct {
 	hooks bytes.Buffer
 	// release is the Claude Code version person p runs, when it is not 2.1.281.
 	release map[int]string
+	// workflow names person p's job when p is a service run (ADR-0036), labelled as the CI
+	// settings block labels it.
+	workflow map[int]string
 }
 
 func newSeed(t *testing.T, st *Store, weeksBack int) *seed {
@@ -84,9 +87,13 @@ func (s *seed) otel(p int, at time.Time, event, prompt string, kv ...string) {
 	for i := 0; i+1 < len(kv); i += 2 {
 		attrs[kv[i]] = kv[i+1]
 	}
+	resource := map[string]string{"cardo.tier": "1", "cardo.salt_version": "v1", "cardo.cohort": s.cohort(p)}
+	if wf := s.workflow[p]; wf != "" {
+		resource["cardo.actor"], resource["cardo.workflow"] = "service", wf
+	}
 	json.NewEncoder(&s.logs).Encode(map[string]any{
 		"Timestamp": stamp(at), "EventName": "claude_code." + event, "LogAttributes": attrs,
-		"ResourceAttributes": map[string]string{"cardo.tier": "1", "cardo.salt_version": "v1", "cardo.cohort": s.cohort(p)},
+		"ResourceAttributes": resource,
 	})
 }
 
@@ -616,6 +623,90 @@ func TestCollectorGoldAppliesTheMinimumGroupSize(t *testing.T) {
 	if u := usage(); u["skill/"+s.run+"-rare/"] != nil {
 		t.Errorf("a stored minimum of 2 named a command two people use")
 	}
+}
+
+// Service runs are not people (ADR-0036). A nightly job with a pseudonym of its own runs in a team
+// beside four engineers. Counted as a person, it would make the team five, so the team would be
+// named, and its model, its release, its command and the newer instructions file only it loaded
+// would each show. Left out, as every weekly view and both artifact views must leave it, the week
+// holds four people and nothing of the job.
+func TestWeeklyViewsLeaveServiceRunsOut(t *testing.T) {
+	st := testStore(t)
+	setViewSettings(t, st, ViewSettings{OrgArtifacts: strPtr(testOrgPattern), MinGroupSize: strPtr("")})
+	s := newSeed(t, st, 11)
+	s.release = map[int]string{5: "2.1.299"}
+	s.workflow = map[int]string{5: "nightly-" + s.run}
+	week := s.day.Format("2006-01-02")
+	for p := 1; p <= 5; p++ {
+		start := s.at(time.Duration(p) * time.Minute)
+		q := s.prompt(p, "1")
+		model, cost := "m1", "0.01"
+		file, command := "acme-"+s.run+"-rules-v2.md", "acme-"+s.run+"-tool"
+		if p == 5 {
+			model, cost = "m9-"+s.run, "5"
+			file, command = "acme-"+s.run+"-rules-v3.md", s.run+"-ci"
+		}
+		s.otel(p, start, "user_prompt", q, "prompt_length", "10")
+		s.request(p, start.Add(5*time.Second), q, model, 100, 800, 100, cost)
+		s.hook(p, start, "InstructionsLoaded", "", "instructions_name", file,
+			"instructions_file", "rule", "load_reason", "session_start", "memory_type", "Project")
+		s.hook(p, start, "UserPromptExpansion", q, "command_name", command, "command_source", "projectSettings")
+	}
+	s.call(1, s.at(10*time.Minute), "tu-"+s.run+"-ok", "Bash", true)
+	for i := range 3 {
+		s.call(5, s.at(20*time.Minute+time.Duration(i)*time.Minute), fmt.Sprint("tu-", s.run, "-ci", i), "Bash", false)
+	}
+	s.write()
+
+	job := oneRow(t, st, "the job's session", fmt.Sprintf(
+		"SELECT actor_kind, workflow FROM cardo.silver_session WHERE session_id = '%s'", s.session(5)))
+	if job["actor_kind"] != "service" {
+		t.Fatalf("the seeded job is not a service run, so this test proves nothing: %v", job)
+	}
+	if r := rowsOf(t, st, fmt.Sprintf(
+		"SELECT cohort FROM cardo.silver_session_cohort_week WHERE session_id = '%s'", s.session(5))); len(r) != 0 {
+		t.Errorf("silver_session_cohort_week puts the job in a team, so every weekly view reads it: %v", r)
+	}
+
+	// Each weekly view holds one row: four people are fewer than five, so the team, the model and
+	// the release are all "other", and the job's $5, its model and its release are in none of them.
+	only := func(what, q string, want map[string]string) {
+		t.Helper()
+		rows := rowsOf(t, st, fmt.Sprintf(q, week))
+		if len(rows) != 1 {
+			t.Errorf("%s: got %d rows, want 1: %v", what, len(rows), rows)
+			return
+		}
+		expect(t, what, rows[0], want)
+	}
+	only("gold_spend_weekly", "SELECT cohort, sessions, cost_usd FROM cardo.gold_spend_weekly WHERE week = '%s'",
+		map[string]string{"cohort": "other", "sessions": "4", "cost_usd": "0.04"})
+	only("gold_model_spend_weekly", "SELECT model, people, cost_usd FROM cardo.gold_model_spend_weekly WHERE week = '%s'",
+		map[string]string{"model": "other models", "people": "4", "cost_usd": "0.04"})
+	only("gold_release_cache_weekly", "SELECT app_version, people, requests FROM cardo.gold_release_cache_weekly WHERE week = '%s'",
+		map[string]string{"app_version": "other releases", "people": "4", "requests": "4"})
+	only("gold_context_weekly", "SELECT cohort, active_people, sessions FROM cardo.gold_context_weekly WHERE week = '%s'",
+		map[string]string{"cohort": "other", "active_people": "4", "sessions": "4"})
+	only("gold_setup_context_weekly", "SELECT sessions_with_requests FROM cardo.gold_setup_context_weekly WHERE week = '%s'",
+		map[string]string{"sessions_with_requests": "4"})
+	only("gold_tool_loops_weekly", "SELECT tool_name, calls, loops FROM cardo.gold_tool_loops_weekly WHERE week = '%s'",
+		map[string]string{"tool_name": "Bash", "calls": "1", "loops": "0"})
+	only("gold_instructions_by_team_weekly", "SELECT cohort, sessions, sessions_current FROM cardo.gold_instructions_by_team_weekly WHERE week = '%s'",
+		map[string]string{"cohort": "other", "sessions": "4", "sessions_current": "4"})
+	// v3 is the organization's file, so even one person loading it would show it, and make v2 stale.
+	only("gold_instructions_versions", "SELECT version, is_current, people FROM cardo.gold_instructions_versions WHERE week = '%s'",
+		map[string]string{"version": "2", "is_current": "1", "people": "4"})
+
+	usage := map[string]map[string]string{}
+	for _, r := range rowsOf(t, st, fmt.Sprintf(
+		"SELECT kind, artifact, file_kind, people, active_people FROM cardo.gold_artifact_usage WHERE week = '%s'", week)) {
+		usage[r["kind"]+"/"+r["artifact"]+"/"+r["file_kind"]] = r
+	}
+	if len(usage) != 2 {
+		t.Errorf("gold_artifact_usage: want the organization's command and its v2 file and nothing of the job, got %v", usage)
+	}
+	expect(t, "the organization's command", usage["skill/acme-"+s.run+"-tool/"], map[string]string{"people": "4", "active_people": "4"})
+	expect(t, "the organization's v2 file", usage["instructions/acme-"+s.run+"-rules-v2.md/rule"], map[string]string{"people": "4", "active_people": "4"})
 }
 
 // migrate refuses a group size below the floor before writing anything.

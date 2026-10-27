@@ -38,6 +38,13 @@ stored tables; `cardo check`, the console and the coach read the `_live` views.
   it, `TestCollectorSilverViews` read 0 sessions.
 - Reading the stored tables from something that must show an event at once. `cardo check` looks for
   the session started a minute ago, so it reads `silver_session_live`.
+- Redefining a view whole from the migration that first defined it. A later one may have changed
+  it since: the review's draft of `gold_artifact_usage` started from 007's and dropped 012's
+  service filter, so every service run counted as a person again, and the test guarding the filter
+  read 012 alone. Start from the view's last definition. `TestServiceRunsStayOutOfPeopleCounts`
+  now reads every migration from 012 on. A new weekly view joins `silver_session_cohort_week`,
+  which holds no service run; one that reads `silver_session` directly filters
+  `actor_kind != 'service'` itself.
 - Reading `estimated_cost.amount` as dollars. **It is cents**, on both analytics APIs. Silver divides
   once and names the column `cost_usd`; nothing downstream should divide again.
 - `sum(x) AS x` in a ClickHouse view, or in a dashboard panel. Legal in DuckDB, an error here as

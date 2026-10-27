@@ -268,9 +268,12 @@ batches with a log line saying why, rather than storing reversible pseudonyms.
 - The label comes from the run, not from the actor type: the Analytics API's two types,
   `user_actor` and `api_actor`, are both people, so neither can decide this.
 - `gold_fleet_adoption` counts both documented actor types as people, with
-  `countDistinctIf(pseudonym, pseudonym != '')`; `gold_artifact_usage` excludes sessions whose
-  `actor_kind` is `service` from both its fleet and its per-name people counts. The coach does the
-  same ([ADR-0048](../adr/0048-coach-in-the-console.md)).
+  `countDistinctIf(pseudonym, pseudonym != '')`; `gold_artifact_usage` and
+  `gold_instructions_versions` exclude sessions whose `actor_kind` is `service` from every count.
+  So do the weekly views (018): `silver_session_cohort_week` puts a service run in no team, and the
+  two that read `silver_session` directly filter it themselves. The daily views from 007, which no
+  panel reads now, still count service runs. The coach leaves them out too
+  ([ADR-0048](../adr/0048-coach-in-the-console.md)).
 - `deploy/ci/github-actions.card.yaml` is the ready-made block: telemetry on, `cardo.actor=service`,
   `cardo.workflow=${{ github.workflow }}`, and the instruction to run with an API key, never a
   person's login.

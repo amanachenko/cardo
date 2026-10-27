@@ -841,7 +841,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "cardo-clickhouse"
       },
-      "description": "For the adoption owner. What Claude Code's requests cost each week, stacked by model. A step in spend that arrives with a new model is a change of default, not more work. A model fewer than five people used that week is counted as other models. The cost is Claude Code's own estimate for each request, not the invoice.",
+      "description": "For the adoption owner. What Claude Code's requests cost each week, stacked by model. A step in spend that arrives with a new model is a change of default, not more work. A model fewer than five people used that week is counted as other models. The cost is Claude Code's own estimate for each request, not the invoice. Service runs, Claude Code run by a job with nobody at the keyboard, are left out (ADR-0036).",
       "gridPos": {
         "h": 9,
         "w": 24,
@@ -904,7 +904,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "cardo-clickhouse"
       },
-      "description": "For the adoption owner. The same spend, stacked by team, listed alphabetically. Read it beside spend by model: a team whose spend steps up in the week a new model appears is the team that changed its default. A team is named only in weeks when at least five people worked in it (the minimum group size, which can be raised); the rest are counted as other. Spend is never divided by headcount: a large team spends more, and that is all it says.",
+      "description": "For the adoption owner. The same spend, stacked by team, listed alphabetically. Read it beside spend by model: a team whose spend steps up in the week a new model appears is the team that changed its default. A team is named only in weeks when at least five people worked in it (the minimum group size, which can be raised); the rest are counted as other. Spend is never divided by headcount: a large team spends more, and that is all it says. Service runs, Claude Code run by a job with nobody at the keyboard, are in no team and left out (ADR-0036).",
       "gridPos": {
         "h": 9,
         "w": 24,
