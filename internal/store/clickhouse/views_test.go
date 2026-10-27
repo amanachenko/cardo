@@ -119,6 +119,11 @@ func (s *seed) write() {
 	}
 	s.logs.Reset()
 	s.hooks.Reset()
+	// Silver is stored and rebuilt every 10 minutes (ADR-0052): rebuild it now, or the views read
+	// the tables as they were before these rows.
+	if err := RebuildSilver(ctx, s.st.c); err != nil {
+		s.t.Fatal(err)
+	}
 }
 
 // call adds a tool call that ran for person p: Claude Code's decision, then its result.

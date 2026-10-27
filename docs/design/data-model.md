@@ -96,7 +96,12 @@ not pretend to be the session model below.
 
 `sql/clickhouse/006_silver_collector.sql`, ClickHouse only
 ([ADR-0028](../adr/0028-file-store-is-admin-api-only.md)). Deliberately small: this is the
-vendor-neutral layer ([ADR-0004](../adr/0004-claude-code-first-neutral-schema.md)). Every view
+vendor-neutral layer ([ADR-0004](../adr/0004-claude-code-first-neutral-schema.md)).
+
+The seven views below `silver_session_cohort` are stored (`017_stored_silver.sql`,
+[ADR-0052](../adr/0052-silver-is-stored-and-rebuilt-every-10-minutes.md)). `silver_session` is a table ClickHouse rebuilds every 10
+minutes from `silver_session_live`, the plain view, and so on for each. `silver_artifact_load`
+stays a plain view over `silver_artifact_load_stored`, adding `is_org` as it is read. Every view
 carries `pseudonym` and `cohort`, taken from the session's OTel rows for anything a hook row
 reports. Both are NULL or empty for a session that sent no OTel.
 
@@ -201,13 +206,14 @@ session started, and in a weekly view in that day's week.
 
 ## Retention
 
-Enforced by ClickHouse TTL on every bronze table ([ADR-0016](../adr/0016-retention.md)). Only tier 1
+Enforced by ClickHouse TTL on every bronze table ([ADR-0016](../adr/0016-retention.md),
+[ADR-0053](../adr/0053-retention-default-and-organization-choice.md)). Only tier 1
 exists today:
 
 | Tier | TTL | Status |
 |---|---|---|
 | T0 | 1 year | no tier-0 data is collected yet |
-| T1 | 90 days | `bronze_actor_day` and all three collector tables |
+| T1 | 90 days by default; the organization may change it | `bronze_actor_day` and all three collector tables |
 | T2 | 30 days | no tier-2 data is collected yet |
 | Gold marts carrying no pseudonym | indefinite | **not yet true**: the gold marts, on both paths, are views, so they expire with bronze ([risks.md](../../risks.md) #10) |
 | `cardo.settings` | none | configuration, not telemetry: the organization's pattern and the minimum group size |

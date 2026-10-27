@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -42,5 +43,20 @@ func TestResolveWindow(t *testing.T) {
 				t.Errorf("the window holds no days, so a poll over it does nothing")
 			}
 		})
+	}
+}
+
+// Every command the usage lists must answer `cardo help <command>`: a listed command without a
+// synopsis prints "no help" instead.
+func TestEveryListedCommandHasHelp(t *testing.T) {
+	listed := usage[:strings.Index(usage, "Examples")]
+	for _, line := range strings.Split(listed, "\n") {
+		f := strings.Fields(line)
+		if !strings.HasPrefix(line, "  ") || len(f) < 2 || f[0] == "cardo" || f[0] == "help" {
+			continue
+		}
+		if _, ok := synopsis[f[0]]; !ok {
+			t.Errorf("%q is listed in the usage but has no synopsis", f[0])
+		}
 	}
 }

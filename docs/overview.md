@@ -13,8 +13,8 @@ your engineering teams:
 - what adoption costs, and where the money goes on rework;
 - whether the policies your administrators set actually hold.
 
-It also gives each engineer a private coach. Nothing is installed on laptops, no data leaves your
-network, and engineers can check for themselves exactly what it collects.
+It also gives each engineer a private coach. Nothing is installed on laptops, no data about your
+organization leaves your network, and engineers can check for themselves exactly what it collects.
 
 ---
 
@@ -45,7 +45,7 @@ Items marked *(planned)* are designed but not yet built. See [What exists today]
 
 | The question | What Cardo shows |
 |---|---|
-| Which of the approaches our teams built should everyone use? | Team-grown skills, commands, subagents and MCP servers, and how many people use each. An approach is named once five people use it. How sessions using it compare on cost and on signs of the agent struggling *(planned)* |
+| Which of the approaches our teams built should everyone use? | Team-grown skills, commands, subagents and MCP servers, and how many people use each. An approach is named once enough people use it (five by default; the organization may raise that). How sessions using it compare on cost and on signs of the agent struggling *(planned)* |
 | Has what we shipped reached every team? Is everyone on the current version of our instructions? | What share of the organization uses each thing you shipped, and which machines still load an old version of your instructions files. Each team's uptake against the whole organization *(planned)* |
 | What are we getting for the spend? | Cost per accepted change and per commit or pull request, spend on rework, and cost per approach, as trends, always beside the volume they are computed from *(planned)* |
 | Where is adoption lagging? | Approaches that aren't spreading, and teams a rollout hasn't reached *(the team view is planned)* |
@@ -67,16 +67,17 @@ what the console shows, and each engineer sees their own position first.
 
 ### Engineers
 
-- **A private coach page** *(planned)*. It shows your own figures, and suggestions drawn from
-  what people around you have adopted. For example:
-  - "your conversations were squeezed for length twice as often this month as last month";
+- **A private coach page**. It shows your own figures, and at most one suggestion, drawn from what
+  people around you have adopted. For example:
   - "11 people here use `/review`, and you haven't tried it yet".
 
   You are compared only with your own past. There is no score and no ranking.
 - **Nobody else sees your page.** During a pilot, the person running the pilot can open it;
   volunteers are told this.
 - **Your manager sees nothing about you** that Anthropic's console doesn't already show them.
-- **Never collected:** your session transcripts, prompts, code, file paths or command arguments.
+- **Never collected:** your prompts, code, file paths or command arguments. Session transcripts are
+  never read by anything that runs on its own; the one exception is the import command you run
+  yourself, which keeps counts and throws the text away (ADR-0050).
   Your email address is replaced by a pseudonym before anything is stored.
 - **The entire installation is a readable settings file.** There is no agent on your machine, and
   the settings file is published so you can check it.
@@ -105,14 +106,20 @@ what the console shows, and each engineer sees their own position first.
 
 - **It measures approaches, not people.** "Is the skill we shipped used, and does it help?" is a
   fact about the skill. A ranking of engineers is a number people learn to game.
-- **It runs entirely in your network.** No phone-home, no hosted version, no benchmark upload.
+- **It runs in your network.** No usage phone-home, no hosted version, no benchmark upload. The binary
+  contacts no host at all: prices come from a table inside it.
+- **Collection reads no content.** Prompts, code and file paths never reach a table (INV-1, INV-5).
+  `cardo import` is the one manual exception: run by the person, metadata only, text discarded
+  (ADR-0050).
 - **Nothing is installed on laptops.** Your device management pushes one settings file, which turns
   on Claude Code's own telemetry and a set of hooks. Claude Code waits for each hook's answer: a few
   milliseconds normally, and at most one second if the collector is out of reach. No hook can block
   anything, and the file changes nothing else about how Claude Code behaves.
-- **Identity is hashed before storage,** and data is kept for 90 days. Pseudonymous data is still
+- **Identity is hashed before storage,** and data is kept for 90 days by default. Your organization
+  may change that window; the console shows which one is in force
+  ([ADR-0053](adr/0053-retention-default-and-organization-choice.md)). Pseudonymous data is still
   personal data, and the documentation says so plainly. Retention is what bounds it.
-- **Small groups are never shown.** A team or a home-grown tool is named only once five people are
+- **Small groups are never shown.** A team or a home-grown tool is named only once enough people are
   in it.
 - **Numbers come with their volumes.** A rate is never shown without what it is a rate of, and no
   estimate is shown that cannot be defended.
@@ -128,11 +135,17 @@ what the console shows, and each engineer sees their own position first.
 | | Status |
 |---|---|
 | Collection: the settings file, hooks, and a collector that hashes identity and drops content | **Built**, and checked against real Claude Code sessions |
+| Installation: one binary, a local board, and one-command checks | **Built**: `cardo ui`, `cardo up`, `cardo check`, `cardo check --proof` |
+| Verification: the pipeline is proved by a probe that deletes its own rows, and the install is verified by the engineer's own session | **Built** |
+| The Admin API path runs inside the stack as an optional poller, configured once from the board | **Built**; not yet run against a live Anthropic response |
+| A leadership login that can read gold views and nothing else | **Partly built**: `cardo gold` creates a database user that reads gold only, proved refused on bronze and silver. Its data source sits in the same Grafana as the full-access one, and a login can query either, so only the operator logs in for now ([risks.md](../risks.md) #15) |
 | Artifact usage, instructions versions, spend by model, team and Claude Code release, failing calls repeated in a row, and a dashboard ([what each chart is for](design/dashboards.md)) | **Built**, checked against those sessions, and reviewed on a made-up organization |
 | Reading Anthropic's usage data | **Built**; not yet run against a live organization |
-| Coach pages, efficiency comparisons, repository classification, teams from your directory, the board report | **Planned** |
-| Evidence report, coverage | **Planned** |
-| Named cost view, pull-request outcomes, other AI tools, events sent to your SIEM | **When an organization asks** |
+| Service runs (CI, agents) are labelled and kept out of people counts | **Built**: `actor_kind`/`workflow`, filters in the gold views, GitHub Actions block |
+| An operator console: overview, versioned artifact catalog, team directory, settings | **Built**: four surfaces; approval and rollback; hashed directory with a floor |
+| Coach pages, efficiency comparisons, repository classification, teams from your directory, the board report | **Built** for the coach page (`cardo coach`, the console page and a per-person link, own-laptop setup only); the rest **Planned** |
+| Evidence report, coverage, SIEM events | **Planned** |
+| Named cost view, pull-request outcomes, other AI tools | **When an organization asks** |
 
 Cardo is pre-alpha. It has not yet run with a team. Whether its efficiency signals really separate
 approaches that work from ones that don't is something a pilot has to find out.

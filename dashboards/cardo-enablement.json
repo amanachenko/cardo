@@ -39,6 +39,55 @@
   },
   "panels": [
     {
+      "id": 24,
+      "title": "Data as of",
+      "type": "stat",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "cardo-clickhouse"
+      },
+      "description": "When the views behind this dashboard were last brought up to date. They are rebuilt from the raw rows every 10 minutes (ADR-0052), so a session reaches these panels up to 10 minutes after it happens. A time older than that means a rebuild keeps failing, and the panels show the data as it was then: failing says how many of the rebuilds failed on their last try.",
+      "gridPos": {
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT ifNull(formatDateTime(rebuilt_at, '%Y-%m-%d %H:%i UTC', 'UTC'), 'not yet') AS data_as_of, failing FROM cardo.gold_data_as_of"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/"
+        },
+        "textMode": "value_and_name",
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal"
+      }
+    },
+    {
       "id": 1,
       "title": "Artifacts: what the organization rolled out, and what engineers brought in",
       "type": "row",
@@ -48,7 +97,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 0
+        "y": 3
       }
     },
     {
@@ -64,7 +113,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 1
+        "y": 4
       },
       "targets": [
         {
@@ -131,7 +180,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 9
+        "y": 12
       },
       "targets": [
         {
@@ -237,7 +286,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 18
+        "y": 21
       },
       "targets": [
         {
@@ -288,7 +337,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 26
+        "y": 29
       }
     },
     {
@@ -299,7 +348,7 @@
         "h": 6,
         "w": 24,
         "x": 0,
-        "y": 27
+        "y": 30
       },
       "options": {
         "mode": "markdown",
@@ -319,7 +368,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 33
+        "y": 36
       },
       "targets": [
         {
@@ -388,7 +437,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 41
+        "y": 44
       },
       "targets": [
         {
@@ -499,7 +548,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 50
+        "y": 53
       },
       "targets": [
         {
@@ -657,7 +706,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 59
+        "y": 62
       }
     },
     {
@@ -673,7 +722,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 60
+        "y": 63
       },
       "targets": [
         {
@@ -781,7 +830,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 69
+        "y": 72
       }
     },
     {
@@ -797,7 +846,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 70
+        "y": 73
       },
       "targets": [
         {
@@ -860,7 +909,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 79
+        "y": 82
       },
       "targets": [
         {
@@ -923,7 +972,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 88
+        "y": 91
       },
       "targets": [
         {
@@ -1016,7 +1065,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 97
+        "y": 100
       },
       "targets": [
         {
@@ -1139,7 +1188,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 106
+        "y": 109
       },
       "targets": [
         {
@@ -1254,7 +1303,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 115
+        "y": 118
       },
       "targets": [
         {

@@ -117,8 +117,23 @@ The dashboard says the same in its "How versions are read" panel.
 `dashboards/cardo-enablement.json`, over the collector's data: the hook pack and Claude Code's own
 OTel. **Status:** reviewed on the made-up organization, 2026-10-23, and rebuilt as the review left
 it, on the weekly views of `sql/clickhouse/015_gold_enablement_review.sql`. At the made-up
-organization's 60 people it takes about 70 seconds to draw, because the views recompute everything
-on every read ([risks.md](../../risks.md) #14).
+organization's 60 people it took about 70 seconds to draw while silver was plain views, which
+recompute everything on every read ([risks.md](../../risks.md) #14). It has not been timed on
+stored silver yet.
+
+#### Data as of
+
+- **Asks:** how old is what the other panels show?
+- **For:** the operator, before reading anything else here.
+- **Reads:** `gold_data_as_of`: the oldest of the seven stored silver tables' last good rebuilds,
+  for example "2026-10-26 10:20 UTC", and `failing`, how many rebuilds failed on their last try.
+  ClickHouse rebuilds the tables every 10 minutes
+  ([ADR-0052](../adr/0052-silver-is-stored-and-rebuilt-every-10-minutes.md)), so a time older
+  than that means a rebuild keeps failing, and every other panel shows the data as it was then.
+- **Cannot show:** why a rebuild failed. ClickHouse's `system.view_refreshes` says, as
+  [the stack's README](../../deploy/compose/README.md#the-dashboards-run-up-to-10-minutes-behind)
+  shows.
+- **Status:** added with stored silver, after the review.
 
 ### Artifacts: what the organization rolled out, and what engineers brought in
 

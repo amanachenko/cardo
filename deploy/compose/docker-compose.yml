@@ -91,6 +91,30 @@ services:
       CARDO_ORG_ARTIFACTS: ${CARDO_ORG_ARTIFACTS:-}
       CARDO_MIN_GROUP_SIZE: ${CARDO_MIN_GROUP_SIZE:-}
 
+  # The Admin API poller. Optional: it starts only with the "admin" profile, so a stack that has no
+  # organization key never carries a container that cannot work. The window is two days on every
+  # pass because Anthropic's daily aggregates arrive late; the loop sleeps instead of relying on a
+  # host cron, so there is nothing to maintain on anyone's machine.
+  poller:
+    build:
+      context: ../..
+    image: cardo:dev
+    command: ["poll", "-store", "clickhouse", "-every", "${CARDO_POLL_INTERVAL:-24h}"]
+    restart: unless-stopped
+    profiles: ["admin"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      CARDO_ADMIN_KEY: ${CARDO_ADMIN_KEY:-}
+      CARDO_RETENTION_DAYS: ${CARDO_RETENTION_DAYS:-90}
+      CARDO_SALT: ${CARDO_SALT}
+      CARDO_SALT_VERSION: ${CARDO_SALT_VERSION:-v1}
+      CARDO_CLICKHOUSE_URL: http://clickhouse:8123
+      CARDO_CLICKHOUSE_USER: ${CLICKHOUSE_USER:-cardo}
+      CARDO_CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CARDO_ORG_ARTIFACTS: ${CARDO_ORG_ARTIFACTS:-}
+
   # The org-edge collector: everything Claude Code sends arrives here and is pseudonymized and
   # reduced before it is written. deploy/collector/config.yaml is the contract.
   #
@@ -141,6 +165,9 @@ services:
       GF_NEWS_NEWS_FEED_ENABLED: "false"
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-cardo}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      # The leadership datasource reads leadership.* only; the user is created by `cardo gold`.
+      GRAFANA_RO_USER: ${GRAFANA_RO_USER:-cardo_ro}
+      GRAFANA_RO_PASSWORD: ${GRAFANA_RO_PASSWORD:-}
     ports:
       - "127.0.0.1:3001:3000"
     volumes:

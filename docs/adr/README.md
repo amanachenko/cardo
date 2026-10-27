@@ -52,6 +52,17 @@ The hard rules that these decisions produce live in
 | [0040](0040-spread-is-a-vote-only-for-what-teams-chose.md) | Spread is a vote only for what teams chose | Accepted, not built | 2026-10-08 |
 | [0041](0041-the-coach-suggests-what-the-fleet-has-shown.md) | The coach suggests only what the fleet has shown | Accepted, not built | 2026-10-08 |
 | [0042](0042-the-north-star.md) | Organizations decide what becomes standard, without watching anyone | Accepted | 2026-10-14 |
+| [0043](0043-admin-poller-in-the-reference-stack.md) | The Admin API poller runs as a service in the reference stack | Accepted | 2026-10-18 |
+| [0044](0044-console-surface.md) | The board is a console of four surfaces; Install is its repair room | Accepted | 2026-10-18 |
+| [0045](0045-catalog-storage.md) | The enablement catalog is versioned files plus metadata rows | Accepted | 2026-10-18 |
+| [0046](0046-hashed-team-directory.md) | The team directory is loaded as a hashed mapping, never as addresses | Accepted | 2026-10-18 |
+| [0047](0047-loopback-admin-stand-in.md) | A loopback stand-in for the Analytics API, for verification only | Accepted — built | 2026-10-18 |
+| [0048](0048-coach-in-the-console.md) | The coach is a page in the console, not a second Grafana | Accepted | 2026-10-18 |
+| [0050](0050-local-transcript-import.md) | Cardo never reads transcripts on its own; `cardo import` is the one exception | Accepted | 2026-10-18 |
+| [0051](0051-a-made-up-organization.md) | A made-up organization is where views are seen and checked, never where findings come from | Accepted | 2026-10-22 |
+| [0052](0052-silver-is-stored-and-rebuilt-every-10-minutes.md) | The collector path's silver views are stored as tables ClickHouse rebuilds every 10 minutes | Proposed | 2026-10-23 |
+| [0053](0053-retention-default-and-organization-choice.md) | Retention is 90 days by default, and the organization may change it | Accepted | 2026-10-25 |
+| [0054](0054-both-actor-types-are-people.md) | Both actor types are people, so a service run is labelled by the run itself | Accepted | 2026-10-25 |
 
 ADR-0030 to ADR-0037 came out of one design review on 2026-09-25, which asked who Cardo is for and
 what each of them needs. Its evidence is
@@ -92,8 +103,8 @@ Recorded here so a future session knows these were considered and postponed, not
 - **Bedrock / Vertex / Foundry support** — out of scope for v1 (ADR-0018, upheld by ADR-0021).
 - **A file-store mode for the collector path** — until a team can run a collector but not
   ClickHouse (ADR-0028).
-- **Materialized collector-path views and rollups** — the views are plain views over 90-day bronze
-  (risks.md #10 and #14).
+- **Rollups that outlive the raw rows** — silver is stored, but rebuilt from 90-day bronze every
+  10 minutes, so nothing outlives the raw rows (risks.md #10, ADR-0052).
 - **The Claude Enterprise Analytics adapter** — built when an organization on Enterprise seats asks
   for it. The Console adapter went first because it could be tested without an organization
   (ADR-0021, ordered by ADR-0042).

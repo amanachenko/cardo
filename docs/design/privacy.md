@@ -1,15 +1,18 @@
 # Privacy — what Cardo collects and what it does not
 
-> Edited in place; describes reality. **Status 2026-09-25:** both collection paths are built: the
+> Edited in place; describes reality. **Status 2026-10-26:** both collection paths are built: the
 > Admin API poller, and the managed-settings bundle with its collector. So are the views and
-> dashboards over what they store. The collector has been run against a real Claude Code, and the
-> list below is what it kept. Changes decided on 2026-09-25 and not yet built are listed
-> separately, under "Decided, not built yet". This document is written to be readable by the
-> engineers being measured, not only by the team deploying it.
+> dashboards over what they store, the operator's console with its coach page, and the import
+> command. The collector has been run against a real Claude Code, and the list below is what it
+> kept. Changes decided and not yet built are listed separately, under "Decided, not built
+> yet". This document is written to be readable by the engineers being measured, not only by the
+> team deploying it.
 
 ## The short version
 
-- Cardo **never reads your session transcripts** — not for debugging, not once (INV-1).
+- Cardo **never reads your session transcripts on its own** — not for debugging, not once (INV-1).
+  The one exception is the import command you run yourself, which keeps counts and throws the text
+  away ([ADR-0050](../adr/0050-local-transcript-import.md)).
 - Cardo **never stores your email address**. It is hashed before anything is written down (INV-2).
 - Cardo **never stores your prompts, your code, or the paths of files you touched** (INV-5).
 - **Nobody except you can see your individual activity.** Everyone else sees team-level aggregates
@@ -39,6 +42,13 @@ Short by design, and this list is the boundary — adding to it requires a recor
 - the skills, slash commands, subagents and MCP servers you used, **by name, including ones you
   wrote yourself** (below)
 - your team, as set in the bundle your organization deployed
+- your team from your organization's directory, if it uploads one in the console: which team
+  your code name belongs to. The directory's email addresses are hashed as it is read and never
+  stored ([ADR-0046](../adr/0046-hashed-team-directory.md))
+- whether a session was a service run, such as one in CI, as labelled by the run's own settings.
+  A service run is never counted as a person
+  ([ADR-0036](../adr/0036-service-runs-are-not-people.md),
+  [ADR-0054](../adr/0054-both-actor-types-are-people.md))
 - **which repository you worked in**, if it is one of your organization's, by name (such as
   `github.com/acme/widgets`). Any other repository is recorded only as "external" plus its host,
   such as `github.com`, and **never by its full address**
@@ -53,7 +63,8 @@ yourself. **That is more than Claude Code's own telemetry sends by default**, an
 thing for themselves, that is how the organization learns what it should make official for
 everyone. Three rules come with it:
 
-- A name is shown in any view only once at least five people used it in the same week. A command
+- A name is shown in any view only once enough people used it in the same week (five by default; the
+  organization may raise that). A command
   that only you use never appears by name; it is counted as "other". Your organization can raise
   the five, never lower it ([ADR-0029](../adr/0029-minimum-group-size.md)).
 - No view counts anyone's own commands per person.
@@ -63,7 +74,8 @@ everyone. Three rules come with it:
 **About your team.** The same rule covers the team name in the bundle. A team with fewer than five
 people working in a chart's period, a day on a daily chart and a week on a weekly one, is shown as
 "other" for that day or week, so a chart of a small team is never two or three people's numbers.
-Totals for the whole organization are always shown.
+Totals for the whole organization are always shown. A team from the directory with fewer than
+five people is not named either.
 
 The exact list is the allowlist in
 [`deploy/collector/config.yaml`](../../deploy/collector/config.yaml), and a CI test fails if it
@@ -98,6 +110,19 @@ permission or a model switch.
 One side effect is Claude Code's behaviour, and cannot be avoided: when an organization sets the
 telemetry endpoint centrally, any telemetry endpoint you had configured yourself stops being used.
 
+## Your own coach page
+
+The console has a coach page for each person ([ADR-0048](../adr/0048-coach-in-the-console.md),
+[ADR-0032](../adr/0032-engineer-coach-by-shared-link.md)). It compares your figures for a period
+with the period before: sessions and prompts, cost at list price, the largest context, tool calls
+and failures, and what you loaded. It may add one suggestion, and only of something enough people
+here use (five by default) that you have not tried. It has no score and no ranking, and it shows
+nobody else's figures. On a stack with fewer people than that, such as your own install, it
+suggests nothing.
+
+**The person who runs the stack can open any person's page** from the console, and can give you
+yours as a link that opens on that machine. You should be told who that person is.
+
 ## Decided, not built yet
 
 Recorded here so you know what is coming before it arrives. Each links to the decision behind it.
@@ -106,14 +131,9 @@ Recorded here so you know what is coming before it arrives. Each links to the de
   any loaded, and how many. Your organization can choose to record the names of project-level
   files, and this document will say if it has. The names of your own personal files are never
   recorded ([ADR-0035](../adr/0035-repository-identity-classified.md)).
-- **Your team, taken from your organization's directory,** with the dates you joined and left it
-  ([ADR-0034](../adr/0034-identity-in-pilots.md)). The five-person rule applies unchanged.
-- **Your own coach page** ([ADR-0032](../adr/0032-engineer-coach-by-shared-link.md)). It shows
-  suggestions about things you can change, compared only with your own past, with no score and no
-  ranking. In a pilot you volunteer for it, you get it as a private link, and you are told that the
-  person running the pilot can open it too.
-- **Runs in CI or in the background are labelled as a service,** not counted as a person
-  ([ADR-0036](../adr/0036-service-runs-are-not-people.md)).
+- **The dates you joined and left your team,** from the directory
+  ([ADR-0034](../adr/0034-identity-in-pilots.md)). Today the directory holds only the current team
+  of each code name.
 - **Only if your organization asks for it:** a budget owner may see the cost of people who are
   over a budget published to you. It shows only what Anthropic's console already shows them, and
   you see your own position first ([ADR-0033](../adr/0033-per-person-cost-for-budget-owners.md)).
@@ -173,12 +193,13 @@ deletion request.
   team afterwards.
 
 **Because the salt is stable in v0.1, retention is the actual privacy control** — not the hashing
-([ADR-0016](../adr/0016-retention.md)):
+([ADR-0016](../adr/0016-retention.md), and the window itself
+[ADR-0053](../adr/0053-retention-default-and-organization-choice.md)):
 
 | Tier | Retention |
 |---|---|
 | Security (T0) | 1 year |
-| Fleet (T1) | 90 days |
+| Fleet (T1) | 90 days by default; your organization may change it |
 | Personal (T2) | 30 days |
 | Aggregates with no pseudonym | indefinite |
 

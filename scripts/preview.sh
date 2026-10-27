@@ -34,7 +34,8 @@ project=cardo-preview
 tables="bronze_hook_events bronze_otel_logs bronze_otel_metrics_sum bronze_actor_day settings"
 
 # Rows newer than the cutoff are not copied, so that live and preview can be compared exactly:
-# the live stack keeps collecting while the preview stands still.
+# the live stack keeps collecting while the preview stands still. The cutoff is this long before
+# now, or before live last rebuilt its stored silver if that is earlier (see copy_rows).
 cutoff_lag_minutes=5
 
 die() { echo "preview: $*" >&2; exit 1; }
@@ -220,7 +221,10 @@ copy_rows() {
   PREVIEW=$(preview_container)
   run=$(date -u +%Y%m%dT%H%M%S)
   : > "$tmp/live-queries"
-  cutoff=$(live_ch --query "SELECT formatDateTime(now('UTC') - INTERVAL $cutoff_lag_minutes MINUTE, '%Y-%m-%d %H:%i:%S', 'UTC') FORMAT TSV")
+  # A stack with migration 017 stores its silver and rebuilds it every 10 minutes (ADR-0052), so
+  # live's gold holds live's rows as of its oldest last rebuild. Rows after that are not in live's
+  # views yet, and a copy that took them would compare as different.
+  cutoff=$(live_ch --query "SELECT formatDateTime(least(now('UTC'), toDateTime(ifNull((SELECT min(last_success_time) FROM system.view_refreshes WHERE database = 'cardo'), now()), 'UTC')) - INTERVAL $cutoff_lag_minutes MINUTE, '%Y-%m-%d %H:%i:%S', 'UTC') FORMAT TSV")
   echo "== Copying rows older than $cutoff UTC from '$live_project' (read-only)"
 
   local t
@@ -246,9 +250,31 @@ copy_rows() {
   # The views read the deployment's choices from settings (sql/clickhouse/005), so the copy, not
   # the migrate run above, decides what the preview's views name.
   echo "   The views use the live stack's settings: $(preview_ch --query "SELECT concat('organization artifacts ', if(org_artifacts = '', '(none named)', org_artifacts), ', minimum group size ', toString(min_group_size)) FROM cardo.settings_effective FORMAT TSV")"
+  rebuild_preview_silver
 
   printf 'run=%s\ncutoff=%s\nlive_queries=%s\nlive_project=%s\n' \
     "$run" "$cutoff" "$(wc -l < "$tmp/live-queries" | tr -d ' ')" "$live_project" > "$state_file"
+}
+
+# The preview's silver is stored too when this checkout has migration 017. Rebuild it from the
+# rows just copied, rather than wait up to 10 minutes for its schedule. A rebuild that was already
+# running may have started before the copy finished, so each one has to have started after the
+# copy did, or it is asked for again.
+rebuild_preview_silver() {
+  local views began v stale tries=0
+  views=$(preview_ch --query "SELECT view FROM system.view_refreshes WHERE database = 'cardo' FORMAT TSV")
+  [ -n "$views" ] || return 0
+  began=$(preview_ch --query "SELECT toString(now()) FORMAT TSV")
+  while :; do
+    sleep 1 # a rebuild's start is kept to the second
+    for v in $views; do preview_ch --query "SYSTEM REFRESH VIEW cardo.$v"; done
+    for v in $views; do preview_ch --query "SYSTEM WAIT VIEW cardo.$v"; done
+    stale=$(preview_ch --query "SELECT count() FROM system.view_refreshes WHERE database = 'cardo' AND (last_success_time IS NULL OR last_success_time <= toDateTime('$began')) FORMAT TSV")
+    [ "$stale" = 0 ] && break
+    tries=$((tries + 1))
+    [ "$tries" -lt 5 ] || die "the preview's stored silver did not rebuild after the copy"
+  done
+  echo "   Rebuilt the preview's stored silver from the copy: $(echo "$views" | wc -l | tr -d ' ') tables"
 }
 
 read_state() {

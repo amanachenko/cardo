@@ -286,7 +286,8 @@ whose shape has not survived contact with real data is the wrong order.
 poller after each day's `Put` and therefore idempotent, with no TTL. It is not a materialized view:
 ClickHouse materialized views fire on INSERT, and the store swaps partitions with
 `REPLACE PARTITION`, which does not trigger them. Until that exists, **the practical retention of
-every Cardo trend is 90 days, not indefinite**, and `docs/design/architecture.md` says so.
+every Cardo trend is the window in force (90 days by default), not indefinite**, and
+`docs/design/architecture.md` says so.
 **Would falsify it:** a first organization for which 90 days of trend is enough, which would make the
 rollup premature rather than missing.
 
@@ -412,12 +413,19 @@ by hand on the same stack, the same dashboard drew in 1.1 seconds. A thousand en
 days, at the made-up organization's placeholder rates, would send about 18 times as many rows, and
 nobody has measured the views at that size.
 
-**Mitigation:** when a real deployment is slow, materialize silver: a daily table per view, written
-by a scheduled job or a ClickHouse refreshable materialized view, with the gold views unchanged on
-top. The same job is the fix for #10 on this path. Until then it is not built, because the views'
-shape is still being learned and a materialized table is a migration each time it changes.
-**Would falsify it:** a deployment of a few hundred engineers whose dashboards load in seconds on
-the views as they are.
+**Status 2026-10-27: mitigated.** On the made-up organization, 60 people over 12 weeks, the
+enablement dashboard took 95.7 seconds to draw, and six of its 13 panels hit Grafana's 60-second
+limit. The seven session-level silver views are now tables ClickHouse rebuilds every 10 minutes
+(migration 017, [ADR-0052](docs/adr/0052-silver-is-stored-and-rebuilt-every-10-minutes.md)), and the same dashboard draws in 1.4 seconds.
+The price is that the dashboards run up to 10 minutes behind, and that ClickHouse rebuilds
+everything every 10 minutes whether anyone looks or not: about 9 seconds and 5 GiB of memory at 60
+people.
+
+**What is left:** every rebuild starts again from all the raw rows. At 500 people that is an
+estimate of about a minute a rebuild, and at a few thousand it could fill the 10 minutes. The fix
+then is to rebuild only the last few days, which needs a superseding record. The rebuilds are not
+#10's fix: silver holds only what the raw rows hold.
+**Would falsify it:** a deployment of a few hundred engineers whose rebuilds take a few seconds.
 
 ### 15. Any Grafana login can read every row the data source can
 
@@ -439,6 +447,13 @@ can query.
 user granted the gold views only. Per-person pages move to a second Grafana that only the operator
 logs in to (ADR-0032). **Would close it:** that grant in place, and a live test that the leadership
 data source's user is refused a bronze or silver read.
+
+**Update 2026-10-26: the grant is built, and this stays open.** `cardo gold` creates the gold-only
+user, and the `Cardo gold (read-only)` datasource uses it. But that datasource sits in the same
+Grafana organization as the full-access one, and a login can send a query to either by its id,
+the same way the 2026-09-25 measurement read bronze. **Would close it, as amended:** the gold
+datasource in a Grafana organization of its own, leaders' logins only there, and a live test that
+such a login is refused a query to the full-access datasource.
 
 ### 16. Two of the new signals rest on unobserved or conditional telemetry
 
@@ -547,3 +562,16 @@ rollout question, "which teams has it not reached?", goes unanswered.
 the smallest group with five or more in it, such as a group of teams. The threshold is never
 lowered to make a small team visible. **Would show the mitigation failing:** an adoption owner
 asking for reach by team that the cohorts cannot give.
+
+### 23. Imported cost depends on a published price list
+
+**Threatens:** the coach's cost figure.
+
+Prices come from a table of Anthropic's published list prices, held in the binary. A model renamed
+upstream, or a price change after the table was taken, makes the estimate drift; discounts and
+credits are invisible by construction. The number is a comparable list price, not money anyone spent.
+
+**Mitigation:** unpriced models are counted and printed rather than billed at zero, every surface
+labels the figure as list price, and the table can be replaced by a local file for an organization
+whose contract differs. **Would show the mitigation failing:** a coach report whose cost cannot be
+reconciled with any invoice at all, or a model family that stays unpriced.

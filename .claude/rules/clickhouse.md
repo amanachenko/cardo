@@ -1,6 +1,7 @@
 ---
 paths:
   - "deploy/compose/**"
+  - "internal/retention/**"
   - "internal/store/**"
   - "test/deploy_test.go"
 ---
@@ -35,3 +36,13 @@ After touching the store, run `make stack-up && make clickhouse-test` (live serv
   `TestDeployClickHouseHealthyMeansReachable` holds it there.
 - A `--` inside an XML comment. The spec forbids it, ClickHouse crash-loops, and the only symptom is
   a restarting container. `TestDeployXMLIsWellFormed` catches it.
+- Altering a table a refreshable view writes into while a rebuild runs. The rebuild fills a new
+  table made from the old one as it began, then swaps it in, and the change is lost: on 26.6 a
+  21-day TTL set mid-rebuild was 60 days again afterwards. Stop the refresher, alter, start it
+  again, as `alterTTL` in `internal/retention` does.
+- Taking `SYSTEM REFRESH VIEW` and then `SYSTEM WAIT VIEW` as proof that a stored table holds the
+  rows just written. A rebuild already running may have started before them. `RebuildSilver`
+  checks that each refresher's `last_success_time`, the start of its last good rebuild to the
+  second, is after the call began, and asks again if not.
+- Letting ClickHouse name a refreshable view's table (no `TO`). It is `.inner_id.` and a uuid, and
+  the dashboard check that refuses `silver_` cannot see it. Stored silver names its tables.

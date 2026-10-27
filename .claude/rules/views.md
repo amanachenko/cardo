@@ -14,8 +14,30 @@ The views read the organization's artifact pattern and the minimum group size fr
 (`actor_kind=service`) stay out of people counts, the five-person rule, budget lists and the coach
 ([ADR-0036](../../docs/adr/0036-service-runs-are-not-people.md)).
 
+Seven silver views are stored (`sql/clickhouse/017_stored_silver.sql`,
+[ADR-0052](../../docs/adr/0052-silver-is-stored-and-rebuilt-every-10-minutes.md)). `silver_session` is a table that
+`silver_session_refresh` rebuilds every 10 minutes from `silver_session_live`, the plain view that
+holds the query, and so on for the other six. `silver_artifact_load` is the exception: a plain view
+over `silver_artifact_load_stored` that adds `is_org`. Gold and `silver_session_cohort` read the
+stored tables; `cardo check`, the console and the coach read the `_live` views.
+
 ## Things that look like good ideas and are not
 
+- A `_live` view that reads a stored table. Each reads the raw tables and other `_live` views only,
+  so no rebuild depends on another having finished. The first prototype rebuilt the artifact table
+  from `silver_session` while that was still empty, and every artifact counted 0 people, with no
+  error.
+- Changing a stored silver view through its refresher. The query is in its `_live` view: replace
+  that, and the next rebuild uses it. A change to its columns has to change the stored table's too;
+  017 drops the table and creates it again from the view.
+- Storing what a setting decides. `is_org` and the five-person minimum are worked out as gold is
+  read, so narrowing `CARDO_ORG_ARTIFACTS` hides a name on the next read rather than up to 10
+  minutes later.
+- Writing rows in a test and reading silver or gold straight after. The stored tables hold what the
+  last rebuild saw: call `clickhouse.RebuildSilver` in between, as the seeded view tests do. Without
+  it, `TestCollectorSilverViews` read 0 sessions.
+- Reading the stored tables from something that must show an event at once. `cardo check` looks for
+  the session started a minute ago, so it reads `silver_session_live`.
 - Reading `estimated_cost.amount` as dollars. **It is cents**, on both analytics APIs. Silver divides
   once and names the column `cost_usd`; nothing downstream should divide again.
 - `sum(x) AS x` in a ClickHouse view, or in a dashboard panel. Legal in DuckDB, an error here as
