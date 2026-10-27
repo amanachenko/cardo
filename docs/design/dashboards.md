@@ -116,7 +116,7 @@ The dashboard says the same in its "How versions are read" panel.
 
 `dashboards/cardo-enablement.json`, over the collector's data: the hook pack and Claude Code's own
 OTel. **Status:** reviewed on the made-up organization, 2026-10-23, and rebuilt as the review left
-it, on the weekly views of `sql/clickhouse/015_gold_enablement_review.sql`. At the made-up
+it, on the weekly views of `sql/clickhouse/018_gold_enablement_review.sql`. At the made-up
 organization's 60 people it took about 70 seconds to draw while silver was plain views, which
 recompute everything on every read ([risks.md](../../risks.md) #14). It has not been timed on
 stored silver yet.

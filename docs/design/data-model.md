@@ -115,7 +115,7 @@ reports. Both are NULL or empty for a session that sent no OTel.
 | `silver_context_event` | one row per compaction or model switch | Compaction: OTel `claude_code.compaction` (`tokens_before`, `tokens_after`), or the `PreCompact` hook alone for a session that sent no OTel compaction. Switch: the `PostModelSwitch` or `PreModelSwitch` hook's fields, timed by its `hook_execution_start`, and `next_request_*`, the next main-thread request on the new model, which is what the switch cost. Both models are compared with the date and `[1m]` removed, since the switch's `to_model` may be dated. Not for a switch made before the session's first main-thread request: that request is the session starting, and the hook's `context_tokens` is 0 ([note](../research/2026-10-06-model-switch-observed.md)). Only switches someone asked for: a `PostModelSwitch` from a fallback (`auto`) or a resume is left out. Defined in `009`, which redefines `008`'s view |
 | `silver_artifact_load` | one row per artifact use | `instructions`: each `InstructionsLoaded`. `skill`: `UserPromptExpansion` and `skill.name` on API requests, one row per prompt and name. `subagent`: each `SubagentStart`, never `SubagentStop`. `mcp`: tool calls on `mcp__<server>__*`, one row per prompt and server. `is_org` applies the organization's pattern; an instructions file with a stored name is always the organization's. `is_builtin` marks Claude Code's own subagents and commands |
 | `silver_session_cohort` | one row per session | The cohort each session is reported under in the daily views: its label, or `other` below the minimum group size that day ([ADR-0029](../adr/0029-minimum-group-size.md)) |
-| `silver_session_cohort_week` | one row per session | The same for the weekly views: the session's week, the Monday of the day it started, and its label, or `other` below the minimum group size that week. A session with no label is `unassigned`. Defined in `015` |
+| `silver_session_cohort_week` | one row per session | The same for the weekly views: the session's week, the Monday of the day it started, and its label, or `other` below the minimum group size that week. A session with no label is `unassigned`. Defined in `018` |
 
 **`PermissionDenied` is not the end of a permission wait.** It fires only when auto mode denies a
 call. The end of a wait a person answered is the `tool_decision` event
@@ -142,7 +142,7 @@ Vendor-specific richness lives in the attribute maps, not flattened away.
 
 ### Built (collector path)
 
-`sql/clickhouse/007_gold_collector.sql`, and `015_gold_enablement_review.sql`, which adds the
+`sql/clickhouse/007_gold_collector.sql`, and `018_gold_enablement_review.sql`, which adds the
 weekly views the enablement dashboard reads and redefines the first two below. Each is
 cohort-level, and each applies the minimum group size
 ([ADR-0029](../adr/0029-minimum-group-size.md)). Which panel reads which view, and why, is in
@@ -191,7 +191,7 @@ view counts home-grown artifacts per person (INV-3).
 stored, and Claude Code 2.1.281 sends no content hash
 ([ADR-0026](../adr/0026-stale-instructions-by-versioned-name.md)). The organization names what it
 ships with a version (`acme-security-v3.md`). The current version is the highest one anyone had
-loaded by the end of that week, and an older one is "stale". Until `015` it was the highest ever
+loaded by the end of that week, and an older one is "stale". Until `018` it was the highest ever
 loaded, so every week before a new version shipped read as all stale. Files that are not the
 organization's are counted by kind and never named.
 

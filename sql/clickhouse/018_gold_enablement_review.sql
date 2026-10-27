@@ -1,4 +1,7 @@
--- 015 — the enablement dashboard's views, as its review on the made-up organization left them.
+-- 018 — the enablement dashboard's views, as its review on the made-up organization left them.
+--
+-- Numbered after stored silver (017): the views here read the stored silver tables by name, as
+-- 007's do, and silver_session_cohort_week stays a plain view like silver_session_cohort.
 --
 -- ClickHouse only (ADR-0028). INV-3 and the five-person minimum (ADR-0029) govern every view here
 -- as they govern 007: a pseudonym is counted, never selected, and a name or team label is shown

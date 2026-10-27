@@ -508,7 +508,7 @@ func TestCollectorGoldAppliesTheMinimumGroupSize(t *testing.T) {
 		"session_start_context_p50": "1000", "turn_peak_context_max": "3000",
 	})
 
-	// The weekly views (015). The daily views above saw seedFleet's Monday alone; the rest of the
+	// The weekly views (018). The daily views above saw seedFleet's Monday alone; the rest of the
 	// week arrives now.
 	seedWeek(s)
 	prev := s.day.AddDate(0, 0, -7).Format("2006-01-02")
