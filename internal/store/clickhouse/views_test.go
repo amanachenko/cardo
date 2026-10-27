@@ -112,6 +112,11 @@ func (s *seed) write() {
 	if err := s.st.c.Insert(ctx, hooksTable, s.hooks.Bytes()); err != nil {
 		s.t.Fatal(err)
 	}
+	// Silver is stored and rebuilt every 10 minutes (ADR-0052): rebuild it now, or the views read
+	// the tables as they were before these rows.
+	if err := RebuildSilver(ctx, s.st.c); err != nil {
+		s.t.Fatal(err)
+	}
 }
 
 // seedFleet writes the whole scenario. Each comment says what the scenario is there to prove.

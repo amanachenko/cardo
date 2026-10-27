@@ -185,15 +185,15 @@ what to build, not a plan.
   sends them. It runs each over the dashboard's own last 30 days and over the whole history. A
   query that fails, or takes longer than 10 seconds, fails the check.
 
-**Today the dashboard part fails at every size.** The views part passes.
-- **At 60 people,** the enablement dashboard takes about 95 seconds to draw. Six of its 13 panels
-  reach Grafana's 60-second limit and draw nothing.
-- **At 40 people,** it takes about 52 seconds.
-- **Why:** it is
-  [the views recomputing everything on every read](../risks.md#14-the-collector-path-views-recompute-everything-on-every-read)
-  (risk 14). Every
-  silver view reads the raw log table again, so one panel reads about 100 million rows from a table
-  of 5.5 million. The last 30 days take as long as the whole history.
+**Both parts pass.** Before the check reads anything, it rebuilds the stored silver tables, which
+ClickHouse otherwise rebuilds every 10 minutes
+([ADR-0052](adr/0052-silver-is-stored-and-rebuilt-every-10-minutes.md)). A check run straight after the load would otherwise read
+tables rebuilt while the load was still sending.
+- **At 60 people,** the enablement dashboard draws in about 1.4 seconds.
+- **Before silver was stored,** it took about 95 seconds, and six of its 13 panels reached
+  Grafana's 60-second limit and drew nothing. Every silver view read the raw log table again, so
+  one panel read about 100 million rows from a table of 5.5 million
+  ([risk 14](../risks.md#14-the-collector-path-views-recompute-everything-on-every-read)).
 - **The fleet dashboard answers at once, with no rows.** It reads the Admin API's cost data, which
   this stack does not have yet.
 

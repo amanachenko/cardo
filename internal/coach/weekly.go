@@ -43,7 +43,7 @@ func Weekly(ctx context.Context, endpoint, user, pass, pseudonym string, weeks i
 	}
 
 	turns, err := post(fmt.Sprintf(`SELECT toMonday(day) AS w, uniqExact(session_id), round(sum(cost_usd), 2)
-		FROM cardo.silver_turn WHERE pseudonym = '%s' AND day >= toDate('%s')
+		FROM cardo.silver_turn_live WHERE pseudonym = '%s' AND day >= toDate('%s')
 		GROUP BY w ORDER BY w FORMAT TSV`, pseudonym, from.Format("2006-01-02")))
 	if err != nil {
 		return nil, err
@@ -69,7 +69,7 @@ func Weekly(ctx context.Context, endpoint, user, pass, pseudonym string, weeks i
 	}
 
 	fails, err := post(fmt.Sprintf(`SELECT toMonday(day) AS w, countIf(ran = 1 AND succeeded = 0)
-		FROM cardo.silver_tool_call WHERE pseudonym = '%s' AND day >= toDate('%s')
+		FROM cardo.silver_tool_call_live WHERE pseudonym = '%s' AND day >= toDate('%s')
 		GROUP BY w ORDER BY w FORMAT TSV`, pseudonym, from.Format("2006-01-02")))
 	if err != nil {
 		return nil, err

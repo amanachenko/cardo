@@ -23,8 +23,9 @@ against those two real sessions.
   ([note](../research/2026-10-06-first-permission-denied.md)). OTel arrives on an individual
   account. **Claude Code waits for every HTTP hook**, so each one gives up after one second
   ([ADR-0039](../adr/0039-hooks-wait-at-most-one-second.md)).
-- **Collector path (Phase 2, analysis).** Seven silver views and four gold marts over the
-  collector's bronze, and an enablement dashboard. They are verified three ways:
+- **Collector path (Phase 2, analysis).** Seven silver views, stored as tables ClickHouse rebuilds
+  every 10 minutes ([ADR-0052](../adr/0052-silver-is-stored-and-rebuilt-every-10-minutes.md)), four gold marts over the collector's bronze,
+  and an enablement dashboard. They are verified three ways:
   - against a live ClickHouse with seeded rows, including each rule broken on purpose;
   - against the collector's fixture corpus, run through the real collector;
   - against the two real sessions, whose permission waits, model-switch costs and context sizes
@@ -193,8 +194,9 @@ Every write goes through `settings_changes`, and the leadership Grafana reads `l
                                           bronze_otel_metrics_sum   (DDL: sql/clickhouse/004,
                                           applied by `cardo migrate`; 90-day TTL)
                                                                      |
-                                     silver views, sql/clickhouse/006: session, api_request, turn,
-                                     tool_call, policy_decision, context_event, artifact_load
+                                     silver, sql/clickhouse/006 and 017: session, api_request, turn,
+                                     tool_call, policy_decision, context_event, artifact_load;
+                                     each a table rebuilt every 10 minutes from its _live view
                                                                      |
                                      gold views, sql/clickhouse/007: artifact_usage,
                                      instructions_versions, friction_daily, context_daily
@@ -205,9 +207,20 @@ Every write goes through `settings_changes`, and the leadership Grafana reads `l
                                      Grafana  dashboards/cardo-enablement.json
 ```
 
-The views are plain views, computed on every read ([risks.md](../../risks.md) #14), and exist in
-the ClickHouse dialect only ([ADR-0028](../adr/0028-file-store-is-admin-api-only.md)). Four things
-shape them, each measured from a real session:
+The silver views are stored ([ADR-0052](../adr/0052-silver-is-stored-and-rebuilt-every-10-minutes.md)). Each is a table ClickHouse
+rebuilds every 10 minutes from a plain view of the same name with `_live` added, such as
+`silver_session_live`. So the dashboards run up to 10 minutes behind, and the enablement dashboard
+draws in 1.4 seconds on the made-up organization rather than 95.7 ([risks.md](../../risks.md) #14).
+`cardo check`, the console and the coach read the `_live` views, so they see a session at once.
+The gold views, and `silver_session_cohort`, stay plain views, so a changed setting takes effect on
+the next read. The enablement dashboard shows when silver was last rebuilt (`gold_data_as_of`).
+
+The ClickHouse has to have refreshable materialized views. The reference stack pins 26.6, where
+they are on by default; an organization's own ClickHouse needs a version where they are on too.
+
+All of these views exist in the ClickHouse dialect only
+([ADR-0028](../adr/0028-file-store-is-admin-api-only.md)). Four things shape them, each measured
+from a real session:
 
 - **Hook rows have no identity.** They reach a pseudonym and a cohort through their session's
   OTel rows.
@@ -294,7 +307,7 @@ developer machine                     organization's infrastructure
 | Hook pack (12 HTTP hooks) | inside the bundle's `hooks` block | **built**, observed from Claude Code 2.1.281 to 2.1.291: 11 of 12 events have arrived | [0005](../adr/0005-collection-mechanism.md), [0039](../adr/0039-hooks-wait-at-most-one-second.md) |
 | Collector config | `deploy/collector/` | **built**, verified against a running collector 0.161.0 and two real Claude Code sessions; repository classification verified against the collector only | [0006](../adr/0006-pseudonymization.md), [0012](../adr/0012-ingest-implementation.md), [0025](../adr/0025-artifact-names-kept-with-guardrails.md), [0026](../adr/0026-stale-instructions-by-versioned-name.md), [0035](../adr/0035-repository-identity-classified.md), [0039](../adr/0039-hooks-wait-at-most-one-second.md) |
 | Collector bronze tables | `sql/clickhouse/004_bronze_collector.sql` | **built** | [0016](../adr/0016-retention.md), [0025](../adr/0025-artifact-names-kept-with-guardrails.md) |
-| Silver views over collector data | `sql/clickhouse/006_silver_collector.sql`, `008_silver_model_switch.sql`, `009_silver_model_switch_cost.sql` | **built** — seven views; verified against seeded rows, the fixture corpus through the collector, and two real sessions | [0025](../adr/0025-artifact-names-kept-with-guardrails.md), [0028](../adr/0028-file-store-is-admin-api-only.md) |
+| Silver views over collector data | `sql/clickhouse/006_silver_collector.sql`, `008_silver_model_switch.sql`, `009_silver_model_switch_cost.sql`, `017_stored_silver.sql` | **built** — seven views, stored as tables rebuilt every 10 minutes; verified against seeded rows, the fixture corpus through the collector, two real sessions and the made-up organization's answer key | [0025](../adr/0025-artifact-names-kept-with-guardrails.md), [0028](../adr/0028-file-store-is-admin-api-only.md), [0052](../adr/0052-silver-is-stored-and-rebuilt-every-10-minutes.md) |
 | Gold marts over collector data | `sql/clickhouse/007_gold_collector.sql` | **built** — artifact usage, instructions versions, friction, context; the minimum group size applied | [0008](../adr/0008-outcome-variable.md), [0026](../adr/0026-stale-instructions-by-versioned-name.md), [0029](../adr/0029-minimum-group-size.md), [0039](../adr/0039-hooks-wait-at-most-one-second.md) |
 | View settings | `sql/clickhouse/005_settings.sql`, `internal/store/clickhouse/settings.go` | **built** — the org pattern and the minimum group size, written by `cardo migrate` | [0029](../adr/0029-minimum-group-size.md) |
 | `cardo poll` CLI | `cmd/cardo/` | **built** | [0017](../adr/0017-v01-scope.md) |

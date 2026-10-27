@@ -777,6 +777,11 @@ func TestCollector_HookPayloadsReduceToTheAllowlist(t *testing.T) {
 		}
 		return got
 	}
+	// Silver is stored and rebuilt every 10 minutes (ADR-0052): rebuild it now, so it holds the
+	// fixtures' rows.
+	if err := clickhouse.RebuildSilver(context.Background(), s.ch); err != nil {
+		t.Fatal(err)
+	}
 	sessions := count(fmt.Sprintf(
 		"SELECT 'sessions', count() FROM cardo.silver_session WHERE startsWith(session_id, '%s.')", run))
 	if sessions["sessions"] != len(sent) {

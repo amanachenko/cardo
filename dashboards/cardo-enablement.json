@@ -15,6 +15,55 @@
   },
   "panels": [
     {
+      "id": 18,
+      "title": "Data as of",
+      "type": "stat",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "cardo-clickhouse"
+      },
+      "description": "When the views behind this dashboard were last brought up to date. They are rebuilt from the raw rows every 10 minutes (ADR-0052), so a session reaches these panels up to 10 minutes after it happens. A time older than that means a rebuild keeps failing, and the panels show the data as it was then: failing says how many of the rebuilds failed on their last try.",
+      "gridPos": {
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "cardo-clickhouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT ifNull(formatDateTime(rebuilt_at, '%Y-%m-%d %H:%i UTC', 'UTC'), 'not yet') AS data_as_of, failing FROM cardo.gold_data_as_of"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/"
+        },
+        "textMode": "value_and_name",
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal"
+      }
+    },
+    {
       "id": 1,
       "title": "Artifacts: what the organization shipped, and what engineers built",
       "type": "row",
@@ -24,7 +73,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 0
+        "y": 3
       }
     },
     {
@@ -40,7 +89,7 @@
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 1
+        "y": 4
       },
       "targets": [
         {
@@ -92,7 +141,7 @@
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 1
+        "y": 4
       },
       "targets": [
         {
@@ -131,7 +180,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 10
+        "y": 13
       },
       "targets": [
         {
@@ -175,7 +224,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 18
+        "y": 21
       }
     },
     {
@@ -191,7 +240,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 19
+        "y": 22
       },
       "targets": [
         {
@@ -230,7 +279,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 19
+        "y": 22
       },
       "targets": [
         {
@@ -274,7 +323,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 27
+        "y": 30
       }
     },
     {
@@ -290,7 +339,7 @@
         "h": 9,
         "w": 8,
         "x": 0,
-        "y": 28
+        "y": 31
       },
       "targets": [
         {
@@ -362,7 +411,7 @@
         "h": 9,
         "w": 8,
         "x": 8,
-        "y": 28
+        "y": 31
       },
       "targets": [
         {
@@ -434,7 +483,7 @@
         "h": 9,
         "w": 8,
         "x": 16,
-        "y": 28
+        "y": 31
       },
       "targets": [
         {
@@ -506,7 +555,7 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 37
+        "y": 40
       },
       "targets": [
         {
@@ -542,7 +591,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 44
+        "y": 47
       }
     },
     {
@@ -558,7 +607,7 @@
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 45
+        "y": 48
       },
       "targets": [
         {
@@ -626,7 +675,7 @@
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 45
+        "y": 48
       },
       "targets": [
         {
@@ -694,7 +743,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 54
+        "y": 57
       },
       "targets": [
         {
@@ -733,7 +782,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 54
+        "y": 57
       },
       "targets": [
         {

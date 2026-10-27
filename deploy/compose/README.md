@@ -227,6 +227,26 @@ next Docker Desktop launch and the stack quietly runs forever. With `unless-stop
 which is also what lets Docker Desktop idle its VM, since that only engages when no container is
 running. Prefer `make stack-stop` over leaving it up.
 
+## The dashboards run up to 10 minutes behind
+
+The collector path's silver views are stored as tables, and ClickHouse rebuilds them every 10
+minutes ([ADR-0052](../../docs/adr/0052-silver-is-stored-and-rebuilt-every-10-minutes.md)). Without that, the enablement dashboard took
+a minute and a half to draw at 60 people. So a command first used at 10:00 reaches the dashboards
+by about 10:10. The enablement dashboard's top panel says when the rebuild last ran, for example
+"Data as of 2026-10-27 10:20 UTC". A time older than 10 minutes means a rebuild keeps failing, and
+`failing` beside it says how many. `cardo check`, the console and the coach read the raw rows as
+they stand, so they see a session at once.
+
+To rebuild now rather than wait, for example after loading rows by hand:
+
+```sh
+docker compose exec clickhouse clickhouse-client --user cardo --password "$CLICKHOUSE_PASSWORD" \
+  --query "SYSTEM REFRESH VIEW cardo.silver_session_refresh"
+```
+
+`SELECT view, status, last_success_time, exception FROM system.view_refreshes` lists all seven.
+A ClickHouse other than this stack's needs refreshable materialized views; 26.6 has them on.
+
 ## Getting at ClickHouse directly
 
 You do not need to for normal use — Grafana is the interface, and the poller applies the schema
@@ -308,6 +328,7 @@ batches on a 10-second timer, so it does not wake ClickHouse more often than tha
 retention rather than hashing is what actually bounds exposure. Rows older than the window are
 removed on a background merge, and the window is 90 days unless the organization changes it.
 
-Because the gold marts are views over bronze rather than materialized tables, **trends older than
-the window disappear along with the rows**. ADR-0016 intends aggregates to be kept indefinitely and
+Because the gold marts are worked out from bronze, **trends older than the window disappear along
+with the rows**. The collector path's stored silver tables are no exception: they are rebuilt from
+the raw rows every 10 minutes, and carry the same TTL in case a rebuild stops. ADR-0016 intends aggregates to be kept indefinitely and
 that part is not built yet — see [risks.md](../../risks.md) #10.
