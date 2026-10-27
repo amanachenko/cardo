@@ -76,13 +76,13 @@
     },
     {
       "id": 3,
-      "title": "Sessions per active engineer",
+      "title": "Sessions",
       "type": "timeseries",
       "datasource": {
         "type": "grafana-clickhouse-datasource",
         "uid": "cardo-clickhouse"
       },
-      "description": "Depth of use, not breadth. Rising adoption with a flat value here means more people trying it once; rising here means the people who adopted it are leaning on it.",
+      "description": "Sessions each day, by source. Read it beside the people using Claude Code: more sessions from about as many people means the people who use it use it more, and more people with as many sessions means more people trying it. Neither is divided by the other, because Cardo shows no figure per head (ADR-0030).",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -99,7 +99,7 @@
           "editorType": "sql",
           "queryType": "table",
           "format": 1,
-          "rawSql": "SELECT day AS time, source, sessions_per_active_actor FROM cardo.gold_fleet_adoption WHERE $__timeFilter(day) ORDER BY day"
+          "rawSql": "SELECT day AS time, source, sessions FROM cardo.gold_fleet_adoption WHERE $__timeFilter(day) ORDER BY day"
         }
       ],
       "fieldConfig": {
@@ -189,10 +189,10 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "cardo-clickhouse"
       },
-      "description": "Estimated cost in US dollars. The API reports cents; the silver layer divides once and names the column cost_usd, so nothing downstream divides again.",
+      "description": "Estimated cost in US dollars. The API reports cents; the silver layer divides once and names the column cost_usd, so nothing downstream divides again. Spend is never divided by the people active (ADR-0030).",
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 24,
         "x": 0,
         "y": 18
       },
@@ -207,53 +207,6 @@
           "queryType": "table",
           "format": 1,
           "rawSql": "SELECT day AS time, source, cost_usd FROM cardo.gold_cost_daily WHERE $__timeFilter(day) ORDER BY day"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "showPoints": "auto",
-            "pointSize": 5,
-            "spanNulls": false
-          },
-          "color": {
-            "mode": "palette-classic"
-          },
-          "unit": "currencyUSD",
-          "min": 0
-        },
-        "overrides": []
-      }
-    },
-    {
-      "id": 7,
-      "title": "Spend per active engineer",
-      "type": "timeseries",
-      "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "cardo-clickhouse"
-      },
-      "description": "The number to take into a capacity conversation. Total spend rises with headcount; this does not.",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 18
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "cardo-clickhouse"
-          },
-          "refId": "A",
-          "editorType": "sql",
-          "queryType": "table",
-          "format": 1,
-          "rawSql": "SELECT day AS time, source, cost_usd_per_active_actor FROM cardo.gold_cost_daily WHERE $__timeFilter(day) ORDER BY day"
         }
       ],
       "fieldConfig": {

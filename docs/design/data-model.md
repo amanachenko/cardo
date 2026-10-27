@@ -133,8 +133,10 @@ Vendor-specific richness lives in the attribute maps, not flattened away.
 ### Built (Admin API path)
 
 `gold_fleet_adoption`, `gold_tool_acceptance`, `gold_model_mix`, `gold_cost_daily`,
-`gold_schema_drift`. All are cohort-level: CI fails any `gold_*` view that selects a pseudonym
-(INV-3).
+`gold_schema_drift`. All are cohort-level: CI reads each `gold_*` view's last definition and
+fails one that uses a pseudonym for anything but counting people (INV-3). None divides by the
+people it counts: `019_no_per_head.sql` removed sessions and spend per active person
+([ADR-0030](../adr/0030-stakeholders-and-questions.md)).
 
 ### Built (collector path)
 

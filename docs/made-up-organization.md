@@ -176,8 +176,7 @@ what to build, not a plan.
   in the week spend rises. Only the releases table, read separately, shows the caching bug, so a
   reader credits the skill with the bug.
 - **One person's spend over a budget.** The view of cost over a published budget
-  ([ADR-0033](adr/0033-per-person-cost-for-budget-owners.md)) is not built. The fleet dashboard's
-  spend per engineer reads the Admin API's cost data, which this stack does not have yet.
+  ([ADR-0033](adr/0033-per-person-cost-for-budget-owners.md)) is not built.
 
 ## What check checks
 

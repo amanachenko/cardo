@@ -147,11 +147,16 @@ act (`cardo poll -days 30`), because an installation is not a historical import.
 
 The operator's Grafana uses the `cardo` ClickHouse user and can read every layer. The leadership
 datasource (`Cardo gold (read-only)`) uses `cardo_ro`, which is granted `SELECT` on the `leadership`
-database only: nine `SQL SECURITY DEFINER` views over the gold layer, created by `cardo gold`. The
+database only: one `SQL SECURITY DEFINER` view over each gold view, created by `cardo gold`. The
 step proves the boundary live — a query against `cardo.bronze_actor_day` or `cardo.silver_session`
 must be refused before the step passes — and `cardo check` repeats that proof without creating
 anything. DEFiner rights are what let the grant stay on `leadership.*` without reaching bronze or
 silver underneath.
+
+A leadership view lists the columns its gold view had when `cardo gold` made it. After a
+migration removes one, the view still counts its rows and refuses `SELECT *`, as
+`leadership.gold_cost_daily` did after 019. So `cardo check` reads every leadership view whole, and
+says to run `cardo gold` again when one fails.
 
 Both datasources are in the same Grafana organization, and a login can query any data source in
 its organization by id. So the grant does not yet limit what a leader's login can read: until the
@@ -330,7 +335,7 @@ developer machine                     organization's infrastructure
 | Fixture corpus + contract tests | `test/fixtures/` | **built**. Console: from documentation. Hooks: field names observed from 2.1.281 with synthetic values, plus the documented shapes | [0014](../adr/0014-version-drift.md) |
 | Invariant tests | `test/invariants_test.go`, `test/deploy_test.go`, `test/collector_test.go`, `test/bundle_test.go` | **built** — INV-1 through INV-7 | `invariants.md` |
 | Reference stack | `deploy/compose/` | **built** — ClickHouse + Grafana + collector, loopback-bound; an opt-in overlay serves the collector's two ports over the network through a TLS proxy (Caddy), never run with a team | [0057](../adr/0057-clickhouse-is-the-only-store.md) |
-| Dashboards | `dashboards/` | **built** — the fleet dashboard (Admin API, 9 panels, not reviewed) and the enablement dashboard (collector, 14 panels, one of them text, reviewed on the made-up organization). Each panel is described in [`dashboards.md`](dashboards.md), and a test fails when a panel and its entry disagree | [0057](../adr/0057-clickhouse-is-the-only-store.md), [0008](../adr/0008-outcome-variable.md), [0029](../adr/0029-minimum-group-size.md) |
+| Dashboards | `dashboards/` | **built** — the fleet dashboard (Admin API, 8 panels, not reviewed) and the enablement dashboard (collector, 14 panels, one of them text, reviewed on the made-up organization). Each panel is described in [`dashboards.md`](dashboards.md), and a test fails when a panel and its entry disagree | [0057](../adr/0057-clickhouse-is-the-only-store.md), [0008](../adr/0008-outcome-variable.md), [0029](../adr/0029-minimum-group-size.md) |
 | Made-up organization | `internal/madeup/`, `cmd/cardo-madeup/`, `scripts/made-up.sh`, `deploy/compose/docker-compose.made-up.yml` | **built** — invented engineers in teams, sent through the collector to a stack of its own, with an answer key that every collector-path view is checked against. Its figures are not evidence about anyone | [0051](../adr/0051-a-made-up-organization.md) |
 
 ## The hook pack
@@ -407,7 +412,7 @@ busy running two other hooks, and Claude Code showed "socket hang up" under the 
 | **INV-1** no transcript reads | CI scans every non-test Go file for `.claude/projects` and related paths |
 | **INV-2** no email persisted | The store accepts only `pseudonym.Scrubbed`, a type with no exported constructor — the sole way to obtain one is `Hasher.Scrub`. A behavioural test then runs the whole pipeline over a payload containing an address and searches every byte the store sends, to a recording server on loopback so it needs no database; a second test searches a real ClickHouse's rows the same way |
 | **INV-2** defence in depth | After scrubbing, the payload is searched for the identifier and for anything shaped like an email address, with the collector tripwire's pattern. A match aborts the run rather than storing the row: a partial scrub is the exact failure the invariant exists to prevent. A behavioural test puts someone else's address in a field the adapter does not model and requires the poll to stop with nothing of it sent to the store |
-| **INV-3** cohort-only | CI parses `sql/` and fails any `gold_*` view that selects a pseudonym. `COUNT(DISTINCT pseudonym)` is allowed; selecting it is not. Until 2026-09-25 the check matched only the unqualified `view gold_`, so it never read a ClickHouse view; it now fails if it finds none |
+| **INV-3** cohort-only | CI reads each `gold_*` view's last definition, in the order the migrations run, and fails one that uses a pseudonym for anything but counting people: `count(DISTINCT pseudonym)`, or `countDistinctIf(pseudonym, pseudonym != '')`, which leaves out a row without one. Selecting it, grouping by it or filtering on it fails. Until 2026-09-25 the check matched only the unqualified `view gold_`, so it never read a ClickHouse view; it now fails if it finds none. Until 2026-10-27 it skipped the line a view starts on, so a view written on one line, as 012 writes its own, went unchecked |
 | **INV-3** minimum group size | A live test seeds seven people, with cohorts of five and two, and requires the view to name the five and fold the two into `other`. It also requires the size to be raiseable and to stay at five when a lower value is written by hand. `cardo migrate` refuses a value below five ([ADR-0029](../adr/0029-minimum-group-size.md)) |
 | **INV-5** no content | The bronze column set is an allowlist checked against the row the store sends |
 | **INV-7** no phone-home | CI scans for outbound hosts and allows only `api.anthropic.com` |
@@ -450,7 +455,9 @@ The volume check was run against each friction panel and the fleet panel with it
 It first passed them all, because each rate is computed from its own volume. That is why it now
 requires an output column. When the enablement dashboard was rebuilt, three of its new panels
 failed it with their volume removed. The INV-3 check was run against a pseudonym planted in a
-ClickHouse gold view, which the old pattern had never read.
+ClickHouse gold view, which the old pattern had never read. When it learned to read a view's last
+definition, it was run against a view on one line that selects the pseudonym, which it had passed
+until then, and against a view that counts one named person; both fail.
 
 ## What deliberately does not exist
 

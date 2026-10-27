@@ -215,8 +215,7 @@ func catalog(p Preset, weeks int) []Story {
 			Planted: "A few people spend much of the money: monthly spend runs from about $100 to $4,000, " +
 				"and does not follow session counts.",
 			Gap: "By design no view shows one person's spend to anyone else (the per-person rule, INV-3). " +
-				"The view of cost over a published budget (ADR-0033) is not built, and the fleet " +
-				"dashboard's spend per engineer reads the cost data this stack does not have yet.",
+				"The view of cost over a published budget (ADR-0033) is not built.",
 		},
 		{
 			Name: "expensive-default",
