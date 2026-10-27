@@ -30,8 +30,9 @@ against those two real sessions.
   - against the two real sessions, whose permission waits, model-switch costs and context sizes
     match the research notes.
 
-  A view names a home-grown artifact or a cohort only once five people are in it
-  ([ADR-0029](../adr/0029-minimum-group-size.md)). The views are ClickHouse only
+  A view names a home-grown artifact or a cohort only once enough people are in it (five by
+  default; the organization may raise that) ([ADR-0029](../adr/0029-minimum-group-size.md)). The
+  views are ClickHouse only
   ([ADR-0028](../adr/0028-file-store-is-admin-api-only.md)).
 
 **Decided on 2026-09-25 and not built.** A design review settled who Cardo is for and what each of
@@ -120,7 +121,56 @@ and an empty day on a dashboard is indistinguishable from a day nobody worked.
 The store is replace-per-day rather than append, because both analytics APIs revise recent days and
 an appending poller would silently double every total.
 
-### The collector path
+### The installer
+
+`cmd/cardo` carries the reference installation as steps (`internal/launcher`): docker, ports, secrets,
+the compose stack, three health checks, the Claude Code settings file, a diagnostic probe and the
+proof from a real session. The CLI and the board call the same `RunStep`, so the browser has no second
+implementation. The board is loopback-only, authenticated by a token that is kept per port under the
+user cache and exchanged for an HttpOnly cookie; every action is a POST with that cookie.
+
+Two steps are deliberately not part of "install everything": `probe` (diagnostic) and `session`
+(proof). The probe writes one OTLP log and one hook event with a per-run marker, reads both counts
+back from ClickHouse, then deletes those rows — `silver_session` groups bronze by `session_id` with no
+filter of its own, so a probe left behind would become a phantom session. The proof is the engineer's
+own session, and `cardo check --proof` is what makes a CI run require it.
+
+### The Admin API poller in the stack
+
+`cardo poll -every 24h` runs as the `poller` service behind the Compose profile `admin` (ADR-0043).
+The profile is added only when `CARDO_ADMIN_KEY` is set, so a collector-only install never carries a
+container that cannot work and `compose up --wait` never waits for an exited one. The board's start
+screen writes the key to `.env` (0600, write-only) and shows the last day, rows and days that landed
+in `bronze_actor_day`; `Run now` restarts the service, which polls immediately. Backfill stays a CLI
+act (`cardo poll -days 30`), because an installation is not a historical import.
+
+### Who can read what
+
+The operator's Grafana uses the `cardo` ClickHouse user and can read every layer. The leadership
+datasource (`Cardo gold (read-only)`) uses `cardo_ro`, which is granted `SELECT` on the `leadership`
+database only: nine `SQL SECURITY DEFINER` views over the gold layer, created by `cardo gold`. The
+step proves the boundary live — a query against `cardo.bronze_actor_day` or `cardo.silver_session`
+must be refused before the step passes — and `cardo check` repeats that proof without creating
+anything. DEFiner rights are what let the grant stay on `leadership.*` without reaching bronze or
+silver underneath.
+
+Both datasources are in the same Grafana organization, and a login can query any data source in
+its organization by id. So the grant does not yet limit what a leader's login can read: until the
+gold datasource has a Grafana organization of its own, only the operator logs in
+([risks.md](../../risks.md) #15).
+
+
+## The console
+
+The same binary serves four surfaces after the stack is up: **Overview** (checks, sessions, poller,
+warnings, recent changes), **Catalog** (`settings_artifact_versions` + immutable files under
+`<compose-dir>/catalog/`), **Teams** (`settings_teams_batches` + `settings_teams`, hashed on load) and
+**Settings** (pilot mode, project directory, min group size, org artifacts, admin key). Install is no
+longer a peer tab: it is the repair room reached from Settings or the Overview next action (ADR-0044).
+Every write goes through `settings_changes`, and the leadership Grafana reads `leadership` views owned by
+`cardo` with `SQL SECURITY DEFINER` (ADR-0022, ADR-0045).
+
+## The collector path
 
 ```
   developer machine                         reference stack / organization's network
@@ -182,6 +232,23 @@ Hook payloads carry no identity. A hook row is tied to a person only through `se
 matches the `session.id` on that session's OTel records, and those carry the pseudonym. Every
 processor fails closed (`error_mode: propagate`). A missing, short or non-hex salt refuses OTel
 batches with a log line saying why, rather than storing reversible pseudonyms.
+
+**Service runs are labelled, and are never counted as people**
+([ADR-0036](../adr/0036-service-runs-are-not-people.md),
+[ADR-0054](../adr/0054-both-actor-types-are-people.md)). What shipped:
+
+- `silver_session` carries `actor_kind` (`person` or `service`) and `workflow`, read from the
+  `cardo.actor` and `cardo.workflow` resource attributes; a hook-only or metric-only session
+  defaults to `person`.
+- The label comes from the run, not from the actor type: the Analytics API's two types,
+  `user_actor` and `api_actor`, are both people, so neither can decide this.
+- `gold_fleet_adoption` counts both documented actor types as people, with
+  `countDistinctIf(pseudonym, pseudonym != '')`; `gold_artifact_usage` excludes sessions whose
+  `actor_kind` is `service` from both its fleet and its per-name people counts. The coach does the
+  same ([ADR-0048](../adr/0048-coach-in-the-console.md)).
+- `deploy/ci/github-actions.card.yaml` is the ready-made block: telemetry on, `cardo.actor=service`,
+  `cardo.workflow=${{ github.workflow }}`, and the instruction to run with an API key, never a
+  person's login.
 
 **Repositories ([ADR-0035](../adr/0035-repository-identity-classified.md)).** The bundle asks
 Claude Code for the repository a session works in, and the collector reduces the URL before
@@ -376,7 +443,8 @@ view, which the old pattern had never read.
 - **No DuckDB mode for the collector path.** The collector writes to ClickHouse only, and its views
   exist in the ClickHouse dialect only. ADR-0009's file store serves the Admin API path
   ([ADR-0028](../adr/0028-file-store-is-admin-api-only.md)).
-- **No transcript reader** (INV-1).
+- **No transcript reader on the collection path** (INV-1). The one exception is the import command
+  a person runs themselves (ADR-0050).
 - **No hosted service, no phone-home** (INV-7).
 - **No custom code on the hook ingest path** while OTTL holds
   ([ADR-0012](../adr/0012-ingest-implementation.md)).
@@ -385,11 +453,14 @@ view, which the old pattern had never read.
   low-entropy and guessable, so a weak salt yields pseudonyms that are trivially reversible by
   anyone holding them — a store that looks pseudonymous and is not is worse than one that does not
   run ([ADR-0006](../adr/0006-pseudonymization.md)).
-- **No `-base-url` flag.** The endpoint is fixed at `api.anthropic.com`, so the binary cannot be
-  pointed at an arbitrary collector (INV-7). Tests override it through an unexported option.
-- **No materialized gold marts, and therefore no trends older than 90 days.** ADR-0016 retains
-  tier-1 rows for 90 days and intends derived aggregates to survive indefinitely. The gold marts
-  are views over bronze, so when bronze expires the aggregates computed from it expire with it,
+- **The poller's endpoint is pinned** at `api.anthropic.com`, so the binary cannot be pointed at an
+  arbitrary collector (INV-7). The one exception is a loopback-only stand-in for verification:
+  `--base-url` accepts `127.0.0.1`, `::1` or `localhost` and refuses anything else
+  ([ADR-0047](../adr/0047-loopback-admin-stand-in.md)). Tests override the endpoint through an
+  unexported option.
+- **No materialized gold marts, and therefore no trends older than 90 days.** ADR-0053 retains
+  tier-1 rows for 90 days by default and intends derived aggregates to survive indefinitely. The
+  gold marts are views over bronze, so when bronze expires the aggregates computed from it expire with it,
   silently, on a background merge. The fix is a cohort-only rollup table written by the poller;
   it is not built ([risks.md](../../risks.md) #10). The collector-path marts have the same limit,
   and no poller runs on that path to write a rollup.

@@ -32,7 +32,8 @@ engineer around it and do not leave a doc saying something untrue.
 
 ## Invariants — do not violate without a superseding ADR
 
-- **INV-1** — Session transcripts are never read. No code path opens anything under
+- **INV-1** — Cardo never reads transcripts on its own. The one exception is `cardo import`, which a
+  person runs on their own machine and which keeps counts only. No code path opens anything under
   `~/.claude/projects/`. Not for debugging, not once, not behind a flag.
 - **INV-2** — `user.email` is never persisted. Pseudonymization happens before storage, always.
 - **INV-3** — No per-person view is visible to anyone except that person. Tier 1 is cohort-only. If a
@@ -109,8 +110,11 @@ Template and full rules: [docs/adr/0000-adr-process.md](docs/adr/0000-adr-proces
 - **Two storage targets on the Admin API path**, ClickHouse (reference) and the file store DuckDB
   reads, with the same columns and view names; a change to one belongs in both or in neither. **The
   collector path is ClickHouse only** ([ADR-0028](docs/adr/0028-file-store-is-admin-api-only.md)).
-- **Never add a `-base-url` flag to the poller.** The endpoint is pinned so the binary cannot be
-  aimed at an arbitrary host (INV-7). Tests override it through an unexported option.
+- **The poller's endpoint is pinned**, so the binary cannot be aimed at an arbitrary host (INV-7).
+  The one exception is a loopback-only stand-in for verification: `--base-url` accepts
+  `127.0.0.1`, `::1` or `localhost` and refuses anything else
+  ([ADR-0047](docs/adr/0047-loopback-admin-stand-in.md)). Tests override the endpoint through an
+  unexported option.
 - **Every efficiency rate is presented with its volume** ([ADR-0008](docs/adr/0008-outcome-variable.md),
   [ADR-0031](docs/adr/0031-what-works-means.md)). Without one it rewards timidity.
 - **Teams are compared on reach, never ranked** ([ADR-0030](docs/adr/0030-stakeholders-and-questions.md)).

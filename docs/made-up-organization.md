@@ -186,7 +186,7 @@ what to build, not a plan.
   query that fails, or takes longer than 10 seconds, fails the check.
 
 **Today the dashboard part fails at every size.** The views part passes.
-- **At 60 people,** the enablement dashboard takes about 85 seconds to draw. Three of its 13 panels
+- **At 60 people,** the enablement dashboard takes about 95 seconds to draw. Six of its 13 panels
   reach Grafana's 60-second limit and draw nothing.
 - **At 40 people,** it takes about 52 seconds.
 - **Why:** it is

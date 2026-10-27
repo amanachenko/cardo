@@ -14,6 +14,22 @@ The collector path has been checked against one engineer's real Claude Code sess
 run with a team, and the poller has never parsed a live Anthropic response
 ([risks.md](../risks.md) #12).
 
+The Admin API poller is now part of the stack (ADR-0043): a `poller` service behind the `admin`
+Compose profile, configured once from the board, so no operator machine needs a cron entry.
+
+The quickstart is built: one binary, `cardo ui` for the board, `cardo up` for the same steps without
+it, `cardo check` for a read-only pass, and `cardo check --proof` to require one real session with
+the fields the views read. The diagnostic probe (`cardo probe`) proves the pipeline and deletes its
+own rows, so no synthetic session ever reaches `silver_session`.
+
+A made-up organization is built, so a view can be seen before any organization's data exists
+([ADR-0051](adr/0051-a-made-up-organization.md)). It is 60 invented engineers in six teams, sent
+through the collector on a stack of its own, with stories planted in their sessions. For example,
+one engineer's `/deploy-check` command reaches a fifth person in week 5, and `check` confirms that
+the enablement views show it as "other" until then and by name after. Nothing seen there is a
+finding about real engineers, and what no view shows yet is listed in [the made-up
+organization](made-up-organization.md#what-no-view-shows-yet).
+
 [ADR-0030](adr/0030-stakeholders-and-questions.md) to [ADR-0037](adr/0037-policy-evidence.md)
 decided who Cardo is for and what each of them needs, and
 [the North Star decision (ADR-0042)](adr/0042-the-north-star.md) says what all of it is for. This
@@ -74,11 +90,20 @@ of the organization's instructions, and spotting a command a team built that is 
 missing is an organization running Cardo safely, so this comes first.
 
 - **A quickstart for one machine, and `cardo check`.** Run the stack, send your own sessions to it,
-  and check in one command that everything the views rely on has arrived. *Open.*
+  and check in one command that everything the views rely on has arrived. **Built:** `cardo ui` for
+  the board, `cardo up` for the same steps without it, `cardo check` for a read-only pass, and
+  `cardo check --proof` to require one real session with the fields the views read. The proof is a
+  real session, not a fixture.
 - **Dashboard logins that cannot read anyone's personal rows.** The leaders' Grafana gets its own
   database user, which can read only the grouped views, with a live test that it is refused the
   raw and per-person tables ([risks.md](../risks.md) #15). This must be done before anyone except
-  the operator gets a Grafana login. *Open.*
+  the operator gets a Grafana login. **Built:** `cardo gold` creates `cardo_ro`, the `leadership`
+  database of SQL SECURITY DEFINER views, grants `leadership.*` only, and proves the refusal live;
+  the `Cardo gold (read-only)` datasource uses it, and `cardo check` re-proves the boundary without
+  writing anything. **Still missing:** that datasource sits in the same Grafana organization as the
+  full-access one, and a login can query any data source in its organization. Leaders need a
+  Grafana organization of their own that holds only the gold datasource, with a live test that a
+  leader's login is refused the full-access one.
 - **A notice an organization can hand to its engineers.** It says:
   - who holds the salt, the key that could reveal who is behind a code name;
   - which settings are on;
@@ -101,10 +126,16 @@ missing is an organization running Cardo safely, so this comes first.
     comparison around the day it arrived;
   - the efficiency views noticing when one tool replaces another.
 
-  *Needs a decision:* how the rollout list is kept and loaded.
+  *Needs a decision:* how the rollout list is kept and loaded. **Built in part:** the enablement
+  catalog — versioned files on disk with their metadata in ClickHouse, validate → diff → draft →
+  approve, retire or roll back ([ADR-0045](adr/0045-catalog-storage.md)). The views still decide
+  which artifacts are the organization's own from the operator's list, so an approved version is not
+  yet what the views call an organization's artifact.
 - **Teams from a directory file** ([identity in pilots](adr/0034-identity-in-pilots.md)). Who is
   in which team, from an export the organization already has, so that a rollout that missed two
-  teams shows up. *Needs a decision:* the file's format, and how it is loaded.
+  teams shows up. *Needs a decision:* the file's format, and how it is loaded. **Built:** the console
+  accepts `email,team`, hashes it on load (ADR-0046), and shows coverage and the group floor; a
+  `cardo teams` CLI check remains.
 
 #### The engineer's side: what does struggle look like, and how does a person find out?
 
@@ -128,19 +159,27 @@ missing is an organization running Cardo safely, so this comes first.
 - **The code-name command, `cardo pseudonym <email>`**
   ([the coach by shared link](adr/0032-engineer-coach-by-shared-link.md),
   [identity in pilots](adr/0034-identity-in-pilots.md)). It prints one engineer's code name, so
-  that the operator can make that engineer's private page. *Open.*
+  that the operator can make that engineer's private page. **Built:** prints the value and its salt
+  version, read from the same salt the collector uses; the address is never stored.
 - **The private page, figures only, and `cardo coach`**
   ([the coach by shared link](adr/0032-engineer-coach-by-shared-link.md)). It shows a person their
   own permission waits, compactions, retry loops and context size, each against their own past.
   A CI rule checks that every query is fixed to one code name, or reads only the grouped views.
-  *Waits for* the code-name command.
+  *Waits for* the code-name command. **Built:** `cardo coach <email>` prints the figures, and the
+  console serves the same data as a page at `#/coach` (operator preview) and
+  `/coach/<pseudonym>?k=…` (per-person link), with an eight-week trend
+  ([ADR-0048](adr/0048-coach-in-the-console.md)). The per-person link is an **own-laptop setup
+  only**: it opens on the machine that runs the console, and how engineers on a team reach their
+  page is still open.
 - **Its own dashboard server** ([the coach by shared link](adr/0032-engineer-coach-by-shared-link.md)).
   A second Grafana for the private pages, apart from the leaders' one. *Waits for* dashboard logins
-  that cannot read anyone's personal rows.
+  that cannot read anyone's personal rows. **Built differently:** the coach is a page in the
+  console, not a second Grafana ([ADR-0048](adr/0048-coach-in-the-console.md)).
 - **Suggestions on the private page**
   ([the coach suggests what the fleet has shown](adr/0041-the-coach-suggests-what-the-fleet-has-shown.md)).
   Example: "11 people here use `/review`, and you haven't tried it yet". *Waits for* the signs of
-  struggle, and how each artifact arrived.
+  struggle, and how each artifact arrived. **Built:** one suggestion at a time, drawn only from what
+  the fleet has shown, with the count of the people who use it.
 
 The signs of struggle feed both tracks: leaders compare tools with them, and each engineer sees
 their own.
@@ -164,7 +203,9 @@ their own.
   decision,* recorded in an ADR.
 - **The automated-run label, and the CI settings block**
   ([service runs are not people](adr/0036-service-runs-are-not-people.md)). Runs in CI or in the
-  background are labelled as a service, and never counted as a person. *Open.*
+  background are labelled as a service, and never counted as a person. **Built:** actor kind and
+  workflow from resource attributes, service runs kept out of the people views, a GitHub Actions
+  block, and a check that fails on undocumented actor types.
 - **Which of the organization's repositories have instructions files,** and the optional setting
   that records their names ([repository identity](adr/0035-repository-identity-classified.md)).
   *Open.*
