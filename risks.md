@@ -414,9 +414,12 @@ days, at the made-up organization's placeholder rates, would send about 18 times
 nobody has measured the views at that size.
 
 **Status 2026-10-27: mitigated.** On the made-up organization, 60 people over 12 weeks, the
-enablement dashboard took 95.7 seconds to draw, and six of its 13 panels hit Grafana's 60-second
-limit. The seven session-level silver views are now tables ClickHouse rebuilds every 10 minutes
-(migration 017, [ADR-0052](docs/adr/0052-silver-is-stored-and-rebuilt-every-10-minutes.md)), and the same dashboard draws in 1.4 seconds.
+enablement dashboard as it was before its review took 95.7 seconds to draw, and six of its 13
+panels hit Grafana's 60-second limit. The seven session-level silver views are now tables
+ClickHouse rebuilds every 10 minutes (migration 017,
+[ADR-0052](docs/adr/0052-silver-is-stored-and-rebuilt-every-10-minutes.md)), and that dashboard
+draws in 1.4 seconds. The reviewed dashboard, with fifteen queries, has not been timed on the
+stored tables yet.
 The price is that the dashboards run up to 10 minutes behind, and that ClickHouse rebuilds
 everything every 10 minutes whether anyone looks or not: about 9 seconds and 5 GiB of memory at 60
 people.

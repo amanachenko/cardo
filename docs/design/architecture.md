@@ -216,8 +216,9 @@ Every write goes through `settings_changes`, and the leadership Grafana reads `l
 
 The silver views are stored ([ADR-0052](../adr/0052-silver-is-stored-and-rebuilt-every-10-minutes.md)). Each is a table ClickHouse
 rebuilds every 10 minutes from a plain view of the same name with `_live` added, such as
-`silver_session_live`. So the dashboards run up to 10 minutes behind, and the enablement dashboard
-draws in 1.4 seconds on the made-up organization rather than 95.7 ([risks.md](../../risks.md) #14).
+`silver_session_live`. So the dashboards run up to 10 minutes behind. On the made-up organization
+the enablement dashboard as it was before its review drew in 1.4 seconds rather than 95.7; the
+reviewed one has not been timed on the stored tables yet ([risks.md](../../risks.md) #14).
 `cardo check`, the console and the coach read the `_live` views, so they see a session at once.
 The gold views, and `silver_session_cohort`, stay plain views, so a changed setting takes effect on
 the next read. The enablement dashboard shows when silver was last rebuilt (`gold_data_as_of`).
