@@ -81,22 +81,22 @@ func (s *Server) teamsView(ctx context.Context) (teamsView, error) {
 			saltVersion = v
 		}
 	}
-	if n, err := s.chInt(ctx, "SELECT count() FROM cardo.silver_session WHERE "+sessionFilter); err == nil {
+	if n, err := s.chInt(ctx, "SELECT count() FROM cardo.silver_session_live WHERE "+sessionFilter); err == nil {
 		v.Sessions7d = n
 	}
 	if v.Loaded {
 		in := "pseudonym IN (SELECT pseudonym FROM cardo.settings_teams WHERE batch = '" + escapeSQL(v.Batch) + "' AND salt_version = '" + escapeSQL(saltVersion) + "')"
-		if n, err := s.chInt(ctx, "SELECT count() FROM cardo.silver_session WHERE "+sessionFilter+" AND "+in); err == nil {
+		if n, err := s.chInt(ctx, "SELECT count() FROM cardo.silver_session_live WHERE "+sessionFilter+" AND "+in); err == nil {
 			v.Mapped = n
 		}
-		if n, err := s.chInt(ctx, "SELECT uniqExact(pseudonym) FROM cardo.silver_session WHERE "+sessionFilter+" AND pseudonym IS NOT NULL AND pseudonym NOT IN (SELECT pseudonym FROM cardo.settings_teams WHERE batch = '"+escapeSQL(v.Batch)+"' AND salt_version = '"+escapeSQL(saltVersion)+"')"); err == nil {
+		if n, err := s.chInt(ctx, "SELECT uniqExact(pseudonym) FROM cardo.silver_session_live WHERE "+sessionFilter+" AND pseudonym IS NOT NULL AND pseudonym NOT IN (SELECT pseudonym FROM cardo.settings_teams WHERE batch = '"+escapeSQL(v.Batch)+"' AND salt_version = '"+escapeSQL(saltVersion)+"')"); err == nil {
 			v.Unassigned = n
 		}
 		if v.Sessions7d > 0 {
 			v.CoveragePct = float64(v.Mapped) / float64(v.Sessions7d) * 100
 		}
 		rows, err := s.ch(ctx, fmt.Sprintf(`SELECT t.team AS team, uniqExact(s.pseudonym) AS people, count() AS sessions
-			FROM cardo.silver_session s INNER JOIN cardo.settings_teams t
+			FROM cardo.silver_session_live s INNER JOIN cardo.settings_teams t
 			ON s.pseudonym = t.pseudonym AND t.batch = '%s' AND t.salt_version = s.salt_version
 			WHERE s.%s GROUP BY t.team ORDER BY sessions DESC FORMAT JSONEachRow`, escapeSQL(v.Batch), sessionFilter))
 		if err == nil {

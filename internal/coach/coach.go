@@ -86,10 +86,13 @@ func Query(ctx context.Context, endpoint, user, pass, pseudonym string, from, to
 		return string(body), nil
 	}
 
+	// The coach reads the _live silver views, so a session that just ended counts at once rather
+	// than at the next rebuild of the stored tables, up to 10 minutes later (ADR-0052). One
+	// person's rows are few, so reading them live costs little.
 	sql := fmt.Sprintf(`SELECT uniqExact(session_id), count(), round(sum(cost_usd), 4), sum(output_tokens),
-		toInt64(round(ifNotFinite(quantile(0.5)(peak_context_tokens), 0))) FROM cardo.silver_turn
+		toInt64(round(ifNotFinite(quantile(0.5)(peak_context_tokens), 0))) FROM cardo.silver_turn_live
 		WHERE pseudonym = '%s' AND day BETWEEN toDate('%s') AND toDate('%s')
-			AND session_id IN (SELECT session_id FROM cardo.silver_session WHERE actor_kind != 'service') FORMAT TSV`,
+			AND session_id IN (SELECT session_id FROM cardo.silver_session_live WHERE actor_kind != 'service') FORMAT TSV`,
 		pseudonym, from.Format("2006-01-02"), to.Format("2006-01-02"))
 	row, err := q(sql)
 	if err != nil {
@@ -102,8 +105,8 @@ func Query(ctx context.Context, endpoint, user, pass, pseudonym string, from, to
 	w.CostUSD = cost
 
 	sql = fmt.Sprintf(`SELECT countIf(ran = 1 AND succeeded = 0), countIf(ran = 1), countIf(is_edit = 1)
-		FROM cardo.silver_tool_call WHERE pseudonym = '%s' AND day BETWEEN toDate('%s') AND toDate('%s')
-			AND session_id IN (SELECT session_id FROM cardo.silver_session WHERE actor_kind != 'service') FORMAT TSV`,
+		FROM cardo.silver_tool_call_live WHERE pseudonym = '%s' AND day BETWEEN toDate('%s') AND toDate('%s')
+			AND session_id IN (SELECT session_id FROM cardo.silver_session_live WHERE actor_kind != 'service') FORMAT TSV`,
 		pseudonym, from.Format("2006-01-02"), to.Format("2006-01-02"))
 	row, err = q(sql)
 	if err != nil {
@@ -111,7 +114,7 @@ func Query(ctx context.Context, endpoint, user, pass, pseudonym string, from, to
 	}
 	_, _ = fmt.Sscanf(strings.TrimSpace(row), "%d\t%d\t%d", &w.FailedTools, &w.ToolCalls, &w.Edits)
 
-	sql = fmt.Sprintf(`SELECT name, count() FROM cardo.silver_artifact_load
+	sql = fmt.Sprintf(`SELECT name, count() FROM cardo.silver_artifact_load_live
 		WHERE pseudonym = '%s' AND day BETWEEN toDate('%s') AND toDate('%s')
 		GROUP BY name ORDER BY count() DESC LIMIT 3 FORMAT TSV`,
 		pseudonym, from.Format("2006-01-02"), to.Format("2006-01-02"))
@@ -156,14 +159,14 @@ func Suggest(untried []PeerArtifact) []string {
 // and neither is something an engineer can be told to adopt (ADR-0036, ADR-0041).
 func Untried(ctx context.Context, endpoint, user, pass, pseudonym string, from, to time.Time) ([]PeerArtifact, error) {
 	sql := fmt.Sprintf(`WITH fleet AS (
-			SELECT name, uniqExact(pseudonym) AS people FROM cardo.silver_artifact_load
+			SELECT name, uniqExact(pseudonym) AS people FROM cardo.silver_artifact_load_live
 			WHERE day BETWEEN toDate('%s') AND toDate('%s') AND pseudonym IS NOT NULL
 				AND is_builtin = 0
-				AND session_id IN (SELECT session_id FROM cardo.silver_session WHERE actor_kind != 'service')
+				AND session_id IN (SELECT session_id FROM cardo.silver_session_live WHERE actor_kind != 'service')
 			GROUP BY name
 			HAVING people >= (SELECT min_group_size FROM cardo.settings_effective)
 		), mine AS (
-			SELECT DISTINCT name FROM cardo.silver_artifact_load
+			SELECT DISTINCT name FROM cardo.silver_artifact_load_live
 			WHERE pseudonym = '%s' AND day BETWEEN toDate('%s') AND toDate('%s')
 		)
 		SELECT name, people FROM fleet WHERE name NOT IN (SELECT name FROM mine)
@@ -203,7 +206,7 @@ func Untried(ctx context.Context, endpoint, user, pass, pseudonym string, from, 
 // attribute them: Claude Code omits user.email when the run authenticates with an API key, and the
 // collector has nothing to hash. The coach says so instead of showing an unexplained empty page.
 func Unidentified(ctx context.Context, endpoint, user, pass string, from, to time.Time) (int, error) {
-	sql := fmt.Sprintf(`SELECT count() FROM cardo.silver_session
+	sql := fmt.Sprintf(`SELECT count() FROM cardo.silver_session_live
 		WHERE day BETWEEN toDate('%s') AND toDate('%s')
 		AND (pseudonym IS NULL OR pseudonym = '') FORMAT TSV`,
 		from.Format("2006-01-02"), to.Format("2006-01-02"))

@@ -251,6 +251,10 @@ type sessionRow struct {
 
 // latestSession reads the most recent session that the installer did not create. Probe markers are
 // excluded twice: the probe deletes its rows, and the query ignores any that survive.
+//
+// It reads the _live views, which work silver out from the raw tables as they are read: the stored
+// tables are rebuilt every 10 minutes (ADR-0052), and a session started a minute ago is the one
+// this check is about.
 func latestSession(ctx context.Context, opts Options) (*sessionRow, error) {
 	env, err := ReadDotEnv(filepath.Join(opts.Dir, ".env"))
 	if err != nil {
@@ -259,8 +263,8 @@ func latestSession(ctx context.Context, opts Options) (*sessionRow, error) {
 	// Imported history and the seeded demo identity are not evidence about the live path: transcripts
 	// carry no hook rows or app_version, and demo rows are synthetic. Only a real session can pass.
 	sql := "SELECT session_id AS id, ifNull(pseudonym, '') AS pseudonym, app_version, has_otel, has_hooks, " +
-		"(SELECT count() FROM cardo.silver_turn t WHERE t.session_id = s.session_id AND t.prompt_id != '') AS prompts " +
-		"FROM cardo.silver_session s WHERE session_id NOT LIKE '" + probePrefix + "%' " +
+		"(SELECT count() FROM cardo.silver_turn_live t WHERE t.session_id = s.session_id AND t.prompt_id != '') AS prompts " +
+		"FROM cardo.silver_session_live s WHERE session_id NOT LIKE '" + probePrefix + "%' " +
 		"AND session_id NOT LIKE 'demo-%' AND cohort != 'imported' " +
 		"ORDER BY last_event_at DESC LIMIT 1 FORMAT JSONEachRow"
 	body, _, err := chQuery(ctx, opts.url("8124", ""), env["CLICKHOUSE_USER"], env["CLICKHOUSE_PASSWORD"], sql)

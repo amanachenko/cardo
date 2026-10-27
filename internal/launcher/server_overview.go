@@ -161,8 +161,12 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 }
 
 // sessionFacts answers "how fresh is the collector path" in one query pair.
+//
+// The console reads the _live silver views throughout. The stored tables are up to 10 minutes
+// behind (ADR-0052), and a console that has just been installed is asked whether a session has
+// arrived yet.
 func (s *Server) sessionFacts(ctx context.Context) (string, int, error) {
-	body, err := s.ch(ctx, "SELECT count() AS n, toString(max(last_event_at)) AS last FROM cardo.silver_session WHERE session_id NOT LIKE '"+probePrefix+"%' AND last_event_at > now() - INTERVAL 7 DAY FORMAT JSONEachRow")
+	body, err := s.ch(ctx, "SELECT count() AS n, toString(max(last_event_at)) AS last FROM cardo.silver_session_live WHERE session_id NOT LIKE '"+probePrefix+"%' AND last_event_at > now() - INTERVAL 7 DAY FORMAT JSONEachRow")
 	if err != nil {
 		return "", 0, err
 	}
@@ -178,8 +182,8 @@ func (s *Server) sessionFacts(ctx context.Context) (string, int, error) {
 
 func (s *Server) latestSession(ctx context.Context) (*sessionCard, error) {
 	sql := "SELECT session_id, app_version, toString(started_at) AS started, toString(last_event_at) AS last, ended, end_reason, has_otel, has_hooks, " +
-		"(SELECT count() FROM cardo.silver_turn t WHERE t.session_id = s.session_id) AS prompts " +
-		"FROM cardo.silver_session s WHERE session_id NOT LIKE '" + probePrefix + "%' ORDER BY last_event_at DESC LIMIT 1 FORMAT JSONEachRow"
+		"(SELECT count() FROM cardo.silver_turn_live t WHERE t.session_id = s.session_id) AS prompts " +
+		"FROM cardo.silver_session_live s WHERE session_id NOT LIKE '" + probePrefix + "%' ORDER BY last_event_at DESC LIMIT 1 FORMAT JSONEachRow"
 	body, err := s.ch(ctx, sql)
 	if err != nil {
 		return nil, err
@@ -205,7 +209,7 @@ func (s *Server) latestSession(ctx context.Context) (*sessionCard, error) {
 		ID: row.ID, AppVersion: row.App, StartedAt: shortTime(row.Started), LastEvent: shortTime(row.Last),
 		Ended: row.Ended == 1, EndReason: row.EndReason, HasOTel: row.HasOTel == 1, HasHooks: row.HasHooks == 1, Prompts: row.Prompts,
 	}
-	arts, err := s.ch(ctx, "SELECT name, kind FROM cardo.silver_artifact_load WHERE session_id = '"+row.ID+"' GROUP BY name, kind ORDER BY name FORMAT JSONEachRow")
+	arts, err := s.ch(ctx, "SELECT name, kind FROM cardo.silver_artifact_load_live WHERE session_id = '"+row.ID+"' GROUP BY name, kind ORDER BY name FORMAT JSONEachRow")
 	if err == nil {
 		for _, line := range strings.Split(strings.TrimSpace(arts), "\n") {
 			var a struct {
