@@ -89,6 +89,11 @@ func madeUpStack(t *testing.T) *madeUpCheck {
 		t.Fatal("scripts/made-up.sh probe was run on this stack after its load, and its rows count in " +
 			"the views. Run down, up and load again.")
 	}
+	// Silver is stored and rebuilt every 10 minutes (ADR-0052). A check run straight after the load
+	// would otherwise read tables rebuilt while the load was still sending.
+	if err := clickhouse.RebuildSilver(context.Background(), c.ch); err != nil {
+		t.Fatal(err)
+	}
 	return c
 }
 
