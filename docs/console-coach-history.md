@@ -335,8 +335,10 @@ starts returning `service_account_actor`, the check fails loudly and names it.
 
 ## 8. Retention
 
-Raw rows are the only rows; silver and gold are views. Deleting raw rows therefore shortens every
-trend.
+Raw rows are the only rows everything else is worked out from. Silver and gold are views, except
+the collector path's stored silver tables, which are rebuilt from the raw rows every 10 minutes
+(ADR-0052). Deleting raw rows therefore shortens every trend, and the stored tables at their next
+rebuild. Their TTL moves with the bronze TTL.
 
 ```sh
 cardo prune -days 30 --dry-run    # count only
@@ -364,7 +366,7 @@ the console has never been opened.
 | --- | --- | --- |
 | `bronze_otel_logs` | MergeTree | Live telemetry **and** imported rows; imported ones carry `cardo.import=1`, `cardo.cohort=imported` |
 | `bronze_hook_events` | MergeTree | Reduced hook payloads (allowlist only) |
-| `silver_session`, `silver_turn`, `silver_api_request`, `silver_tool_call` | Views | Exclude `cardo-probe-%` sessions (migration 013) |
+| `silver_session`, `silver_turn`, `silver_api_request`, `silver_tool_call` | Tables, rebuilt every 10 minutes from their `_live` views (migration 017) | The console and the coach read the `_live` views, so a session shows at once. `silver_session` leaves out `cardo-probe-%` sessions (migration 013) |
 | `gold_cost_daily`, `gold_fleet_adoption`, `gold_artifact_usage`, … | Views | `gold_artifact_usage` excludes service runs |
 | `settings`, `settings_effective`, `settings_changes` | Tables | Immutable versions; every write audited |
 | `settings_artifact_versions` | Table | Catalog metadata; files stay on disk |
@@ -436,9 +438,10 @@ ALTER TABLE cardo.bronze_otel_logs
   DELETE WHERE LogAttributes['session.id'] LIKE 'demo-%' SETTINGS mutations_sync = 1;
 ```
 
-Silver and gold are views, so they empty immediately. Verify with
+The coach reads the `_live` silver views, so it empties at once. The stored silver tables, and the
+dashboards over them, empty at their next rebuild, within 10 minutes (ADR-0052). Verify with
 `cardo coach demo@cardo.local` (expect "No sessions for this pseudonym in this window") and by
-counting `silver_session` rows with `session_id LIKE 'demo-%'` (expect 0).
+counting `silver_session_live` rows with `session_id LIKE 'demo-%'` (expect 0).
 
 **Prove the Admin API path without a key**
 

@@ -60,6 +60,7 @@ The hard rules that these decisions produce live in
 | [0048](0048-coach-in-the-console.md) | The coach is a page in the console, not a second Grafana | Accepted | 2026-10-18 |
 | [0050](0050-local-transcript-import.md) | Cardo never reads transcripts on its own; `cardo import` is the one exception | Accepted | 2026-10-18 |
 | [0051](0051-a-made-up-organization.md) | A made-up organization is where views are seen and checked, never where findings come from | Accepted | 2026-10-22 |
+| [0052](0052-silver-is-stored-and-rebuilt-every-10-minutes.md) | The collector path's silver views are stored as tables ClickHouse rebuilds every 10 minutes | Proposed | 2026-10-23 |
 | [0053](0053-retention-default-and-organization-choice.md) | Retention is 90 days by default, and the organization may change it | Accepted | 2026-10-25 |
 | [0054](0054-both-actor-types-are-people.md) | Both actor types are people, so a service run is labelled by the run itself | Accepted | 2026-10-25 |
 
@@ -102,8 +103,8 @@ Recorded here so a future session knows these were considered and postponed, not
 - **Bedrock / Vertex / Foundry support** — out of scope for v1 (ADR-0018, upheld by ADR-0021).
 - **A file-store mode for the collector path** — until a team can run a collector but not
   ClickHouse (ADR-0028).
-- **Materialized collector-path views and rollups** — the views are plain views over 90-day bronze
-  (risks.md #10 and #14).
+- **Rollups that outlive the raw rows** — silver is stored, but rebuilt from 90-day bronze every
+  10 minutes, so nothing outlives the raw rows (risks.md #10, ADR-0052).
 - **The Claude Enterprise Analytics adapter** — built when an organization on Enterprise seats asks
   for it. The Console adapter went first because it could be tested without an organization
   (ADR-0021, ordered by ADR-0042).

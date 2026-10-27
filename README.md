@@ -335,7 +335,9 @@ cardo prune -days 30             # delete raw rows older than 30 days
 ```
 
 The window also changes the ClickHouse TTL on the bronze tables, so it works in both directions
-(the tables ship with 90 days). Silver and gold are views; they shorten with the raw rows.
+(the tables ship with 90 days). Silver and gold are worked out from the raw rows, so they shorten
+with them. The collector path's stored silver tables follow at their next rebuild, within 10
+minutes, and their TTL moves with the raw tables'.
 
 Ninety days is long enough to compare a few weeks before and after a tool is rolled out, and short
 enough that rows tied to a code name do not linger. The grouped totals carry no code name and are

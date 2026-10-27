@@ -409,12 +409,19 @@ times per refresh.
 On two real sessions that is milliseconds. At a thousand engineers and 90 days it is on the order
 of tens of millions of log rows per scan, and nobody has measured it.
 
-**Mitigation:** when a real deployment is slow, materialize silver: a daily table per view, written
-by a scheduled job or a ClickHouse refreshable materialized view, with the gold views unchanged on
-top. The same job is the fix for #10 on this path. Until then it is not built, because the views'
-shape is still being learned and a materialized table is a migration each time it changes.
-**Would falsify it:** a deployment of a few hundred engineers whose dashboards load in seconds on
-the views as they are.
+**Status 2026-10-27: mitigated.** On the made-up organization, 60 people over 12 weeks, the
+enablement dashboard took 95.7 seconds to draw, and six of its 13 panels hit Grafana's 60-second
+limit. The seven session-level silver views are now tables ClickHouse rebuilds every 10 minutes
+(migration 017, [ADR-0052](docs/adr/0052-silver-is-stored-and-rebuilt-every-10-minutes.md)), and the same dashboard draws in 1.4 seconds.
+The price is that the dashboards run up to 10 minutes behind, and that ClickHouse rebuilds
+everything every 10 minutes whether anyone looks or not: about 9 seconds and 5 GiB of memory at 60
+people.
+
+**What is left:** every rebuild starts again from all the raw rows. At 500 people that is an
+estimate of about a minute a rebuild, and at a few thousand it could fill the 10 minutes. The fix
+then is to rebuild only the last few days, which needs a superseding record. The rebuilds are not
+#10's fix: silver holds only what the raw rows hold.
+**Would falsify it:** a deployment of a few hundred engineers whose rebuilds take a few seconds.
 
 ### 15. Any Grafana login can read every row the data source can
 
