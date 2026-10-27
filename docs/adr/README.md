@@ -60,7 +60,7 @@ The hard rules that these decisions produce live in
 | [0048](0048-coach-in-the-console.md) | The coach is a page in the console, not a second Grafana | Accepted | 2026-10-18 |
 | [0050](0050-local-transcript-import.md) | Cardo never reads transcripts on its own; `cardo import` is the one exception | Accepted | 2026-10-18 |
 | [0051](0051-a-made-up-organization.md) | A made-up organization is where views are seen and checked, never where findings come from | Accepted | 2026-10-22 |
-| [0052](0052-silver-is-stored-and-rebuilt-every-10-minutes.md) | The collector path's silver views are stored as tables ClickHouse rebuilds every 10 minutes | Proposed | 2026-10-23 |
+| [0052](0052-silver-is-stored-and-rebuilt-every-10-minutes.md) | The collector path's silver views are stored as tables ClickHouse rebuilds every 10 minutes | Accepted | 2026-10-23 |
 | [0053](0053-retention-default-and-organization-choice.md) | Retention is 90 days by default, and the organization may change it | Accepted | 2026-10-25 |
 | [0054](0054-both-actor-types-are-people.md) | Both actor types are people, so a service run is labelled by the run itself | Accepted | 2026-10-25 |
 
