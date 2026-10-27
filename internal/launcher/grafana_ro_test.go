@@ -13,7 +13,8 @@ import (
 // do anything, the read-only user only reads the leadership database.
 type goldEnv struct {
 	mu     sync.Mutex
-	leaked bool // set to simulate a missing grant
+	leaked bool   // set to simulate a missing grant
+	stale  string // a leadership view made before a migration removed a column it lists
 	calls  int
 }
 
@@ -28,6 +29,11 @@ func (g *goldEnv) handler() http.HandlerFunc {
 		_, _ = r.Body.Read(body)
 		sql := strings.ToLower(string(body))
 		if user == "cardo_ro" {
+			if g.stale != "" && strings.Contains(sql, "select *") && strings.Contains(sql, "leadership."+g.stale) {
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = w.Write([]byte("Code: 47. Unknown expression identifier `cost_usd_per_active_actor`"))
+				return
+			}
 			if leaked || strings.Contains(sql, "leadership.") {
 				_, _ = w.Write([]byte("1\n"))
 				return
@@ -84,6 +90,27 @@ func TestGoldAccessFailsWhenTheReadOnlyUserCanSeeBronze(t *testing.T) {
 	}
 	if !strings.Contains(res.Cause, "bronze") {
 		t.Errorf("cause = %q, want it to name the leaked table", res.Cause)
+	}
+}
+
+func TestCheckGoldAccessReadsEveryViewWhole(t *testing.T) {
+	res, err := checkGoldAccess(context.Background(), goldOptions(t, &goldEnv{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.OK {
+		t.Fatalf("check failed on current views: %s / %s", res.Value, res.Cause)
+	}
+
+	res, err = checkGoldAccess(context.Background(), goldOptions(t, &goldEnv{stale: "gold_fleet_adoption"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.OK {
+		t.Fatal("check passed while a leadership view refused SELECT *")
+	}
+	if !strings.Contains(res.Value, "leadership.gold_fleet_adoption") || !strings.Contains(res.Fix, "cardo gold") {
+		t.Errorf("check = %q / %q, want it to name the view and say to run cardo gold", res.Value, res.Fix)
 	}
 }
 

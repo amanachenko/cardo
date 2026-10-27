@@ -122,7 +122,7 @@ var Steps = []Meta{
 		ID: "gold", Group: "Access", Name: "Leader access", Cmd: "cardo gold",
 		Title: "Summaries without personal rows",
 		Body: []string{
-			"Creates the gold-only ClickHouse user the leadership Grafana uses. It can read the nine gold views and nothing else: bronze and silver are refused, and the step proves that refusal live before it passes.",
+			"Creates the gold-only ClickHouse user the leadership Grafana uses. It can read the gold views and nothing else: bronze and silver are refused, and the step proves that refusal live before it passes.",
 			"A refusal is the successful outcome. If the read-only user can read a raw table, this step fails and the login must not be handed out.",
 		},
 		Action: "Verify",

@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -399,70 +400,97 @@ func (s staticAdapter) Fetch(ctx context.Context, day time.Time) ([]source.Recor
 // If a view would let a manager rank their reports, it is the wrong view.
 //
 // Gold is the layer dashboards read, so it is the layer where this is breached. A pseudonym may
-// be counted — COUNT(DISTINCT pseudonym) is how cohort size is measured — but it may never be
+// be counted, which is how a group is sized without naming anyone in it, but it may never be
 // selected as an output column, because that is a leaderboard with one rename to go.
+//
+// Each gold view is judged by its last definition, in the order the runner applies the
+// migrations, because that is the one a dashboard reads. Every line of it is read, the CREATE
+// line too. 012 wrote its views on one line each, as ClickHouse prints them, and while this check
+// skipped the CREATE line it read nothing of them: a view on one line that selected every
+// pseudonym passed.
 func TestINV3_GoldViewsExposeNoPerPersonRows(t *testing.T) {
-	dir := filepath.Join(repoRoot(t), "sql")
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		t.Skip("no sql/ directory yet")
-	}
-
-	goldView := regexp.MustCompile(`view\s+(cardo\.)?gold_`)
-	var checked, checkedClickHouse int
-	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".sql") {
-			return err
-		}
-		b, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		rel, _ := filepath.Rel(repoRoot(t), path)
-
-		var inGoldView bool
-		for n, line := range strings.Split(string(b), "\n") {
-			trimmed := strings.TrimSpace(line)
-			lower := strings.ToLower(trimmed)
-
-			if strings.Contains(lower, "create or replace view") {
-				// ClickHouse qualifies every view with the database. Matching only the
-				// unqualified form once let every ClickHouse gold view go unchecked.
-				inGoldView = goldView.MatchString(lower)
-				if inGoldView {
-					checked++
-					if strings.Contains(path, "clickhouse") {
-						checkedClickHouse++
-					}
-				}
-				continue
-			}
-			if !inGoldView || strings.HasPrefix(trimmed, "--") {
-				continue
-			}
-			if !strings.Contains(lower, "pseudonym") {
-				continue
-			}
-			// Counting distinct actors is the legitimate use: it sizes a cohort without
-			// naming anyone in it.
-			if strings.Contains(lower, "count(distinct pseudonym)") {
-				continue
-			}
-			t.Errorf("INV-3 violated: %s:%d exposes a pseudonym in a gold view:\n  %s\n"+
-				"  Gold is cohort-only. A pseudonym may be counted, never selected — a per-person\n"+
-				"  row here is a ranking a manager can sort.", rel, n+1, trimmed)
-		}
-		return nil
-	})
+	root := repoRoot(t)
+	paths, err := filepath.Glob(filepath.Join(root, "sql", "clickhouse", "*.sql"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if checked == 0 {
+	sort.Strings(paths)
+
+	type sqlLine struct {
+		n    int
+		text string
+	}
+	type definition struct {
+		file  string
+		lines []sqlLine
+	}
+	created := regexp.MustCompile(`^\s*create\s+(?:or\s+replace\s+)?(?:materialized\s+)?view\s+` +
+		`(?:if\s+not\s+exists\s+)?(?:cardo\.)?(gold_\w+)`)
+	dropped := regexp.MustCompile(`^\s*drop\s+(?:view|table)\s+(?:if\s+exists\s+)?(?:cardo\.)?(gold_\w+)`)
+	final := map[string]definition{}
+	for _, path := range paths {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rel, _ := filepath.Rel(root, path)
+		var stmt []sqlLine
+		for n, text := range strings.Split(string(b), "\n") {
+			// As the runner splits a file: a comment runs to the end of its line, and a semicolon
+			// ends a statement.
+			if i := strings.Index(text, "--"); i >= 0 {
+				text = text[:i]
+			}
+			parts := strings.Split(text, ";")
+			for i, part := range parts {
+				if strings.TrimSpace(part) != "" {
+					stmt = append(stmt, sqlLine{n + 1, part})
+				}
+				if i == len(parts)-1 {
+					break
+				}
+				var whole strings.Builder
+				for _, l := range stmt {
+					whole.WriteString(strings.ToLower(l.text) + "\n")
+				}
+				if m := created.FindStringSubmatch(whole.String()); m != nil {
+					final[m[1]] = definition{rel, stmt}
+				} else if m := dropped.FindStringSubmatch(whole.String()); m != nil {
+					delete(final, m[1])
+				}
+				stmt = nil
+			}
+		}
+	}
+	if len(final) == 0 {
 		t.Fatal("no gold views were found to check; this test would pass vacuously")
 	}
-	// The collector-path gold views exist only in the ClickHouse dialect (ADR-0028), so a check
-	// that silently skipped that dialect would guard none of them.
-	if checkedClickHouse == 0 {
-		t.Fatal("no ClickHouse gold views were found to check; the view pattern no longer matches them")
+
+	// The ways a view counts people. countDistinctIf with this one condition leaves out a row
+	// without a pseudonym (ADR-0036), as gold_fleet_adoption does; any other condition could
+	// count one person.
+	counted := regexp.MustCompile(`count\(\s*distinct\s+(?:\w+\.)?pseudonym\s*\)` +
+		`|countdistinct\(\s*(?:\w+\.)?pseudonym\s*\)` +
+		`|countdistinctif\(\s*(?:\w+\.)?pseudonym\s*,\s*(?:\w+\.)?pseudonym\s*!=\s*''\s*\)`)
+	views := make([]string, 0, len(final))
+	for v := range final {
+		views = append(views, v)
+	}
+	sort.Strings(views)
+	for _, v := range views {
+		def := final[v]
+		for _, l := range def.lines {
+			rest := counted.ReplaceAllString(strings.ToLower(l.text), "")
+			i := strings.Index(rest, "pseudonym")
+			if i < 0 {
+				continue
+			}
+			// A view on one line is hundreds of characters; show the part around the pseudonym.
+			excerpt := strings.TrimSpace(rest[max(0, i-60):min(len(rest), i+70)])
+			t.Errorf("INV-3 violated: %s:%d exposes a pseudonym in %s, as last defined:\n  ...%s...\n"+
+				"  Gold is cohort-only. A pseudonym may be counted, never selected — a per-person\n"+
+				"  row here is a ranking a manager can sort.", def.file, l.n, v, excerpt)
+		}
 	}
 }
 

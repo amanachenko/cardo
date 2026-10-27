@@ -139,9 +139,26 @@ func checkGoldAccess(ctx context.Context, opts Options) (Result, error) {
 				Fix:   "Revoke that grant before anyone receives a leadership login."}, nil
 		}
 	}
-	if _, _, err := chQuery(ctx, opts.url("8124", ""), "cardo_ro", password, "SELECT count() FROM "+leadershipDB+".gold_fleet_adoption"); err != nil {
-		return Result{ID: "gold", Name: "GOLD", Value: "read-only user cannot read gold",
-			Cause: err.Error(), Fix: "Run cardo gold to recreate the leadership views and the grant."}, nil
+	// Each view whole, not a count of one. A view made before a migration changed its gold view
+	// still counts rows, and fails once a column it lists is read: after 019 removed two columns,
+	// leadership.gold_cost_daily answered count() and refused SELECT *.
+	names, _, err := chQuery(ctx, opts.url("8124", ""), env["CLICKHOUSE_USER"], env["CLICKHOUSE_PASSWORD"],
+		"SELECT name FROM system.tables WHERE database = '"+leadershipDB+"' ORDER BY name")
+	if err != nil {
+		return Result{ID: "gold", Name: "GOLD", Value: "cannot list the leadership views",
+			Cause: err.Error(), Fix: "Check that ClickHouse answers on 8124."}, nil
+	}
+	views := strings.Fields(names)
+	if len(views) == 0 {
+		return Result{ID: "gold", Name: "GOLD", Value: "no leadership views",
+			Fix: "Run cardo gold to recreate the leadership views and the grant."}, nil
+	}
+	for _, v := range views {
+		if _, _, err := chQuery(ctx, opts.url("8124", ""), "cardo_ro", password, "SELECT * FROM "+leadershipDB+"."+v+" LIMIT 0"); err != nil {
+			return Result{ID: "gold", Name: "GOLD", Value: "read-only user cannot read " + leadershipDB + "." + v,
+				Cause: err.Error(), Fix: "Run cardo gold to recreate the leadership views and the grant. " +
+					"A view made before a migration changed it fails until then."}, nil
+		}
 	}
 	return Result{ID: "gold", Name: "GOLD", Value: "cardo_ro · gold readable · bronze and silver refused", OK: true}, nil
 }

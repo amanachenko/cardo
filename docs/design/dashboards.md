@@ -354,6 +354,12 @@ cost data path. Its figures are daily, and it predates the rules above. Its desc
 each chart shows, not who reads it, so its entries have no "For" line. Its review starts from
 [the questions after them](#questions-for-the-fleet-dashboards-review).
 
+It had two figures per head, sessions and spend per active engineer, which
+[who Cardo serves (ADR-0030)](../adr/0030-stakeholders-and-questions.md) rules out in its seventh
+decision: "Cardo computes and shows no per-head ratio". Both were removed on 2026-10-27, from the
+views by `sql/clickhouse/019_no_per_head.sql` and from the dashboard. The sessions chart now
+shows the count itself, and the spend chart is gone, since "Daily spend" shows the total.
+
 ### Fleet adoption
 
 #### Engineers using Claude Code
@@ -363,14 +369,15 @@ each chart shows, not who reads it, so its entries have no "For" line. Its revie
 - **Cannot show:** who.
 - **Status:** not reviewed; waits for the cost data path.
 
-#### Sessions per active engineer
+#### Sessions
 
-- **Asks:** are the people who use Claude Code leaning on it more, or are more people trying it
-  once?
-- **Reads:** `gold_fleet_adoption`: sessions divided by the people active that day.
-- **Cannot show:** how the sessions spread. An average per head hides that people work in very
-  different ways: on the made-up organization, someone with a thousand short sessions a month sits
-  beside someone with twenty long ones.
+- **Asks:** how many sessions ran each day? Read beside the people using Claude Code, it says
+  whether the people who use it use it more, or more people are trying it.
+- **Reads:** `gold_fleet_adoption`: the sessions that day, by source. They are never divided by
+  the people active.
+- **Cannot show:** how the sessions spread across people, who work in very different ways: on the
+  made-up organization, someone with a thousand short sessions a month sits beside someone with
+  twenty long ones.
 - **Status:** not reviewed; waits for the cost data path.
 
 #### Code movement
@@ -389,15 +396,6 @@ each chart shows, not who reads it, so its entries have no "For" line. Its revie
 - **Reads:** `gold_cost_daily`: the cost in dollars, by source. The API reports cents; silver
   divides once.
 - **Cannot show:** why it moved.
-- **Status:** not reviewed; waits for the cost data path.
-
-#### Spend per active engineer
-
-- **Asks:** what does Claude Code cost per active person each day? Its description calls it the
-  number to take into a capacity conversation.
-- **Reads:** `gold_cost_daily`: the cost divided by the people active that day.
-- **Cannot show:** where the money goes. An average per head hides that a few people spend much
-  of it, as on the made-up organization, where it was planted.
 - **Status:** not reviewed; waits for the cost data path.
 
 #### Model mix by spend
@@ -438,11 +436,6 @@ each chart shows, not who reads it, so its entries have no "For" line. Its revie
 
 ## Questions for the fleet dashboard's review
 
-- **Two panels divide by headcount.** "Sessions per active engineer" and "Spend per active
-  engineer" are figures per head, which
-  [who Cardo serves (ADR-0030)](../adr/0030-stakeholders-and-questions.md) rules out in its seventh
-  decision: "Cardo computes and shows no per-head ratio". [The privacy page](privacy.md) makes the
-  same promise to engineers. Both panels predate that decision.
 - **Who each chart is for, and what they decide with it.** No description says.
 - **Daily or weekly.** The enablement dashboard went weekly because daily team figures broke at
   weekends. The fleet dashboard draws no team today.

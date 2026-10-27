@@ -45,6 +45,11 @@ stored tables; `cardo check`, the console and the coach read the `_live` views.
   now reads every migration from 012 on. A new weekly view joins `silver_session_cohort_week`,
   which holds no service run; one that reads `silver_session` directly filters
   `actor_kind != 'service'` itself.
+- Dividing a fleet's figure by the people active. It is a figure per head, which
+  [who Cardo serves (ADR-0030)](../../docs/adr/0030-stakeholders-and-questions.md) rules out, and
+  it hides how the figure spreads, as when a few people spend much of the money. 019 removed
+  sessions and spend per active person; show the count, with the people beside it in a column or
+  chart of their own. A share of people, such as `people_share`, is reach and stays.
 - Reading `estimated_cost.amount` as dollars. **It is cents**, on both analytics APIs. Silver divides
   once and names the column `cost_usd`; nothing downstream should divide again.
 - `sum(x) AS x` in a ClickHouse view, or in a dashboard panel. It is an error as soon as `x` is
