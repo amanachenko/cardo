@@ -1,6 +1,7 @@
-// Package retention deletes raw rows older than the operator's window. Silver and gold are views,
-// so only bronze is touched; a shorter window therefore shortens every downstream number at once
-// (ADR-0012).
+// Package retention deletes raw rows older than the operator's window. Gold is views over silver,
+// and silver is views or tables rebuilt from bronze, so only bronze is deleted from; a shorter
+// window therefore shortens every downstream number at once (ADR-0012). The stored silver tables
+// carry bronze's expiry as well, in case their rebuilds stop, and it moves with bronze's (ADR-0052).
 package retention
 
 import (
@@ -17,11 +18,26 @@ import (
 // what the shipped tables' TTL already does, and what the console shows as "90 (default)".
 const DefaultDays = 90
 
-// Table is one bronze table and the predicate that ages it.
+// Table is one table retention ages, and how.
 type Table struct {
 	Name string
-	Age  string // a SQL predicate over the table, e.g. "day < today() - 30"
+	Age  string // a SQL predicate over the table, e.g. "day < today() - 30"; empty when nothing is deleted from it
 	TTL  string // the expression the table's TTL is built on, e.g. "day"; empty when it carries none
+	// Refresher is the refreshable view that rebuilds a stored silver table, empty for any other.
+	// It is stopped while the table's TTL moves (see alterTTL).
+	Refresher string
+}
+
+// storedSilver lists the silver tables rebuilt from bronze every 10 minutes, each with the
+// refresher that rebuilds it (sql/clickhouse/017_stored_silver.sql).
+var storedSilver = [][2]string{
+	{"cardo.silver_session", "cardo.silver_session_refresh"},
+	{"cardo.silver_api_request", "cardo.silver_api_request_refresh"},
+	{"cardo.silver_tool_call", "cardo.silver_tool_call_refresh"},
+	{"cardo.silver_turn", "cardo.silver_turn_refresh"},
+	{"cardo.silver_policy_decision", "cardo.silver_policy_decision_refresh"},
+	{"cardo.silver_context_event", "cardo.silver_context_event_refresh"},
+	{"cardo.silver_artifact_load_stored", "cardo.silver_artifact_load_refresh"},
 }
 
 // Tables is the fixed list retention owns.
@@ -29,14 +45,21 @@ type Table struct {
 // The staging table carries no TTL on purpose: its rows live for seconds, between the write and
 // the partition swap (sql/clickhouse/001_bronze.sql). Retention still ages out what a crashed
 // poll left behind, but it does not put a TTL on a table that is meant to have none.
+//
+// Nothing is deleted from the stored silver tables. Each rebuild starts again from bronze, so a row
+// deleted there leaves silver at the next rebuild, within 10 minutes. Only their TTL moves.
 func Tables(days int) []Table {
-	return []Table{
+	tables := []Table{
 		{Name: "cardo.bronze_actor_day", Age: fmt.Sprintf("day < today() - %d", days), TTL: "day"},
 		{Name: "cardo.bronze_actor_day_staging", Age: fmt.Sprintf("day < today() - %d", days)},
 		{Name: "cardo.bronze_otel_logs", Age: fmt.Sprintf("Timestamp < now() - INTERVAL %d DAY", days), TTL: "toDate(Timestamp)"},
 		{Name: "cardo.bronze_hook_events", Age: fmt.Sprintf("Timestamp < now() - INTERVAL %d DAY", days), TTL: "toDate(Timestamp)"},
 		{Name: "cardo.bronze_otel_metrics_sum", Age: fmt.Sprintf("TimeUnix < now() - INTERVAL %d DAY", days), TTL: "toDate(TimeUnix)"},
 	}
+	for _, s := range storedSilver {
+		tables = append(tables, Table{Name: s[0], TTL: "day", Refresher: s[1]})
+	}
+	return tables
 }
 
 // Report says how many rows each table would delete, or did.
@@ -57,18 +80,23 @@ func Prune(ctx context.Context, endpoint, user, pass string, days int, dryRun bo
 			// Keep everything. Nothing is deleted, and the TTL comes off, so nothing expires on
 			// its own either. A dry run says the same thing without touching the table.
 			if !dryRun && t.TTL != "" {
-				if err := exec(ctx, endpoint, user, pass, fmt.Sprintf("ALTER TABLE %s REMOVE TTL", t.Name)); err != nil {
+				if err := alterTTL(ctx, endpoint, user, pass, t, "REMOVE TTL"); err != nil {
 					return out, fmt.Errorf("%s: %w", t.Name, err)
 				}
 			}
-			out[t.Name] = 0
+			if t.Age != "" {
+				out[t.Name] = 0
+			}
 			continue
 		}
 		if !dryRun && t.TTL != "" {
 			// The table ships with a 90-day TTL; the operator's window wins, in both directions.
-			if err := exec(ctx, endpoint, user, pass, fmt.Sprintf("ALTER TABLE %s MODIFY TTL %s + toIntervalDay(%d)", t.Name, t.TTL, days)); err != nil {
+			if err := alterTTL(ctx, endpoint, user, pass, t, fmt.Sprintf("MODIFY TTL %s + toIntervalDay(%d)", t.TTL, days)); err != nil {
 				return out, fmt.Errorf("%s: %w", t.Name, err)
 			}
+		}
+		if t.Age == "" {
+			continue
 		}
 		n, err := count(ctx, endpoint, user, pass, fmt.Sprintf("SELECT count() FROM %s WHERE %s", t.Name, t.Age))
 		if err != nil {
@@ -102,16 +130,38 @@ func ApplyWindow(ctx context.Context, endpoint, user, pass string, days int) err
 			continue
 		}
 		if days == 0 {
-			if err := exec(ctx, endpoint, user, pass, fmt.Sprintf("ALTER TABLE %s REMOVE TTL", t.Name)); err != nil {
+			if err := alterTTL(ctx, endpoint, user, pass, t, "REMOVE TTL"); err != nil {
 				return fmt.Errorf("%s: %w", t.Name, err)
 			}
 			continue
 		}
-		if err := exec(ctx, endpoint, user, pass, fmt.Sprintf("ALTER TABLE %s MODIFY TTL %s + toIntervalDay(%d)", t.Name, t.TTL, days)); err != nil {
+		if err := alterTTL(ctx, endpoint, user, pass, t, fmt.Sprintf("MODIFY TTL %s + toIntervalDay(%d)", t.TTL, days)); err != nil {
 			return fmt.Errorf("%s: %w", t.Name, err)
 		}
 	}
 	return nil
+}
+
+// alterTTL changes one table's TTL.
+//
+// A stored silver table's refresher is stopped first and started again after. A rebuild fills a
+// new table made from the old one's definition as the rebuild began, and swaps it in when done,
+// so a TTL changed while a rebuild runs comes back as it was. Measured on ClickHouse 26.6: a
+// 21-day TTL set during a rebuild was 60 again once the rebuild finished. Stopping the refresher
+// cancels a rebuild in progress, and the next one starts from the changed table.
+func alterTTL(ctx context.Context, endpoint, user, pass string, t Table, change string) error {
+	alter := fmt.Sprintf("ALTER TABLE %s %s", t.Name, change)
+	if t.Refresher == "" {
+		return exec(ctx, endpoint, user, pass, alter)
+	}
+	if err := exec(ctx, endpoint, user, pass, "SYSTEM STOP VIEW "+t.Refresher); err != nil {
+		return err
+	}
+	err := exec(ctx, endpoint, user, pass, alter)
+	if serr := exec(ctx, endpoint, user, pass, "SYSTEM START VIEW "+t.Refresher); err == nil {
+		err = serr
+	}
+	return err
 }
 
 // EffectiveWindow returns the window in force: the one the operator chose in the console, or the

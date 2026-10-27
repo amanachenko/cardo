@@ -56,7 +56,7 @@ func TestZeroKeepsEverythingAndTakesTheTTLOff(t *testing.T) {
 			removed++
 		}
 	}
-	// Four tables carry a TTL. The staging table never had one, so there is nothing to take off.
+	// Every table but staging carries a TTL. Staging never had one, so there is nothing to take off.
 	withTTL := 0
 	for _, tbl := range Tables(0) {
 		if tbl.TTL != "" {
@@ -209,7 +209,44 @@ func TestApplyWindowOfZeroTakesTheTTLOff(t *testing.T) {
 			removed++
 		}
 	}
-	if removed != 4 {
-		t.Errorf("%d tables had their TTL taken off, want 4: the staging table never had one", removed)
+	if want := len(Tables(0)) - 1; removed != want {
+		t.Errorf("%d tables had their TTL taken off, want %d: the staging table never had one", removed, want)
+	}
+}
+
+// The stored silver tables are rebuilt from bronze every 10 minutes (ADR-0052). Their TTL moves
+// with bronze's, in case rebuilds stop, but nothing is deleted from them: the next rebuild drops
+// what bronze lost. A rebuild that runs while the TTL moves would swap the old TTL back in, so each
+// table's refresher is stopped before its TTL changes and started again after.
+func TestStoredSilverMovesItsTTLWithItsRefresherStopped(t *testing.T) {
+	for _, days := range []int{30, 0} {
+		st := &stub{}
+		srv := st.server(t)
+		report, err := Prune(context.Background(), srv.URL, "u", "p", days, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, s := range storedSilver {
+			table, refresher := s[0], s[1]
+			if _, ok := report[table]; ok {
+				t.Errorf("window %d: %s is in the report, but nothing is ever deleted from it", days, table)
+			}
+			var order []string
+			for _, sql := range st.statements {
+				switch {
+				case sql == "SYSTEM STOP VIEW "+refresher:
+					order = append(order, "stop")
+				case strings.HasPrefix(sql, "ALTER TABLE "+table+" ") && strings.Contains(sql, "TTL"):
+					order = append(order, "ttl")
+				case sql == "SYSTEM START VIEW "+refresher:
+					order = append(order, "start")
+				case strings.Contains(sql, table+" ") && (strings.Contains(sql, "DELETE") || strings.Contains(sql, "count()")):
+					t.Errorf("window %d: %s was read or deleted from: %s", days, table, sql)
+				}
+			}
+			if got := strings.Join(order, ","); got != "stop,ttl,start" {
+				t.Errorf("window %d: %s got %q, want its refresher stopped, its TTL changed, then the refresher started", days, table, got)
+			}
+		}
 	}
 }
