@@ -3,9 +3,6 @@
 # Go is expected on PATH. If it was installed as a zip rather than system-wide:
 #   export PATH="$$LOCALAPPDATA/cardo-toolchain/go/bin:$$PATH"
 
-SAMPLE_DIR ?= .sample
-DUCKDB     ?= duckdb
-
 .PHONY: all
 all: fmt vet test
 
@@ -37,28 +34,9 @@ test-race:
 invariants:
 	go test ./test/ -v -run 'TestINV'
 
-# Regenerate the sample store and re-check every DuckDB view against it.
-#
-# The script goes in on stdin rather than through `duckdb -c`: dot commands like `.read` are a
-# feature of the CLI's input loop, and `-c` parses its argument as SQL, so the `-c` form fails with
-# a syntax error on the leading dot.
-.PHONY: sql
-sql:
-	CARDO_SAMPLE_DIR=$(SAMPLE_DIR) go test ./test/ -run TestGenerateSampleStore
-	printf '%s\n' \
-	  ".bail on" \
-	  "SET VARIABLE cardo_root = '$(SAMPLE_DIR)';" \
-	  ".read sql/duckdb/010_bronze.sql" \
-	  ".read sql/duckdb/020_silver.sql" \
-	  ".read sql/duckdb/030_gold.sql" \
-	  "SELECT * FROM gold_fleet_adoption ORDER BY day;" \
-	  "SELECT * FROM gold_schema_drift;" \
-	  ".read test/duckdb_checks.sql" \
-	| $(DUCKDB) -init /dev/null
-
 .PHONY: clean
 clean:
-	rm -rf bin $(SAMPLE_DIR)
+	rm -rf bin
 
 # --- ClickHouse reference stack -------------------------------------------------------------
 #

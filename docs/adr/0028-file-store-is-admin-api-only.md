@@ -1,6 +1,6 @@
 # ADR-0028 — The file store serves the Admin API path only
 
-**Status:** Accepted
+**Status:** Superseded by [ADR-0057](0057-clickhouse-is-the-only-store.md)
 **Date:** 2026-09-25
 **Evidence:** Judgment, the operator's. The facts it rests on are in [risks.md](../../risks.md) #13
 and in `2026-09-24-first-real-hook-payloads.md`, which measured OTel arriving on an individual

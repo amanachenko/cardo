@@ -8,9 +8,9 @@
 dashboard over it. The collection half has seen a real Claude Code, and the views have been checked
 against those two real sessions.
 
-- **Admin API path (Phase 1).** Poller, pseudonymization, both storage targets, the SQL layers over
-  each, and a Grafana dashboard. The ClickHouse half is verified against a real server; the DuckDB
-  half against a generated store. No adapter has parsed a live response: an individual account
+- **Admin API path (Phase 1).** Poller, pseudonymization, the ClickHouse store, the SQL layers over
+  it, and a Grafana dashboard, verified against a real server. The file store that DuckDB read was
+  removed on 2026-10-27 ([ADR-0057](../adr/0057-clickhouse-is-the-only-store.md)). No adapter has parsed a live response: an individual account
   gets 403 on every Admin endpoint ([note](../research/2026-09-23-admin-api-individual-account.md)).
 - **Collector path (Phase 2, collection).** The managed-settings bundle, the twelve-event hook
   pack, and the org-edge collector config writing to three ClickHouse bronze tables. Verified
@@ -38,7 +38,7 @@ against those two real sessions.
   A view names a home-grown artifact or a cohort only once enough people are in it (five by
   default; the organization may raise that) ([ADR-0029](../adr/0029-minimum-group-size.md)). The
   views are ClickHouse only
-  ([ADR-0028](../adr/0028-file-store-is-admin-api-only.md)).
+  ([ADR-0057](../adr/0057-clickhouse-is-the-only-store.md)).
 
 **Decided on 2026-09-25 and not built.** A design review settled who Cardo is for and what each of
 them needs ([ADR-0030](../adr/0030-stakeholders-and-questions.md) to
@@ -93,30 +93,24 @@ one ([risks.md](../../risks.md) #15).
   |           |                                    |
   |           v   [ only pseudonym.Scrubbed        |
   |               crosses this line ]              |
-  |  store              internal/store/jsonl/      |
+  |  store              internal/store/clickhouse/ |
   +-----------------------------------------------+
           |
           v
+  ClickHouse  cardo.bronze_actor_day
+  (migrations embedded in the binary)
           |
-          +--------------------------+
-          |                          |
-          v                          v
-  data/bronze/source=console/   ClickHouse  internal/store/clickhouse/
-    YYYY-MM-DD.jsonl              cardo.bronze_actor_day
-  (Hive-partitioned NDJSON)       (migrations embedded in the binary)
-          |                          |
-          v                          v
-  DuckDB                          ClickHouse
-  sql/duckdb/010 -> 020 -> 030    sql/clickhouse/001 -> 002 -> 003
-                                     |
-                                     v
-                                  Grafana  dashboards/cardo-fleet.json
+          v
+  sql/clickhouse/001 -> 002 -> 003
+          |
+          v
+  Grafana  dashboards/cardo-fleet.json
 ```
 
-Both storage targets exist because ADR-0009 requires both to work: ClickHouse for a real
-deployment, and the file store so a five-engineer pilot needs nothing approved by anyone. They hold
-the same columns — enforced by a test, not by discipline — and the two SQL dialects publish the
-same view and column names, so a dashboard cannot tell which engine it is reading.
+ClickHouse is the only store ([ADR-0057](../adr/0057-clickhouse-is-the-only-store.md)). Until 2026-10-27 the poller could also
+write one file per day for DuckDB to read, with the Admin API views written a second time in
+DuckDB's dialect. That mode showed the Admin API's daily figures and nothing built since, and it
+was removed.
 
 The ClickHouse write is atomic per day. Rows land in a staging table and are moved across with
 `ALTER TABLE ... REPLACE PARTITION`, so a reader sees either the previous version of a day or the
@@ -227,7 +221,7 @@ The ClickHouse has to have refreshable materialized views. The reference stack p
 they are on by default; an organization's own ClickHouse needs a version where they are on too.
 
 All of these views exist in the ClickHouse dialect only
-([ADR-0028](../adr/0028-file-store-is-admin-api-only.md)). Four things shape them, each measured
+([ADR-0057](../adr/0057-clickhouse-is-the-only-store.md)). Four things shape them, each measured
 from a real session:
 
 - **Hook rows have no identity.** They reach a pseudonym and a cohort through their session's
@@ -323,7 +317,7 @@ developer machine                     organization's infrastructure
 | Hook pack (12 HTTP hooks) | inside the bundle's `hooks` block | **built**, observed from Claude Code 2.1.281 to 2.1.291: 11 of 12 events have arrived | [0005](../adr/0005-collection-mechanism.md), [0039](../adr/0039-hooks-wait-at-most-one-second.md) |
 | Collector config | `deploy/collector/` | **built**, verified against a running collector 0.161.0 and two real Claude Code sessions; repository classification verified against the collector only | [0006](../adr/0006-pseudonymization.md), [0012](../adr/0012-ingest-implementation.md), [0025](../adr/0025-artifact-names-kept-with-guardrails.md), [0026](../adr/0026-stale-instructions-by-versioned-name.md), [0035](../adr/0035-repository-identity-classified.md), [0039](../adr/0039-hooks-wait-at-most-one-second.md) |
 | Collector bronze tables | `sql/clickhouse/004_bronze_collector.sql` | **built** | [0016](../adr/0016-retention.md), [0025](../adr/0025-artifact-names-kept-with-guardrails.md) |
-| Silver views over collector data | `sql/clickhouse/006_silver_collector.sql`, `008_silver_model_switch.sql`, `009_silver_model_switch_cost.sql`, `017_stored_silver.sql` | **built** — seven views, stored as tables rebuilt every 10 minutes; verified against seeded rows, the fixture corpus through the collector, two real sessions and the made-up organization's answer key | [0025](../adr/0025-artifact-names-kept-with-guardrails.md), [0028](../adr/0028-file-store-is-admin-api-only.md), [0052](../adr/0052-silver-is-stored-and-rebuilt-every-10-minutes.md) |
+| Silver views over collector data | `sql/clickhouse/006_silver_collector.sql`, `008_silver_model_switch.sql`, `009_silver_model_switch_cost.sql`, `017_stored_silver.sql` | **built** — seven views, stored as tables rebuilt every 10 minutes; verified against seeded rows, the fixture corpus through the collector, two real sessions and the made-up organization's answer key | [0025](../adr/0025-artifact-names-kept-with-guardrails.md), [0052](../adr/0052-silver-is-stored-and-rebuilt-every-10-minutes.md) |
 | Gold marts over collector data | `sql/clickhouse/007_gold_collector.sql`, `018_gold_enablement_review.sql` | **built** — artifact usage and instructions versions by week; friction and context by day (007). By week (018): spend by team and by model, cache use by Claude Code release, the context sessions start with, context by team, instructions versions by team, and failing calls repeated in a row by tool. The minimum group size applied over each view's own period | [0008](../adr/0008-outcome-variable.md), [0026](../adr/0026-stale-instructions-by-versioned-name.md), [0029](../adr/0029-minimum-group-size.md), [0030](../adr/0030-stakeholders-and-questions.md), [0039](../adr/0039-hooks-wait-at-most-one-second.md) |
 | View settings | `sql/clickhouse/005_settings.sql`, `internal/store/clickhouse/settings.go` | **built** — the org pattern and the minimum group size, written by `cardo migrate` | [0029](../adr/0029-minimum-group-size.md) |
 | `cardo poll` CLI | `cmd/cardo/` | **built** | [0017](../adr/0017-v01-scope.md) |
@@ -331,14 +325,12 @@ developer machine                     organization's infrastructure
 | Console adapter (Claude Code Analytics API) | `internal/source/console/` | **built**, unverified against live API | [0017](../adr/0017-v01-scope.md), [0021](../adr/0021-analytics-source-scope.md) |
 | Enterprise adapter (Claude Enterprise Analytics API) | — | not built; [built when an organization on Enterprise seats asks](../vision.md#later-when-an-organization-asks) | [0021](../adr/0021-analytics-source-scope.md), risks #8 |
 | Pseudonymizer | `internal/pseudonym/` | **built** | [0006](../adr/0006-pseudonymization.md) |
-| File store (no-infrastructure mode) | `internal/store/jsonl/` | **built** | [0009](../adr/0009-storage-agnostic-clickhouse-reference.md) |
-| ClickHouse store + migration runner | `internal/store/clickhouse/` | **built**, verified against ClickHouse 26.6 | [0009](../adr/0009-storage-agnostic-clickhouse-reference.md), [0019](../adr/0019-sql-tooling.md), [0022](../adr/0022-clickhouse-access.md) |
-| SQL layers (DuckDB) | `sql/duckdb/` | **built**, verified against a generated store | [0010](../adr/0010-layered-schema.md) |
+| ClickHouse store + migration runner | `internal/store/clickhouse/` | **built**, verified against ClickHouse 26.6; the only store | [0057](../adr/0057-clickhouse-is-the-only-store.md), [0019](../adr/0019-sql-tooling.md), [0022](../adr/0022-clickhouse-access.md) |
 | SQL layers (ClickHouse) | `sql/clickhouse/` | **built**, verified against a live server | [0010](../adr/0010-layered-schema.md), [0016](../adr/0016-retention.md) |
 | Fixture corpus + contract tests | `test/fixtures/` | **built**. Console: from documentation. Hooks: field names observed from 2.1.281 with synthetic values, plus the documented shapes | [0014](../adr/0014-version-drift.md) |
 | Invariant tests | `test/invariants_test.go`, `test/deploy_test.go`, `test/collector_test.go`, `test/bundle_test.go` | **built** — INV-1 through INV-7 | `invariants.md` |
-| Reference stack | `deploy/compose/` | **built** — ClickHouse + Grafana + collector, loopback-bound; an opt-in overlay serves the collector's two ports over the network through a TLS proxy (Caddy), never run with a team | [0009](../adr/0009-storage-agnostic-clickhouse-reference.md) |
-| Dashboards | `dashboards/` | **built** — the fleet dashboard (Admin API, 9 panels, not reviewed) and the enablement dashboard (collector, 14 panels, one of them text, reviewed on the made-up organization). Each panel is described in [`dashboards.md`](dashboards.md), and a test fails when a panel and its entry disagree | [0009](../adr/0009-storage-agnostic-clickhouse-reference.md), [0008](../adr/0008-outcome-variable.md), [0029](../adr/0029-minimum-group-size.md) |
+| Reference stack | `deploy/compose/` | **built** — ClickHouse + Grafana + collector, loopback-bound; an opt-in overlay serves the collector's two ports over the network through a TLS proxy (Caddy), never run with a team | [0057](../adr/0057-clickhouse-is-the-only-store.md) |
+| Dashboards | `dashboards/` | **built** — the fleet dashboard (Admin API, 9 panels, not reviewed) and the enablement dashboard (collector, 14 panels, one of them text, reviewed on the made-up organization). Each panel is described in [`dashboards.md`](dashboards.md), and a test fails when a panel and its entry disagree | [0057](../adr/0057-clickhouse-is-the-only-store.md), [0008](../adr/0008-outcome-variable.md), [0029](../adr/0029-minimum-group-size.md) |
 | Made-up organization | `internal/madeup/`, `cmd/cardo-madeup/`, `scripts/made-up.sh`, `deploy/compose/docker-compose.made-up.yml` | **built** — invented engineers in teams, sent through the collector to a stack of its own, with an answer key that every collector-path view is checked against. Its figures are not evidence about anyone | [0051](../adr/0051-a-made-up-organization.md) |
 
 ## The hook pack
@@ -413,14 +405,14 @@ busy running two other hooks, and Claude Code showed "socket hang up" under the 
 | Invariant | Mechanism |
 |---|---|
 | **INV-1** no transcript reads | CI scans every non-test Go file for `.claude/projects` and related paths |
-| **INV-2** no email persisted | The store accepts only `pseudonym.Scrubbed`, a type with no exported constructor — the sole way to obtain one is `Hasher.Scrub`. A behavioural test then runs the whole pipeline over a payload containing an address and greps every byte written to disk |
-| **INV-2** defence in depth | After scrubbing, the payload is searched for the identifier and for anything shaped like an email address, with the collector tripwire's pattern. A match aborts the run rather than storing the row: a partial scrub is the exact failure the invariant exists to prevent. A behavioural test puts someone else's address in a field the adapter does not model and requires the poll to stop with nothing of it on disk |
-| **INV-3** cohort-only | CI parses `sql/` and fails any `gold_*` view, in either dialect, that selects a pseudonym. `COUNT(DISTINCT pseudonym)` is allowed; selecting it is not. Until 2026-09-25 the check matched only the unqualified `view gold_`, so it never read a ClickHouse view; it now fails if it finds none |
+| **INV-2** no email persisted | The store accepts only `pseudonym.Scrubbed`, a type with no exported constructor — the sole way to obtain one is `Hasher.Scrub`. A behavioural test then runs the whole pipeline over a payload containing an address and searches every byte the store sends, to a recording server on loopback so it needs no database; a second test searches a real ClickHouse's rows the same way |
+| **INV-2** defence in depth | After scrubbing, the payload is searched for the identifier and for anything shaped like an email address, with the collector tripwire's pattern. A match aborts the run rather than storing the row: a partial scrub is the exact failure the invariant exists to prevent. A behavioural test puts someone else's address in a field the adapter does not model and requires the poll to stop with nothing of it sent to the store |
+| **INV-3** cohort-only | CI parses `sql/` and fails any `gold_*` view that selects a pseudonym. `COUNT(DISTINCT pseudonym)` is allowed; selecting it is not. Until 2026-09-25 the check matched only the unqualified `view gold_`, so it never read a ClickHouse view; it now fails if it finds none |
 | **INV-3** minimum group size | A live test seeds seven people, with cohorts of five and two, and requires the view to name the five and fold the two into `other`. It also requires the size to be raiseable and to stay at five when a lower value is written by hand. `cardo migrate` refuses a value below five ([ADR-0029](../adr/0029-minimum-group-size.md)) |
-| **INV-5** no content | The bronze column set is an allowlist checked against a real written row |
+| **INV-5** no content | The bronze column set is an allowlist checked against the row the store sends |
 | **INV-7** no phone-home | CI scans for outbound hosts and allows only `api.anthropic.com` |
 | **INV-3** on dashboards | CI parses every panel query in `dashboards/`. A panel may not name a pseudonym, and may not read bronze or silver directly — that is where "just one per-person panel" would actually be added, and it touches no SQL. It governs what a dashboard shows, not what a Grafana login can query: that is bounded only by the data source's database user ([risks.md](../../risks.md) #15) |
-| **INV-5** across both stores | The bronze column set is one list checked against three things: the test itself, a real row written by the JSONL store, and the ClickHouse DDL. A column added to one store and not the other fails here |
+| **INV-5** row and table | The bronze column set is one list checked against two things: the row the ClickHouse store sends and the table its DDL creates. A column added to one and not the other fails here, before the first insert would |
 | **ADR-0008** volume denominator (carried into [ADR-0031](../adr/0031-what-works-means.md)) | CI fails any dashboard panel charting a rate without its volume as an output column beside it. It covers the acceptance and edit rejection rates with proposals, permission waits with the prompts answered, compactions per session with sessions, an artifact's share with the active people, a share of sessions with the sessions, and the share of context read from the cache and any figure per request with the requests. The friction pairs stay although no panel charts them now, so a friction panel that comes back brings its volume. A name elsewhere in the SQL does not count, because each rate is computed from its volume. The constraint is a product decision, so it is enforced like one |
 | **INV-2** on the collector path | CI runs the real collector (`collector` job), sends OTel carrying a mixed-case email on the resource, the record and the data point, and requires the stored pseudonym to equal the poller's for the same salt. A second test puts an email in an attribute nothing knows about, on a log record beside a clean one and on a data point, and requires the tripwire to refuse each request and store nothing from either, while a clean request sent after them is stored |
 | **INV-5** on hook payloads | Every observed and documented hook shape goes through the running collector carrying marker strings in each content field, including one past 100 KiB; CI byte-searches what reached ClickHouse for the markers. The allowlist itself is pinned in a test, so adding a field is a two-place change |
@@ -471,9 +463,8 @@ ClickHouse gold view, which the old pattern had never read.
 - **No raw hook payload anywhere.** Not in bronze, not in a debug log, not in the fixtures, which
   carry field names observed from a real Claude Code and synthetic values. Drift is detected from
   field *names* ([ADR-0023](../adr/0023-hook-payload-allowlist.md)).
-- **No DuckDB mode for the collector path.** The collector writes to ClickHouse only, and its views
-  exist in the ClickHouse dialect only. ADR-0009's file store serves the Admin API path
-  ([ADR-0028](../adr/0028-file-store-is-admin-api-only.md)).
+- **No second store.** Both paths write to ClickHouse, and every view is in its dialect. The file
+  store DuckDB read was removed ([ADR-0057](../adr/0057-clickhouse-is-the-only-store.md)).
 - **No transcript reader on the collection path** (INV-1). The one exception is the import command
   a person runs themselves (ADR-0050).
 - **No hosted service, no phone-home** (INV-7).

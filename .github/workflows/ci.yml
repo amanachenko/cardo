@@ -44,25 +44,6 @@ jobs:
       - name: Unit and contract tests
         run: go test ./... -race
 
-      - name: Verify the SQL layer against a generated store
-        run: |
-          # Pinned: DuckDB 2.0 renamed this file, and "latest" then downloaded a Not Found page.
-          curl -fsSL -o duckdb.zip https://github.com/duckdb/duckdb/releases/download/v1.5.6/duckdb_cli-linux-amd64.zip
-          unzip -q duckdb.zip
-          CARDO_SAMPLE_DIR="$PWD/.sample" go test ./test/ -run TestGenerateSampleStore
-          # .bail on: without it the CLI reports an error and carries on, and the step stays green.
-          ./duckdb -init /dev/null <<'SQL'
-          .bail on
-          SET VARIABLE cardo_root = '.sample';
-          .read sql/duckdb/010_bronze.sql
-          .read sql/duckdb/020_silver.sql
-          .read sql/duckdb/030_gold.sql
-          SELECT 'bronze', count(*) FROM bronze_actor_day;
-          SELECT 'silver', count(*) FROM silver_actor_day;
-          SELECT 'gold',   count(*) FROM gold_fleet_adoption;
-          .read test/duckdb_checks.sql
-          SQL
-
   os:
     # The same code has to build and pass on the platforms people run it on. The race detector and
     # the invariant jobs stay on Linux above; this leg is about the platform itself.

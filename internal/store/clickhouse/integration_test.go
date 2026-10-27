@@ -63,6 +63,9 @@ type record struct {
 	model    string
 	src      source.Name
 	unknown  []string
+	// sparse leaves out two of the tools and one token count, as a source that leaves out a zero
+	// would send them.
+	sparse bool
 }
 
 // scrub builds a stored record the only way a store can receive one: through the hasher.
@@ -107,6 +110,19 @@ func scrub(t *testing.T, day time.Time, r record) pseudonym.Scrubbed {
 			"estimated_cost": {"currency": "USD", "amount": %d}
 		}]%s
 	}`, r.email, r.sessions, r.accepted, r.rejected, model, r.cents, extra)
+	if r.sparse {
+		for _, field := range []string{
+			`"multi_edit_tool": {"accepted": 0, "rejected": 0},`,
+			`,
+			"notebook_edit_tool": {"accepted": 0, "rejected": 0}`,
+			`, "cache_creation": 5`,
+		} {
+			if !strings.Contains(raw, field) {
+				t.Fatalf("the record template changed, and %q is no longer there to leave out", field)
+			}
+			raw = strings.Replace(raw, field, "", 1)
+		}
+	}
 
 	s, err := h.Scrub(source.Record{
 		Source: src, Day: day,
@@ -236,6 +252,36 @@ func TestGoldMartsOverRealClickHouse(t *testing.T) {
 			t.Errorf("gold_schema_drift = %q, want %q", got, want)
 		}
 	})
+}
+
+// An absent counter reads as 0. As NULL it would make edit_accepted + multi_edit_accepted + ...
+// NULL for the whole row, and sum() skips such a row without a word: the fleet's acceptance would
+// be undercounted. JSONExtractInt gives 0 for a missing key, and this keeps it so. DuckDB's views
+// were checked for the same until the file store was removed (ADR-0057).
+func TestAbsentCountersReadAsZero(t *testing.T) {
+	st := testStore(t)
+	key := put(t, st, testDay(4), []record{
+		{email: testEmail, sessions: 2, accepted: 5, rejected: 1, cents: 50, sparse: true},
+	})
+	where := fmt.Sprintf("WHERE source = '%s' AND day = '%s' FORMAT TabSeparated", testSource, key)
+
+	got := query(t, st, fmt.Sprintf("SELECT multi_edit_accepted, multi_edit_rejected, "+
+		"notebook_accepted, notebook_rejected FROM %s.silver_actor_day %s", Database, where))
+	if want := "0\t0\t0\t0"; got != want {
+		t.Errorf("silver_actor_day's absent tools = %q, want %q", got, want)
+	}
+	got = query(t, st, fmt.Sprintf("SELECT tokens_cache_creation FROM %s.silver_actor_day_model %s",
+		Database, where))
+	if got != "0" {
+		t.Errorf("silver_actor_day_model's absent cache_creation = %q, want 0", got)
+	}
+	// 5 edits and 3 writes accepted, 1 of each rejected: the absent tools add nothing and take
+	// nothing away.
+	got = query(t, st, fmt.Sprintf("SELECT accepted, rejected, proposals FROM %s.gold_tool_acceptance %s",
+		Database, where))
+	if want := "8\t2\t10"; got != want {
+		t.Errorf("gold_tool_acceptance = %q, want %q", got, want)
+	}
 }
 
 // INV-2 -- user.email is never persisted. Behavioural, not static: the record goes through the

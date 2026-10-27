@@ -1,6 +1,6 @@
 # ADR-0009 — Storage-agnostic semantic layer; ClickHouse + Grafana reference stack
 
-**Status:** Accepted
+**Status:** Superseded by [ADR-0057](0057-clickhouse-is-the-only-store.md)
 **Date:** 2026-09-22
 **Evidence:** `2026-09-21-prior-art-survey.md`; `2026-09-20-claude-code-telemetry-surfaces.md`
 (cardinality defaults).

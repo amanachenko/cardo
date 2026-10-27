@@ -301,7 +301,7 @@ built, for the same reason as above: the marts' shape has seen two real sessions
 
 ### 11. The reference stack has only ever run on one machine
 
-**Threatens:** [ADR-0009](docs/adr/0009-storage-agnostic-clickhouse-reference.md).
+**Threatens:** the reference stack, Cardo's only store ([ADR-0057](docs/adr/0057-clickhouse-is-the-only-store.md)).
 
 The ClickHouse schema, the migration runner, the store and the Grafana dashboard have been verified
 end to end — but against a single-node ClickHouse 26.6 on Docker Desktop, seeded with invented
@@ -372,7 +372,8 @@ consequence was undocumented and the cost of being wrong was the operator's mone
 **Closed 2026-09-25 by [ADR-0028](docs/adr/0028-file-store-is-admin-api-only.md):** the file store
 serves the Admin API path only, and the collector-path views exist in ClickHouse alone. No pilot
 team that could run a collector but not ClickHouse had turned up. A team that does is the trigger
-for a superseding ADR. The original text follows.
+for a superseding ADR. Since 2026-10-27 the file store is gone and ClickHouse is the only store
+([ADR-0057](docs/adr/0057-clickhouse-is-the-only-store.md)). The original text follows.
 
 
 **Threatens:** [ADR-0009](docs/adr/0009-storage-agnostic-clickhouse-reference.md), whose file store
@@ -398,7 +399,7 @@ never turns up, an ADR scoping the file store to the Admin API path is the hones
 ### 14. The collector-path views recompute everything on every read
 
 **Threatens:** the reference stack's claim to serve a fleet
-([ADR-0009](docs/adr/0009-storage-agnostic-clickhouse-reference.md)).
+([ADR-0057](docs/adr/0057-clickhouse-is-the-only-store.md)).
 
 The silver and gold views over the collector's data are plain views. `silver_session` groups every
 OTel log row, metric row and hook row by session; five of the other six silver views join back to

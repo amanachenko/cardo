@@ -47,8 +47,8 @@ stored tables; `cardo check`, the console and the coach read the `_live` views.
   `actor_kind != 'service'` itself.
 - Reading `estimated_cost.amount` as dollars. **It is cents**, on both analytics APIs. Silver divides
   once and names the column `cost_usd`; nothing downstream should divide again.
-- `sum(x) AS x` in a ClickHouse view, or in a dashboard panel. Legal in DuckDB, an error here as
-  soon as `x` is used again in the same query: a panel computing
+- `sum(x) AS x` in a ClickHouse view, or in a dashboard panel. It is an error as soon as `x` is
+  used again in the same query: a panel computing
   `sum(r) / nullIf(sum(sessions), 0)` beside `sum(sessions) AS sessions` fails with "aggregate
   function found inside another". Aggregate in a subquery with a `_total` suffix and rename
   outside, so the published names still match. Run a new panel's query through Grafana, not only

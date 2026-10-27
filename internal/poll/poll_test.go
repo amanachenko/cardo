@@ -12,7 +12,6 @@ import (
 
 	"github.com/amanachenko/cardo/internal/pseudonym"
 	"github.com/amanachenko/cardo/internal/source"
-	"github.com/amanachenko/cardo/internal/store/jsonl"
 )
 
 const testSalt = "0123456789abcdef0123456789abcdef"
@@ -49,16 +48,23 @@ func recordFor(day, email string) source.Record {
 	}
 }
 
-func newRunner(t *testing.T, a source.Adapter) (*Runner, string) {
+// memStore keeps what it is given, so the runner can be exercised without a database.
+type memStore struct {
+	days map[string][]pseudonym.Scrubbed
+}
+
+func (m *memStore) Migrate(context.Context) error { return nil }
+
+func (m *memStore) Put(_ context.Context, _ source.Name, day string, records []pseudonym.Scrubbed) error {
+	m.days[day] = records
+	return nil
+}
+
+func (m *memStore) Close() error { return nil }
+
+func newRunner(t *testing.T, a source.Adapter) (*Runner, *memStore) {
 	t.Helper()
-	dir := t.TempDir()
-	st, err := jsonl.New(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := st.Migrate(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	st := &memStore{days: map[string][]pseudonym.Scrubbed{}}
 	h, err := pseudonym.New(testSalt, "v1")
 	if err != nil {
 		t.Fatal(err)
@@ -68,7 +74,7 @@ func newRunner(t *testing.T, a source.Adapter) (*Runner, string) {
 		Hasher:  h,
 		Store:   st,
 		Log:     slog.New(slog.NewTextHandler(io.Discard, nil)),
-	}, dir
+	}, st
 }
 
 func window(from, to string) source.Window {

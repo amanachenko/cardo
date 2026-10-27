@@ -20,7 +20,7 @@ const (
 	stagingTable = Database + ".bronze_actor_day_staging"
 )
 
-// Store is the ADR-0009 reference storage target.
+// Store is Cardo's storage target, the only one (ADR-0057).
 type Store struct {
 	c   *Client
 	log *slog.Logger
@@ -51,8 +51,8 @@ func (s *Store) Migrate(ctx context.Context) error {
 
 // row is the bronze record as written to ClickHouse.
 //
-// The column set is identical to the JSONL store's row (internal/store/jsonl/jsonl.go) and to
-// sql/clickhouse/001_bronze.sql. One list, three places, checked by the INV-5 allowlist test.
+// The column set is identical to sql/clickhouse/001_bronze.sql. Both are checked against one
+// list by the INV-5 allowlist tests: this row as Put sends it, and the table as 001 creates it.
 //
 // Payload is a string rather than json.RawMessage on purpose: the ClickHouse column is String,
 // holding the verbatim payload as text (ADR-0010). Marshalling a RawMessage would emit a JSON

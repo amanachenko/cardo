@@ -6,17 +6,14 @@
 
 Three layers ([ADR-0010](../adr/0010-layered-schema.md), whose layering
 [ADR-0023](../adr/0023-hook-payload-allowlist.md) and [ADR-0025](../adr/0025-artifact-names-kept-with-guardrails.md)
-uphold). Two storage targets: ClickHouse
-(reference) and a file store read by DuckDB (evaluation mode)
-([ADR-0009](../adr/0009-storage-agnostic-clickhouse-reference.md)). The file store covers the Admin
-API path only ([ADR-0028](../adr/0028-file-store-is-admin-api-only.md)).
+uphold), all in ClickHouse, the only store ([ADR-0057](../adr/0057-clickhouse-is-the-only-store.md)).
 
 ## bronze — raw, not normalized
 
 Nothing is normalized or aggregated at this layer. What "raw" means differs by path, and the
 difference is deliberate.
 
-### Admin API path — `bronze_actor_day` (ClickHouse) / `bronze/source=*/*.jsonl` (file store)
+### Admin API path — `bronze_actor_day`
 
 One row per actor per day, written by `cardo poll`. `payload` is the API's record **verbatim**,
 except that the actor's email has been deleted from it. The Admin API returns aggregates and no
@@ -94,8 +91,7 @@ not pretend to be the session model below.
 
 ### Built (collector path)
 
-`sql/clickhouse/006_silver_collector.sql`, ClickHouse only
-([ADR-0028](../adr/0028-file-store-is-admin-api-only.md)). Deliberately small: this is the
+`sql/clickhouse/006_silver_collector.sql`. Deliberately small: this is the
 vendor-neutral layer ([ADR-0004](../adr/0004-claude-code-first-neutral-schema.md)).
 
 The seven views below `silver_session_cohort` are stored (`017_stored_silver.sql`,

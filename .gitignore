@@ -11,17 +11,10 @@
 *.out
 vendor/
 
-# Local data / evaluation mode
-*.duckdb
-*.duckdb.wal
+# Local data. /data/ was the removed file store's default directory, and a copy left from it
+# holds pseudonymous telemetry, so it stays out of git.
 *.parquet
 /data/
-# Sample store generated for SQL verification:
-#   CARDO_SAMPLE_DIR=.sample go test ./test/ -run TestGenerateSampleStore
-# Unanchored on purpose. The generator resolves a relative CARDO_SAMPLE_DIR against the repo root,
-# so this should only ever match at the root -- and if some future caller passes an absolute path
-# somewhere else in the tree, that copy stays ignored too.
-.sample/
 
 # Secrets — never commit. The pseudonymization salt is held by the organization's
 # security team (ADR-0006) and must never appear in this repo.
