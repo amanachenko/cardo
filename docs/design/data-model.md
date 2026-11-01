@@ -148,6 +148,7 @@ cohort-level, and each applies the minimum group size
 
 | Mart | Grain | Answers |
 |---|---|---|
+<<<<<<< HEAD
 | `gold_artifact_usage` | week, kind, artifact | Is what the organization shipped being used, by what share of the fleet? What have engineers brought in that several of them use, across how many teams (`teams`, a count, never which), and since which week (`first_week`)? |
 | `gold_instructions_versions` | week, file family, version | Which version of each of the organization's instructions files people load, whether it was current that week, and the first week anyone loaded it |
 | `gold_instructions_by_team_weekly` | week, cohort, file family | The sessions that loaded the file, and how many of them loaded the version current that week (`current_share`). Teams' rows add up to the fleet |
@@ -159,6 +160,14 @@ cohort-level, and each applies the minimum group size
 | `gold_tool_loops_weekly` | week, tool | Runs of three or more failed calls of one tool, one after another in a session with no other call that ran in between, ordered by when Claude Code decided to run them; the failed calls in them, the sessions they happened in, and every call of the tool that week. A connector's tool under the minimum that week is `other tools`; Claude Code's own tools are always named |
 | `gold_friction_daily` | day, cohort | The friction index's three components: edit rejection rate, permission waits and compactions per session, each beside its volume ([ADR-0008](../adr/0008-outcome-variable.md)). No panel reads it since the enablement dashboard's review |
 | `gold_context_daily` | day, cohort | The context each session starts from, the context each prompt grows to, spend, and model switches' measured cost beside Claude Code's estimate. No panel reads it since the review; the weekly views replace it |
+| `gold_team_reach` | week, team, artifact | How far each artifact reached inside each team: the share of the team's active people that week who use it, beside the same share for the whole organization ([ADR-0030](../adr/0030-stakeholders-and-questions.md)). Reach, never a ranking, and no row is sorted by team |
+
+A team below the minimum group size is not rendered at all, and its rows are not counted as
+`other` — "1 person" is a person ([ADR-0046](../adr/0046-hashed-team-directory.md)). The floor is
+the team's active people that week, not everyone the directory lists. The join that puts a session
+in its team lives in the silver layer, `silver_session_team` — the directory's team when the person
+is listed, the session's own label otherwise — because a gold view may count a pseudonym but never
+compare one (INV-3).
 
 A mart with the effort distribution by cohort is not built. Spend by cohort and the model mix are
 `gold_spend_weekly` and `gold_model_spend_weekly` on the collector path, and `gold_model_mix` on the

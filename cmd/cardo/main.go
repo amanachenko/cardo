@@ -39,6 +39,7 @@ Install
   ui          Serve the board on loopback; its buttons run the same steps as up
   connect     Write .claude/settings.json into one project (--project <dir>)
   secret      Generate the salt and the passwords into .env with mode 0600
+  teams       Read a team directory and say what it would store (--file <directory.csv>)
 
 Check
   check       Read-only: run the same checks and exit 1 if anything is wrong
@@ -114,6 +115,7 @@ var synopsis = map[string][2]string{
 	"probe":      {"cardo probe [--dir]", "Send one OTLP log and one hook event, then read them back."},
 	"session":    {"cardo session [--dir]", "Check whether a real session has reached the stack."},
 	"gold":       {"cardo gold [--dir]", "Create the gold-only ClickHouse user and prove the refusal."},
+	"teams":      {"cardo teams --file <directory.csv> [--apply]", "Read a team directory and say what it would store."},
 	"pseudonym":  {"cardo pseudonym [flags] <email>", "Print the pseudonym the views join on for this address."},
 	"coach":      {"cardo coach [flags] <email>", "Show your figures against your own previous window."},
 	"import":     {"cardo import [flags]", "Count your past sessions from Claude Code's local transcripts; -write stores the counts, never the text."},
@@ -218,6 +220,8 @@ func run(args []string) error {
 		return runPrune(args[1:])
 	case "migrate":
 		return runMigrate(args[1:])
+	case "teams":
+		return runTeams(args[1:])
 	case "version":
 		return runVersion(args[1:])
 	case "-h", "--help":
