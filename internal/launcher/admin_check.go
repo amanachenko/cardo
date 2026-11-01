@@ -25,6 +25,14 @@ func checkAdminData(ctx context.Context, opts Options) (Result, error) {
 		return r, nil
 	}
 	enabled := strings.TrimSpace(env["CARDO_ADMIN_KEY"]) != ""
+	if !enabled {
+		// The path is off by choice, so there is nothing to wait for: a disabled optional path is
+		// a healthy stack, and `cardo check --proof` must not fail over it forever.
+		r.OK = true
+		r.Value = "off (optional)"
+		r.Fix = "Set CARDO_ADMIN_KEY in Settings to start polling."
+		return r, nil
+	}
 	body, _, err := chQuery(ctx, opts.url("8124", ""), env["CLICKHOUSE_USER"], env["CLICKHOUSE_PASSWORD"],
 		"SELECT toString(max(day)), count(), uniqExact(pseudonym) FROM cardo.bronze_actor_day FORMAT TSV")
 	if err != nil {
@@ -39,12 +47,6 @@ func checkAdminData(ctx context.Context, opts Options) (Result, error) {
 	rows, _ := strconv.Atoi(parts[1])
 	people, _ := strconv.Atoi(parts[2])
 	r.Value = fmt.Sprintf("last %s · %d rows · %d people", parts[0], rows, people)
-	if !enabled {
-		r.Pending = true
-		r.Value = "off · " + r.Value
-		r.Fix = "Optional path, off. Set CARDO_ADMIN_KEY in Settings to start polling again."
-		return r, nil
-	}
 	last, err := time.Parse("2006-01-02", parts[0])
 	if err != nil {
 		return r, nil

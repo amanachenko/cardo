@@ -76,19 +76,22 @@ func TestAdminDataWaitsForTheFirstPoll(t *testing.T) {
 	}
 }
 
-// The path is optional. Off means off: frozen rows from when it ran are history, and a disabled
-// optional path must not fail the stack forever.
-func TestAdminDataOffIsPendingEvenWithOldRows(t *testing.T) {
-	opts, done := adminEnvOff(t, "2020-01-01\t6\t3\n")
-	defer done()
-	r, err := checkAdminData(context.Background(), opts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if r.OK || !r.Pending {
-		t.Fatalf("a disabled path must be pending, not failing, got %+v", r)
-	}
-	if !strings.Contains(r.Value, "off") || !strings.Contains(r.Value, "2020-01-01") {
-		t.Fatalf("the value must say the path is off and keep the facts, got %+v", r)
+// The path is optional. Off by choice is a healthy stack, not a wait: there is nothing to finish,
+// and `cardo check --proof` must not fail over a path nobody turned on. Frozen rows from when it
+// ran are history either way.
+func TestAdminDataOffIsNotAWait(t *testing.T) {
+	for _, body := range []string{"2020-01-01\t6\t3\n", "1970-01-01\t0\t0\n"} {
+		opts, done := adminEnvOff(t, body)
+		r, err := checkAdminData(context.Background(), opts)
+		done()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !r.OK || r.Pending {
+			t.Fatalf("a disabled path must pass (body %q), got %+v", body, r)
+		}
+		if !strings.Contains(r.Value, "off") {
+			t.Fatalf("the value must say the path is off, got %+v", r)
+		}
 	}
 }
