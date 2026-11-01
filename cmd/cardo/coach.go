@@ -99,6 +99,8 @@ func runCoach(args []string) error {
 	money := fmt.Sprintf("$%.2f", now.CostUSD)
 	if now.CostEstimatedUSD > 0 {
 		money += fmt.Sprintf(" (incl. $%.2f estimated)", now.CostEstimatedUSD)
+	} else if now.CostUSD == 0 && now.OutputTokens > 0 {
+		money += " (unpriced models)"
 	}
 	prevMoney := fmt.Sprintf("prev $%.2f", prev.CostUSD)
 	if prev.CostEstimatedUSD > 0 {

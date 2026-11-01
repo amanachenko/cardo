@@ -1488,7 +1488,7 @@ function renderCoach(v, standalone) {
   hero.appendChild(coachCell('Sessions', String(n.sessions), 'prev ' + pv.sessions));
   hero.appendChild(coachCell('Prompts', String(n.prompts), 'prev ' + pv.prompts));
   hero.appendChild(coachCell('Cost',
-    '$' + n.costUsd.toFixed(2) + (n.costEstimatedUsd > 0 ? ' (incl. $' + n.costEstimatedUsd.toFixed(2) + ' estimated)' : ''),
+    '$' + n.costUsd.toFixed(2) + (n.costEstimatedUsd > 0 ? ' (incl. $' + n.costEstimatedUsd.toFixed(2) + ' estimated)' : (n.costUsd === 0 && n.outputTokens > 0 ? ' (unpriced models)' : '')),
     'prev $' + pv.costUsd.toFixed(2) + (pv.costEstimatedUsd > 0 ? ' (incl. $' + pv.costEstimatedUsd.toFixed(2) + ' est.)' : '')));
   hero.appendChild(coachCell('Peak context', n.peakContext.toLocaleString(), 'prev ' + pv.peakContext.toLocaleString()));
   box.appendChild(hero);
