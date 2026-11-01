@@ -12,6 +12,10 @@ import (
 // checkAdminData answers the other half of "what the views rely on": the Admin API path. It is
 // pending until the first poll, and fails when the newest day is older than two days, which is how
 // a dead poller looks from the outside.
+//
+// The path is optional. With no CARDO_ADMIN_KEY it is off, and then nothing about it can fail: the
+// rows left from when it ran are history, not a broken poller. A disabled optional path failing the
+// stack forever is how a fresh install ends up permanently red.
 func checkAdminData(ctx context.Context, opts Options) (Result, error) {
 	r := Result{ID: "admin", Name: "ADMIN DATA"}
 	env, err := ReadDotEnv(filepath.Join(opts.Dir, ".env"))
@@ -20,6 +24,7 @@ func checkAdminData(ctx context.Context, opts Options) (Result, error) {
 		r.Fix = "Run cardo up once; it writes .env and starts the stack."
 		return r, nil
 	}
+	enabled := strings.TrimSpace(env["CARDO_ADMIN_KEY"]) != ""
 	body, _, err := chQuery(ctx, opts.url("8124", ""), env["CLICKHOUSE_USER"], env["CLICKHOUSE_PASSWORD"],
 		"SELECT toString(max(day)), count(), uniqExact(pseudonym) FROM cardo.bronze_actor_day FORMAT TSV")
 	if err != nil {
@@ -34,6 +39,12 @@ func checkAdminData(ctx context.Context, opts Options) (Result, error) {
 	rows, _ := strconv.Atoi(parts[1])
 	people, _ := strconv.Atoi(parts[2])
 	r.Value = fmt.Sprintf("last %s · %d rows · %d people", parts[0], rows, people)
+	if !enabled {
+		r.Pending = true
+		r.Value = "off · " + r.Value
+		r.Fix = "Optional path, off. Set CARDO_ADMIN_KEY in Settings to start polling again."
+		return r, nil
+	}
 	last, err := time.Parse("2006-01-02", parts[0])
 	if err != nil {
 		return r, nil

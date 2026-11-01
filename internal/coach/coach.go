@@ -143,7 +143,8 @@ func Query(ctx context.Context, endpoint, user, pass, pseudonym string, from, to
 // The suggestion carries the number of people who use it, because that count is the evidence.
 func Suggest(untried []PeerArtifact) []string {
 	if len(untried) == 0 {
-		return nil
+		// Never nil: a report's suggestions marshal as a list, because the board iterates them.
+		return []string{}
 	}
 	a := untried[0]
 	return []string{fmt.Sprintf("%d people here use %s, and you haven't tried it yet.", a.People, a.Name)}

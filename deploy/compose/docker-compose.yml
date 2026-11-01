@@ -100,7 +100,10 @@ services:
       context: ../..
     image: cardo:dev
     command: ["poll", "-store", "clickhouse", "-every", "${CARDO_POLL_INTERVAL:-24h}"]
-    restart: unless-stopped
+    # on-failure, not unless-stopped: with no CARDO_ADMIN_KEY the binary says so once and exits
+    # cleanly ("the organization has not enabled the Admin API path yet"). A restart policy of
+    # unless-stopped turns that clean exit into a restart loop. Crashes still restart.
+    restart: on-failure
     profiles: ["admin"]
     depends_on:
       migrate:
