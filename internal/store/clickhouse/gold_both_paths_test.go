@@ -63,7 +63,7 @@ func TestGoldAggregatesReadBothPaths(t *testing.T) {
 	for _, person := range []string{"pa-" + run, p2} {
 		q := fmt.Sprintf("INSERT INTO %s (source, day, pseudonym, salt_version, tier, actor_type, "+
 			"org_id, customer_type, terminal_type, payload, unknown_fields) VALUES "+
-			"('acme', '%s', '%s', 'v1', 1, 'user', '', '', '', '%s', [])", BronzeTable, day, person, payload)
+			"('acme', '%s', '%s', 'v1', 1, 'user_actor', '', '', '', '%s', [])", BronzeTable, day, person, payload)
 		if err := st.c.Exec(ctx, q); err != nil {
 			t.Fatal(err)
 		}
