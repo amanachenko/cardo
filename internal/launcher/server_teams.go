@@ -24,6 +24,7 @@ type teamRow struct {
 
 type teamsView struct {
 	Loaded      bool      `json:"loaded"`
+	Source      string    `json:"source"`
 	Batch       string    `json:"batch,omitempty"`
 	LoadedAt    string    `json:"loadedAt,omitempty"`
 	SourceHash  string    `json:"sourceHash,omitempty"`
@@ -85,6 +86,7 @@ func (s *Server) teamsView(ctx context.Context) (teamsView, error) {
 		v.Sessions7d = n
 	}
 	if v.Loaded {
+		v.Source = "directory"
 		in := "pseudonym IN (SELECT pseudonym FROM cardo.settings_teams WHERE batch = '" + escapeSQL(v.Batch) + "' AND salt_version = '" + escapeSQL(saltVersion) + "')"
 		if n, err := s.chInt(ctx, "SELECT count() FROM cardo.silver_session_live WHERE "+sessionFilter+" AND "+in); err == nil {
 			v.Mapped = n
@@ -117,6 +119,46 @@ func (s *Server) teamsView(ctx context.Context) (teamsView, error) {
 					v.TeamRows = append(v.TeamRows, teamRow{Team: tr.Team, People: tr.People, Sessions: tr.Sessions})
 				}
 			}
+		}
+	} else {
+		// No directory yet, and teams still start: the cohort labels sessions already carry are a
+		// team's name until someone loads the real thing (ADR-0030's "one meaning of team"). The
+		// floor applies exactly as it does to a directory, because a label of two people is a
+		// person.
+		v.Source = "labels"
+		rows, err := s.ch(ctx, `SELECT cohort AS team, uniqExact(pseudonym) AS people, count() AS sessions
+			FROM cardo.silver_session_live
+			WHERE `+sessionFilter+` AND actor_kind != 'service'
+			  AND pseudonym IS NOT NULL AND pseudonym != '' AND cohort != ''
+			GROUP BY cohort ORDER BY sessions DESC FORMAT JSONEachRow`)
+		if err == nil {
+			for _, line := range strings.Split(strings.TrimSpace(rows), "\n") {
+				if strings.TrimSpace(line) == "" {
+					continue
+				}
+				var tr struct {
+					Team     string `json:"team"`
+					People   int    `json:"people"`
+					Sessions int    `json:"sessions"`
+				}
+				if json.Unmarshal([]byte(line), &tr) == nil {
+					if tr.People < v.Floor {
+						v.HiddenTeams++
+						continue
+					}
+					v.TeamRows = append(v.TeamRows, teamRow{Team: tr.Team, People: tr.People, Sessions: tr.Sessions})
+				}
+			}
+		}
+		if n, err := s.chInt(ctx, "SELECT uniqExact(pseudonym) FROM cardo.silver_session_live WHERE "+sessionFilter+
+			" AND actor_kind != 'service' AND pseudonym IS NOT NULL AND pseudonym != '' AND cohort = ''"); err == nil {
+			v.Unassigned = n
+		}
+		if n, err := s.chInt(ctx, "SELECT count() FROM cardo.silver_session_live WHERE "+sessionFilter+" AND cohort != ''"); err == nil {
+			v.Mapped = n
+		}
+		if v.Sessions7d > 0 {
+			v.CoveragePct = float64(v.Mapped) / float64(v.Sessions7d) * 100
 		}
 	}
 	return v, nil

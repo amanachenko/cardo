@@ -1369,9 +1369,10 @@ async function loadTeams() {
     return;
   }
   facts.innerHTML = '';
-  facts.appendChild(factCell('Directory', t.loaded ? t.rows + ' people · ' + t.teams + ' teams' : 'not loaded', t.loaded ? 'ok' : ''));
-  facts.appendChild(factCell('Sessions mapped · 7d', t.loaded ? Math.round(t.coveragePct) + '%' : '—', t.loaded && t.coveragePct > 0 ? 'ok' : ''));
-  facts.appendChild(factCell('Unassigned', t.loaded ? String(t.unassigned) : '—', t.loaded && t.unassigned > 0 ? 'bad' : ''));
+  const labelled = t.loaded || t.source === 'labels';
+  facts.appendChild(factCell('Directory', t.loaded ? t.rows + ' people · ' + t.teams + ' teams' : (t.source === 'labels' ? 'session labels' : 'not loaded'), t.loaded ? 'ok' : ''));
+  facts.appendChild(factCell('Sessions mapped · 7d', labelled ? Math.round(t.coveragePct) + '%' : '—', labelled && t.coveragePct > 0 ? 'ok' : ''));
+  facts.appendChild(factCell('Unassigned', labelled ? String(t.unassigned) : '—', labelled && t.unassigned > 0 ? 'bad' : ''));
   facts.appendChild(factCell('Hidden teams', String(t.hiddenTeams || 0), t.hiddenTeams ? 'bad' : ''));
 
   const body = $('#teamRows');
@@ -1387,14 +1388,18 @@ async function loadTeams() {
     const tr = el('tr');
     const td = el('td');
     td.colSpan = 3;
-    td.appendChild(el('div', 'state-empty', 'No sessions yet, so there is nothing to attribute. Load a directory and let the collector run.'));
+    td.appendChild(el('div', 'state-empty', t.source === 'labels'
+      ? 'No cohort labels on the sessions yet. Load a directory, or work in sessions that carry a label.'
+      : 'No sessions yet, so there is nothing to attribute. Load a directory and let the collector run.'));
     tr.appendChild(td);
     body.appendChild(tr);
   }
   $('#teamEmpty').hidden = true;
   $('#teamHint').textContent = t.loaded
     ? 'Loaded ' + (t.loadedAt || '').slice(0, 16) + ' · ' + t.rows + ' people, ' + t.teams + ' teams. The file itself is not stored.'
-    : 'Paste email,team rows, one person per line. Loading replaces the current mapping; the previous batch stays for one generation.';
+    : (t.source === 'labels'
+      ? 'Teams from session labels (cohort) — the names sessions already carry. Load a directory to name them your way; a team below ' + (t.floor || 5) + ' people is hidden.'
+      : 'Paste email,team rows, one person per line. Loading replaces the current mapping; the previous batch stays for one generation.');
 }
 
 async function sendTeams(apply) {
