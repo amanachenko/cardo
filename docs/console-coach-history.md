@@ -160,7 +160,8 @@ what a salted SHA-256 looks like. A value that is not one is refused rather than
 - **Cost** is Anthropic's published list price, not an invoice (§13, gap 1).
 - **Peak context** is the largest `input + cache read + cache create` seen in one request.
 - **Tool calls** are only available for live-telemetry sessions. Imported transcripts carry no tool
-  decisions or durations, so the imported path reports `0` (§13, gap 2).
+  decisions or durations, so a window that holds imported history and nothing else says **not
+  observed** rather than `0 failed` — the figures were never looked for (§13, gap 2).
 
 ### 4.3 Pseudonyms
 
@@ -458,7 +459,7 @@ counting `silver_session_live` rows with `session_id LIKE 'demo-%'` (expect 0).
 | --- | --- | --- |
 | `FIELDS  cannot read back` + `invalid character '…'` | A ClickHouse query parsed as JSON without `FORMAT JSONEachRow`, so the TSV body was handed to `json.Unmarshal` | Append `FORMAT JSONEachRow` to every query whose body is parsed. Fixed in `internal/launcher/readback.go` on 2026-10-18 |
 | `FIELDS  … missing app_version, hook rows` | The newest session was an imported or demo one, which can never carry hooks | The check now excludes `cohort='imported'` and `demo-%`; run Claude Code once in an instrumented project to produce a real session |
-| `Tool calls 0` in the coach | Imported transcripts carry no tool calls | Expected; label the figure "live only" or add hook capture |
+| the coach says *not observed* | Imported transcripts carry no tool calls | Expected |
 | `unpriced models` in `cardo import` | The model is not in the published table, or the transcript has a typo | Add it to `~/Library/Caches/cardo/pricing-override.json`, or fix the model name in the transcript |
 | Console refuses the link | Token rotated, or the port changed (token files are per port) | Open `?t=<token>` from `~/Library/Caches/cardo/token-<port>` |
 | Coach link 401 | `k` missing, wrong pseudonym, or the board token rotated | Reissue from Console → Coach |
@@ -471,7 +472,8 @@ counting `silver_session_live` rows with `session_id LIKE 'demo-%'` (expect 0).
 1. **Cost is Anthropic's published list price, not the invoice.** Discounts, credits and batch pricing
    are not modelled.
 2. **Imported history has no tool calls.** Transcripts contain no decisions or durations; only live
-   telemetry does.
+   telemetry does. The coach says "not observed" for such a window rather than `0 failed`, so a
+   zero is never reported where nothing was looked at.
 3. Three of the 84 imported sessions have no prompts and therefore no turns (81 appear in
    `silver_turn`).
 4. **The import sees one machine.** Cross-machine history needs export/import (roadmap, Step 3,
