@@ -29,7 +29,8 @@ type Table struct {
 }
 
 // storedSilver lists the silver tables rebuilt from bronze every 10 minutes, each with the
-// refresher that rebuilds it (sql/clickhouse/017_stored_silver.sql).
+// refresher that rebuilds it (sql/clickhouse/017_stored_silver.sql, and the two the repository
+// identity views add in sql/clickhouse/020_stored_repo_identity.sql).
 var storedSilver = [][2]string{
 	{"cardo.silver_session", "cardo.silver_session_refresh"},
 	{"cardo.silver_api_request", "cardo.silver_api_request_refresh"},
@@ -38,6 +39,8 @@ var storedSilver = [][2]string{
 	{"cardo.silver_policy_decision", "cardo.silver_policy_decision_refresh"},
 	{"cardo.silver_context_event", "cardo.silver_context_event_refresh"},
 	{"cardo.silver_artifact_load_stored", "cardo.silver_artifact_load_refresh"},
+	{"cardo.silver_session_repo", "cardo.silver_session_repo_refresh"},
+	{"cardo.silver_instruction_load", "cardo.silver_instruction_load_refresh"},
 }
 
 // Tables is the fixed list retention owns.
