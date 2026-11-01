@@ -84,6 +84,8 @@ up:
 
 Nothing is taken today.
 
+The coverage audit the next items came from: **[2026-10-25-coverage-audit.md](research/2026-10-25-coverage-audit.md)**.
+
 ### Step 1: run it safely
 
 Two decisions are already possible with what is built: chasing the machines still on an old version
