@@ -63,6 +63,7 @@ The hard rules that these decisions produce live in
 | [0052](0052-silver-is-stored-and-rebuilt-every-10-minutes.md) | The collector path's silver views are stored as tables ClickHouse rebuilds every 10 minutes | Accepted | 2026-10-23 |
 | [0053](0053-retention-default-and-organization-choice.md) | Retention is 90 days by default, and the organization may change it | Accepted | 2026-10-25 |
 | [0054](0054-both-actor-types-are-people.md) | Both actor types are people, so a service run is labelled by the run itself | Accepted | 2026-10-25 |
+| [0055](0055-trend-rows-outlive-the-rows.md) | Trend rows outlive the rows behind them, and only when they describe five people | Proposed | 2026-10-25 |
 | [0057](0057-clickhouse-is-the-only-store.md) | ClickHouse is the only store; the file store and its DuckDB views are removed | Accepted | 2026-10-27 |
 
 ADR-0030 to ADR-0037 came out of one design review on 2026-09-25, which asked who Cardo is for and
