@@ -428,8 +428,9 @@ func runMigrate(args []string) error {
 	// them changes nothing; a variable set to "" resets its setting to the default. The poller
 	// never writes them.
 	vs := clickhouse.ViewSettings{
-		OrgArtifacts: lookupEnv("CARDO_ORG_ARTIFACTS"),
-		MinGroupSize: lookupEnv("CARDO_MIN_GROUP_SIZE"),
+		OrgArtifacts:      lookupEnv("CARDO_ORG_ARTIFACTS"),
+		MinGroupSize:      lookupEnv("CARDO_MIN_GROUP_SIZE"),
+		InstructionsNames: lookupEnv("CARDO_INSTRUCTIONS_NAMES"),
 	}
 	if err := st.ApplyViewSettings(ctx, vs); err != nil {
 		return err

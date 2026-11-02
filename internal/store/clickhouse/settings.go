@@ -27,6 +27,11 @@ const MinGroupSizeFloor = 5
 type ViewSettings struct {
 	OrgArtifacts *string
 	MinGroupSize *string
+	// InstructionsNames is ADR-0035's mode: "project" keeps the names of project-level
+	// instruction files, and any other value means the default, where no name is kept but the
+	// organization's own (ADR-0026). It is written as it is given, because the views compare it
+	// with "project" themselves and a value they do not know means the default.
+	InstructionsNames *string
 }
 
 // Validate refuses a value the views must never be given. It runs before anything is written.
@@ -66,13 +71,22 @@ func (s *Store) ApplyViewSettings(ctx context.Context, vs ViewSettings) error {
 	}{
 		{"org_artifacts", vs.OrgArtifacts},
 		{"min_group_size", vs.MinGroupSize},
+		{"instructions_names", vs.InstructionsNames},
 	} {
 		if kv.value == nil {
 			continue
 		}
+		value := strings.TrimSpace(*kv.value)
+		if kv.key == "instructions_names" && value != "project" {
+			// The collector keeps the names of project-level instruction files only when the
+			// value is exactly "project", and any other value means the default (ADR-0035).
+			// The setting is stored the same way, so the views and the collector agree: a
+			// value they do not know means the default on both sides.
+			value = ""
+		}
 		params := url.Values{
 			"param_key":    {kv.key},
-			"param_value":  {strings.TrimSpace(*kv.value)},
+			"param_value":  {value},
 			"async_insert": {"0"},
 		}
 		if _, err := s.c.do(ctx, params, strings.NewReader(insertSetting)); err != nil {

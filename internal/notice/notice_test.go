@@ -199,3 +199,33 @@ func TestAnUndocumentedValueIsNotReportedAsInForce(t *testing.T) {
 		t.Error("an undocumented naming mode is not flagged")
 	}
 }
+
+// ADR-0035 says the notice states which way the organization set the instructions-names
+// setting, so the page has to name the mode it is in — and say what the mode means, because the
+// names are kept for every repository and shown only for the organization's own, once enough
+// people load them.
+func TestThePageStatesTheInstructionsNamesMode(t *testing.T) {
+	s := FromEnv(map[string]string{"CARDO_INSTRUCTIONS_NAMES": "project"})
+	page := s.Markdown()
+	if !strings.Contains(page, "CARDO_INSTRUCTIONS_NAMES") {
+		t.Errorf("the page does not name the setting\n---\n%s", page)
+	}
+	if !strings.Contains(page, "yes: kept for every repository, shown only for your organization's repositories once 5 people load them") {
+		t.Errorf("the page does not say what keeping the names means\n---\n%s", page)
+	}
+	// The default: only the organization's own artifacts keep their names.
+	s = FromEnv(map[string]string{})
+	page = s.Markdown()
+	if !strings.Contains(page, "no, only your organization's own artifacts") {
+		t.Errorf("the page does not say that names are not kept by default\n---\n%s", page)
+	}
+	// A value Cardo does not document is the default, and the page says so.
+	s = FromEnv(map[string]string{"CARDO_INSTRUCTIONS_NAMES": "projekt"})
+	page = s.Markdown()
+	if !strings.Contains(page, "not one Cardo documents") {
+		t.Errorf("an undocumented instructions mode is not flagged\n---\n%s", page)
+	}
+	if strings.Contains(page, "yes: kept for every repository") {
+		t.Errorf("an undocumented mode is reported as keeping names\n---\n%s", page)
+	}
+}
