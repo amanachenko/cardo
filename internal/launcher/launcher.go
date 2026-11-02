@@ -69,6 +69,9 @@ type Options struct {
 	// pilot.
 	Pilot  bool
 	DryRun bool
+	// pathUnknown says the store did not answer when a team row asked which path this is. The
+	// bundle then refuses to guess: for it, the solo path is not the safe one.
+	pathUnknown bool
 	// Project is the directory whose Claude Code settings the connect step installs into.
 	Project string
 }
@@ -190,7 +193,7 @@ func Up(ctx context.Context, opts Options) error {
 	// for the machines the organization manages, and the notice it hands to its engineers. A solo
 	// install has nobody to hand them to, so they run only when the organization chose the team
 	// path — with the flag, or by having chosen it in the board, which writes the same setting.
-	if opts.Pilot || pilotModeInStore(ctx, opts) {
+	if pilot, _ := pilotModeInStore(ctx, opts); opts.Pilot || pilot {
 		pilotOpts := opts
 		pilotOpts.Pilot = true
 		for _, id := range []string{"gold", "bundle", "notice"} {
@@ -215,18 +218,19 @@ func Up(ctx context.Context, opts Options) error {
 // table where the board writes it.
 //
 // The CLI and the board must not disagree about which rows belong to a pilot, so both read the
-// same setting. A store that cannot be read answers false: the solo path is the safe one.
-func pilotModeInStore(ctx context.Context, opts Options) bool {
+// same setting. A store that cannot be read answers false, and known says it did not answer: for
+// most rows the solo path is the safe one, but not for the bundle.
+func pilotModeInStore(ctx context.Context, opts Options) (pilot, known bool) {
 	env, err := ReadDotEnv(filepath.Join(opts.Dir, ".env"))
 	if err != nil {
-		return false
+		return false, false
 	}
 	body, _, err := chQuery(ctx, opts.url("8124", ""), env["CLICKHOUSE_USER"], env["CLICKHOUSE_PASSWORD"],
 		"SELECT argMax(value, version) FROM cardo.settings WHERE key = 'pilot_mode' FORMAT TSV")
 	if err != nil {
-		return false
+		return false, false
 	}
-	return strings.TrimSpace(body) == "1"
+	return strings.TrimSpace(body) == "1", true
 }
 
 // Check is read-only: it never writes .env and never starts a container.

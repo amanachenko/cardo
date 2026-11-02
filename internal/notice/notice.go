@@ -126,8 +126,8 @@ func (s Settings) Markdown() string {
 	b.WriteString("Cardo's data is not used for individual performance decisions, and there is no view\n")
 	b.WriteString("that would let a manager rank their reports. The operator named above can read\n")
 	b.WriteString("everything and can tell who is behind a code name; nobody else gets a login to the\n")
-	b.WriteString("raw rows. Leaders see team summaries only. Your own figures reach you through a\n")
-	b.WriteString("private link.\n\n")
+	b.WriteString("raw rows. Leaders see team summaries only. The operator can open your own coach\n")
+	b.WriteString("page for you; it opens only on the machine that runs Cardo.\n\n")
 
 	b.WriteString("## If something looks wrong\n\n")
 	b.WriteString("The operator can show you the settings file and the check that proves what arrived.\n")

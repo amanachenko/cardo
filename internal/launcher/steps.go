@@ -195,7 +195,9 @@ func RunStep(ctx context.Context, opts Options, id string) (Result, error) {
 	// flag can hand a team a bundle whose address is each laptop itself.
 	switch id {
 	case "gold", "bundle", "notice":
-		opts.Pilot = opts.Pilot || pilotModeInStore(ctx, opts)
+		pilot, known := pilotModeInStore(ctx, opts)
+		opts.Pilot = opts.Pilot || pilot
+		opts.pathUnknown = !opts.Pilot && !known
 	}
 	switch id {
 	case "docker":

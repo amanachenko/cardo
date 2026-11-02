@@ -12,6 +12,10 @@ import (
 // laptop at itself.
 var errNoNetworkAddress = errors.New("no network address for the collector")
 
+// errPathUnknown is a store that did not answer which path this stack is on, with no hostname set:
+// a loopback bundle would be right for one machine and wrong for a team's.
+var errPathUnknown = errors.New("cannot tell which path this stack is on")
+
 // stepBundle writes the managed-settings bundle: the file an organization hands to the machines it
 // manages.
 //
@@ -33,6 +37,13 @@ func stepBundle(opts Options) (Result, error) {
 				ID: "bundle", Name: "BUNDLE", Value: errNoNetworkAddress.Error(),
 				Cause: "This stack is on the team path, and without a hostname the bundle would point every machine at itself: on each laptop 127.0.0.1 is the laptop. Nothing would ever arrive, and nothing would say why.",
 				Fix:   "set CARDO_HOSTNAME in .env, the name the certificate is for",
+			}, nil
+		}
+		if errors.Is(err, errPathUnknown) {
+			return Result{
+				ID: "bundle", Name: "BUNDLE", Value: errPathUnknown.Error(),
+				Cause: "The store did not answer whether this stack serves a team, and no hostname is set. On the team path a loopback bundle would point every machine at itself.",
+				Fix:   "start the stack with cardo up, or set CARDO_HOSTNAME in .env, the name the certificate is for",
 			}, nil
 		}
 		return Result{
@@ -63,7 +74,7 @@ func stepBundle(opts Options) (Result, error) {
 // stack behind the network overlay needs it too. Without it the collector is on loopback and the
 // bundle points there, which is the same address the single-engineer install uses. On the team
 // path that is a failure, not a loopback bundle: on each engineer's laptop that address is the
-// laptop itself.
+// laptop itself. A store that could not say which path this is fails too, rather than guess.
 func bundleFor(opts Options) ([]byte, error) {
 	env, err := ReadDotEnv(filepath.Join(opts.Dir, ".env"))
 	if err != nil {
@@ -73,6 +84,9 @@ func bundleFor(opts Options) ([]byte, error) {
 	if host == "" {
 		if opts.Pilot {
 			return nil, errNoNetworkAddress
+		}
+		if opts.pathUnknown {
+			return nil, errPathUnknown
 		}
 		return SettingsBundle()
 	}

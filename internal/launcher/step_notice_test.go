@@ -1,6 +1,7 @@
 package launcher
 
 import (
+	"context"
 	"encoding/json"
 	"net/url"
 	"os"
@@ -322,6 +323,28 @@ func TestTheTeamBundleWithoutAHostnameFails(t *testing.T) {
 	}
 	if res.Value != "no network address for the collector" {
 		t.Errorf("value = %q, want %q", res.Value, "no network address for the collector")
+	}
+	if !strings.Contains(res.Fix, "CARDO_HOSTNAME") {
+		t.Errorf("the fix does not name the setting: %q", res.Fix)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "managed-settings.json")); err == nil {
+		t.Error("a bundle was written anyway")
+	}
+}
+
+// A stopped stack cannot say which path it is on. With no hostname, `cardo bundle` must not take
+// the solo path for granted: on a team's stack that is the loopback bundle, handed to the MDM.
+func TestTheBundleDoesNotGuessThePathWhenTheStoreIsDown(t *testing.T) {
+	dir := t.TempDir()
+	writeEnv(t, dir, map[string]string{"CARDO_SALT": "0123456789abcdef0123456789abcdef"})
+	down := func(port, path string) string { return "http://127.0.0.1:1" + path }
+
+	res, err := RunStep(context.Background(), Options{Dir: dir, URLFn: down}, "bundle")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.OK {
+		t.Fatal("the bundle passed while the store could not say which path this is")
 	}
 	if !strings.Contains(res.Fix, "CARDO_HOSTNAME") {
 		t.Errorf("the fix does not name the setting: %q", res.Fix)
