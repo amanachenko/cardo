@@ -130,6 +130,12 @@ the directory lists. The view carries no pseudonym: the join that puts a session
 in the silver layer (`silver_session_team`), so a leader cannot read a person's row out of it
 (INV-3).
 
+A person's weeks all count under the team the directory lists for them now: the directory keeps no
+dates, so someone who moved from `payments` to `search` in March has their weeks before March
+counted under `search` too. With the default 90-day window, that shifts at most the weeks of the
+window before the move. An organization that keeps everything sees older weeks move with the person
+as well ([ADR-0058](adr/0058-the-current-team-carries-the-history.md)).
+
 ### 3.5 Coach
 
 The console page is the operator preview: type an email, get the same report the person would get,
