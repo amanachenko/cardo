@@ -1,6 +1,6 @@
 # ADR-0058 — A person's whole history sits on the team they are in now
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-11-01
 **Evidence:** Judgment, no evidence. The question is which of two accepted records governs the
 dates; this record picks one and says what the choice costs.
