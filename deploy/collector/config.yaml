@@ -21,6 +21,12 @@
 #   CARDO_ORG_REPOS         regex naming your organization's repositories, matched against the
 #                           lowercased host/owner/name. Unset or empty: every repository is
 #                           external. See transform/otel_repo.
+#   CARDO_INSTRUCTIONS_NAMES "project" keeps the name of every project-level instructions file,
+#                           so a repository's own files can be named and counted. Any other value,
+#                           including a typo, keeps no name of a team's files. The names of the
+#                           files your organization ships are kept either way (ADR-0026). A
+#                           person's own files are never named, whatever this says. See
+#                           transform/hooks.
 
 receivers:
   # Native OTel from Claude Code. HTTP only: one protocol, one port, one thing to put behind TLS.
@@ -293,6 +299,25 @@ processors:
           - 'replace_pattern(log.cache["instructions_name"], "^.*[/\\\\]", "") where IsString(log.cache["instructions_name"])'
           - 'delete_key(log.cache, "instructions_name") where IsString(log.cache["instructions_name"]) and ("${env:CARDO_ORG_ARTIFACTS:-}" == "" or not IsMatch(log.cache["instructions_name"], "${env:CARDO_ORG_ARTIFACTS:-}"))'
 
+          # The name of a project-level instruction file, kept only when the organization asked for
+          # it (ADR-0035).
+          #
+          # A separate attribute from instructions_name on purpose. That one means "the
+          # organization's own artifact", and the artifact views read it as such, so the
+          # organization's names are shown whatever their count (ADR-0025, ADR-0029). This one
+          # means "a file of a repository", and only the repository views read it: a team's own
+          # files are never the organization's artifacts, and one field for the two would show a
+          # team's file names in the artifact views without the five-person rule.
+          #
+          # Only the Project scope is kept. memory_type is Claude Code's own scope (User, Project
+          # or Managed), and a person's own files are never named, whatever the setting says
+          # (ADR-0035). A file whose scope nobody stated is not evidence that a project loaded it,
+          # so it is not kept either. Any value but "project" means the default, so a typo keeps
+          # nothing rather than everything.
+          - 'set(log.cache["instructions_project_name"], log.cache["file_path"]) where IsString(log.cache["file_path"])'
+          - 'replace_pattern(log.cache["instructions_project_name"], "^.*[/\\\\]", "") where IsString(log.cache["instructions_project_name"])'
+          - 'delete_key(log.cache, "instructions_project_name") where IsString(log.cache["instructions_project_name"]) and ("${env:CARDO_INSTRUCTIONS_NAMES:-}" != "project" or not IsString(log.cache["memory_type"]) or log.cache["memory_type"] != "Project")'
+
           # Names of commands, subagents and MCP servers are kept (ADR-0025): what engineers build
           # for themselves is the best evidence of what the platform team should ship. The views,
           # not this file, keep a name nobody else uses out of sight (ADR-0029). The list of Claude
@@ -329,7 +354,7 @@ processors:
               "tool_name", "tool_use_id",
               "compaction_reason", "current_context_tokens", "target_tokens", "tokens_before", "tokens_after",
               "load_reason", "memory_type", "content_hash", "instructions_file", "instructions_scope",
-              "instructions_name",
+              "instructions_name", "instructions_project_name",
               "from_model", "to_model", "requested_model", "model_switch_source",
               "context_tokens", "prompt_cache_warm", "cache_ttl", "estimated_cache_write_usd",
               "config_source"
