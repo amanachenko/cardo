@@ -163,6 +163,14 @@ cohort-level, and each applies the minimum group size
 | `gold_context_daily` | day, cohort | The context each session starts from, the context each prompt grows to, spend, and model switches' measured cost beside Claude Code's estimate. No panel reads it since the review; the weekly views replace it |
 | `gold_repo_instructions` | week, repository | Which repositories have instructions files, how many loads, and how many people ([ADR-0035](../adr/0035-repository-identity-classified.md)). A repository is named once its people that week reach the minimum group size, and is `other` within its class below it. The number of distinct files is absent without `CARDO_INSTRUCTIONS_NAMES=project`, because without the names it cannot be counted |
 | `gold_repo_instruction_files` | week, repository, file | Which instruction files a repository's sessions load, named, for the organization's own repositories only, and only for repositories over the minimum group size that week ([ADR-0035](../adr/0035-repository-identity-classified.md), [ADR-0029](../adr/0029-minimum-group-size.md)). Empty without the setting |
+| `gold_team_reach` | week, team, artifact | How far each artifact reached inside each team: the share of the team's active people that week who use it, beside the same share for the whole organization ([ADR-0030](../adr/0030-stakeholders-and-questions.md)). Reach, never a ranking, and no row is sorted by team |
+
+A team below the minimum group size is not rendered at all, and its rows are not counted as
+`other` — "1 person" is a person ([ADR-0046](../adr/0046-hashed-team-directory.md)). The floor is
+the team's active people that week, not everyone the directory lists. The join that puts a session
+in its team lives in the silver layer, `silver_session_team` — the directory's team when the person
+is listed, the session's own label otherwise — because a gold view may count a pseudonym but never
+compare one (INV-3).
 
 A mart with the effort distribution by cohort is not built. Spend by cohort and the model mix are
 `gold_spend_weekly` and `gold_model_spend_weekly` on the collector path, and `gold_model_mix` on the
