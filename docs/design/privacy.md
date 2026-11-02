@@ -131,9 +131,6 @@ Recorded here so you know what is coming before it arrives. Each links to the de
   any loaded, and how many. Your organization can choose to record the names of project-level
   files, and this document will say if it has. The names of your own personal files are never
   recorded ([ADR-0035](../adr/0035-repository-identity-classified.md)).
-- **The dates you joined and left your team,** from the directory
-  ([ADR-0034](../adr/0034-identity-in-pilots.md)). Today the directory holds only the current team
-  of each code name.
 - **Only if your organization asks for it:** a budget owner may see the cost of people who are
   over a budget published to you. It shows only what Anthropic's console already shows them, and
   you see your own position first ([ADR-0033](../adr/0033-per-person-cost-for-budget-owners.md)).
