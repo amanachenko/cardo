@@ -50,11 +50,11 @@ Three facts settle it:
 
 | Table | Grain | Answers |
 |---|---|---|
-| `cardo.trend_day` | day | how much the fleet did, and what it cost it |
+| `cardo.trend_day` | day | how much the fleet did: people, sessions, prompts and compactions |
 | `cardo.trend_week_artifact` | week, kind, artifact, file_kind | how adoption moved |
 
-They carry **no pseudonym and no content** ([INV-5](../design/invariants.md)): counts, sums and
-quantiles only. There is no column that can name a person, and the tests assert that. There is no
+They carry **no pseudonym and no content** ([INV-5](../design/invariants.md)): counts only.
+There is no column that can name a person, and the tests assert that. There is no
 table by team: the reasons are in "Rejected alternatives and why" below. Trends of the efficiency
 measures can follow once their views exist, under their own decision.
 
@@ -137,5 +137,5 @@ stable salt in v0.1, so this is a rule for when rotation arrives, not a defect t
   a row describing two people is personal data whether or not a view shows it. The gate belongs at
   write time.
 - **Extend the Admin API path's rollup to cover this.** That path's marts are the leadership ones,
-  and a change to one target belongs in both. The collector path is the one with the enablement
-  question, so it goes first.
+  computed from daily aggregates per person, and need a rollup of their own. The collector path is
+  the one with the enablement question, so it goes first.
