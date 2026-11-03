@@ -1370,10 +1370,12 @@ async function loadTeams() {
     return;
   }
   facts.innerHTML = '';
-  const labelled = t.loaded || t.source === 'labels';
-  facts.appendChild(factCell('Directory', t.loaded ? t.rows + ' people · ' + t.teams + ' teams' : (t.source === 'labels' ? 'session labels' : 'not loaded'), t.loaded ? 'ok' : ''));
-  facts.appendChild(factCell('Sessions mapped · 7d', labelled ? Math.round(t.coveragePct) + '%' : '—', labelled && t.coveragePct > 0 ? 'ok' : ''));
-  facts.appendChild(factCell('Unassigned', labelled ? String(t.unassigned) : '—', labelled && t.unassigned > 0 ? 'bad' : ''));
+  // Every figure here counts people: the floor, the directory and "who has no team" are all about
+  // people. Sessions appear only beside a team, in the table.
+  const active = t.people7d || 0;
+  facts.appendChild(factCell('Directory', t.loaded ? t.rows + ' people · ' + t.teams + ' teams' : 'not loaded', t.loaded ? 'ok' : ''));
+  facts.appendChild(factCell('People in a team · 7d', active ? Math.round(t.coveragePct) + '%' : '—', active && t.mapped > 0 ? 'ok' : ''));
+  facts.appendChild(factCell('People without one · 7d', active ? String(t.unassigned) : '—', t.loaded && t.unassigned > 0 ? 'bad' : ''));
   facts.appendChild(factCell('Hidden teams', String(t.hiddenTeams || 0), t.hiddenTeams ? 'bad' : ''));
 
   const body = $('#teamRows');
@@ -1386,21 +1388,31 @@ async function loadTeams() {
     body.appendChild(tr);
   }
   if (!(t.teamRows || []).length) {
+    const floor = t.floor || 5;
+    let msg;
+    if (!active) {
+      msg = 'No one has had a session in the last 7 days, so there is nothing to attribute yet. A new session shows here within about ten minutes.';
+    } else if (t.hiddenTeams) {
+      msg = t.hiddenTeams + (t.hiddenTeams === 1 ? ' team' : ' teams') + ' had sessions this week, but none had ' + floor +
+        ' people, so none is shown: a team that small would show a person.';
+    } else if (t.loaded) {
+      msg = 'Nobody who had a session this week is in the directory, and no session carries a team label.';
+    } else {
+      msg = 'Nobody is in a team yet: no directory is loaded, and no session carries a team label. Load a directory below; the sessions already in the store map to it.';
+    }
     const tr = el('tr');
     const td = el('td');
     td.colSpan = 3;
-    td.appendChild(el('div', 'state-empty', t.source === 'labels'
-      ? 'No cohort labels on the sessions yet. Load a directory, or work in sessions that carry a label.'
-      : 'No mapped sessions yet. They appear here as the collector sees people in the directory.'));
+    td.appendChild(el('div', 'state-empty', msg));
     tr.appendChild(td);
     body.appendChild(tr);
   }
   $('#teamEmpty').hidden = true;
-  $('#teamHint').textContent = t.loaded
-    ? 'Loaded ' + (t.loadedAt || '').slice(0, 16) + ' · ' + t.rows + ' people, ' + t.teams + ' teams. The file itself is not stored.'
-    : (t.source === 'labels'
-      ? 'Teams from session labels (cohort) — the names sessions already carry. Load a directory to name them your way; a team below ' + (t.floor || 5) + ' people is hidden.'
-      : 'Paste email,team rows, one person per line. Loading replaces the current mapping; the previous batch stays for one generation.');
+  $('#teamHint').textContent = (t.loaded
+    ? 'Loaded ' + (t.loadedAt || '').slice(0, 16) + ' · ' + t.rows + ' people, ' + t.teams + ' teams. The file itself is not stored. '
+    : 'Paste email,team rows, one person per line. Loading replaces the current mapping; the previous batch stays for one generation. ') +
+    'For someone not in the directory, the label on their sessions is the team (cardo.cohort in the settings bundle); the default label, "unassigned", counts as no team. A team below ' +
+    (t.floor || 5) + ' people is not shown.';
 }
 
 async function sendTeams(apply) {
