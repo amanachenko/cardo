@@ -5,10 +5,9 @@
 closing it looked like, and what had to be decided before anyone wrote code. What got built
 afterwards is said by the pull requests that build it.
 
-This is the specification that follows the coverage audit of 2026-10-25. Every claim below was
-checked against the code, not against a document: a step that is listed but returns "not
-implemented" is open, and a document that says "not built" about something that was built later is
-not evidence that it is still open.
+Every claim below was checked against the code, not against a document: a step that is listed but
+returns "not implemented" is open, and a document that says "not built" about something that was
+built later is not evidence that it is still open.
 
 **How to read a row.** Each item names the file that proves it open and the check that would prove
 it closed. An item that needs a decision says so, and the decision is a new or superseding record
@@ -22,7 +21,7 @@ it closed. An item that needs a decision says so, and the decision is a new or s
 The items are grouped by what unblocks the most work first, not by the order they were found in.
 
 | # | Item | Kind | Needs a decision | Depends on |
-|---|---|---|---|---|---|
+|---|---|---|---|---|
 | 1 | The pilot rows of the launcher | code | no | — |
 | 2 | The engineer notice | code | no | 1 |
 | 3 | The signs of struggle, first version | code + a record | yes | — |
@@ -85,7 +84,7 @@ second one anywhere a machine could pick it up.
   failure this repo's own guidance warns about.
 
 **The check that would prove it closed:** `cardo up --pilot` on a clean machine, then read the
-board: three rows pass, none says "PILOT" and "not implemented". 
+board: three rows pass, none says "PILOT" and "not implemented".
 
 **Watch for.** Writing the bundle is a file on the operator's machine, not an installation on a
 developer's. Pushing managed settings to real developer machines is an owner-gated action and stays
