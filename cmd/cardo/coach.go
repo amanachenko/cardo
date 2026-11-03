@@ -96,7 +96,17 @@ func runCoach(args []string) error {
 	}
 	line("Sessions", itoa(now.Sessions), "prev "+itoa(prev.Sessions))
 	line("Prompts", itoa(now.Prompts), "prev "+itoa(prev.Prompts))
-	line("Cost", fmt.Sprintf("$%.2f", now.CostUSD), fmt.Sprintf("prev $%.2f", prev.CostUSD))
+	money := fmt.Sprintf("$%.2f", now.CostUSD)
+	if now.CostEstimatedUSD > 0 {
+		money += fmt.Sprintf(" (incl. $%.2f estimated)", now.CostEstimatedUSD)
+	} else if now.CostUSD == 0 && now.OutputTokens > 0 {
+		money += " (unpriced models)"
+	}
+	prevMoney := fmt.Sprintf("prev $%.2f", prev.CostUSD)
+	if prev.CostEstimatedUSD > 0 {
+		prevMoney += fmt.Sprintf(" (incl. $%.2f est.)", prev.CostEstimatedUSD)
+	}
+	line("Cost", money, prevMoney)
 	line("Peak context", fmt.Sprintf("%d", now.PeakContext), fmt.Sprintf("prev %d", prev.PeakContext))
 	// A window of imported history carries no tool decisions, so the figures were never looked
 	// for. Saying "0 failed" there would claim a measurement nobody made (ADR-0050). Each window

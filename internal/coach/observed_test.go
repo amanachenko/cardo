@@ -35,7 +35,7 @@ func (e *coachEnv) handler() http.HandlerFunc {
 				_, _ = w.Write([]byte("2	5	3\n"))
 			}
 		case strings.Contains(sql, "uniqExact(session_id)"):
-			_, _ = w.Write([]byte("4\t9\t1.50\t1200\t48000\n"))
+			_, _ = w.Write([]byte("4\t9\t1.50\t1200\t48000\t0\n"))
 		default:
 			_, _ = w.Write([]byte(""))
 		}
