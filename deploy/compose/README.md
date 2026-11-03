@@ -30,7 +30,10 @@ docker compose up -d
 After pulling new code, run `docker compose up -d --build migrate`, because the image embeds the
 migrations.
 
-Grafana has two dashboards. **Cardo — fleet adoption** reads the Admin API data.
+Grafana has two dashboards. **Cardo — fleet adoption** reads the Admin API data, day by day.
+Where the Admin API has no row for a person's day, people, sessions and spend come from the
+collector's sessions instead. Lines of code, commits, pull requests and edit acceptance come from
+the Admin API alone.
 **Cardo — enablement** reads the collector's data, week by week. It shows:
 
 - whether the organization's artifacts are used;

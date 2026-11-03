@@ -214,7 +214,8 @@ export CARDO_CLICKHOUSE_USER=cardo CARDO_CLICKHOUSE_PASSWORD=...
 ```
 
 Grafana is on `127.0.0.1:3001` with both dashboards already provisioned: the fleet dashboard
-(Admin API) and the enablement dashboard (collector). The schema is applied
+(daily figures from the Admin API, filled in from the collector's sessions) and the enablement
+dashboard (collector). The schema is applied
 on every run from migrations embedded in the binary — there is no separate migrate step to forget.
 No admin key yet? `make sample-seed` writes invented data so the dashboards have something to draw.
 

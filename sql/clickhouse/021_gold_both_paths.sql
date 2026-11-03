@@ -1,82 +1,61 @@
 -- 021_gold_both_paths.sql
 --
--- The daily-aggregate family -- fleet adoption, daily spend, model mix, tool acceptance -- read
+-- The daily-aggregate family -- fleet adoption, daily spend, model mix -- read
 -- only the Admin API path (silver_actor_day over bronze_actor_day), while the store holds two
 -- ingestion paths and says so on the overview itself. A stack without an admin key then shows
 -- empty money and adoption charts beside real sessions in the store: "what does each cost" has
 -- numbers in one dashboard and none in the other.
 --
--- This migration derives the same daily aggregates from the sessions path (silver_session,
--- silver_api_request, silver_tool_call) and unions both into what the gold views read. Three
--- rules, each of them the point:
+-- This migration derives the same daily aggregates from the sessions path (silver_session and
+-- silver_api_request) and unions both into what the gold views read. Three rules, each of them
+-- the point:
 --
 --   1. THE ADMIN ROW WINS THE DAY. When the ledger has a person's day, the derived rows for that
 --      (day, person) are suppressed (LEFT ANTI JOIN). The ledger is the billing record; counting
 --      a day twice is how "what does each cost" becomes a lie.
 --   2. WHAT ONLY THE LEDGER KNOWS STAYS EMPTY. Lines, commits and pull requests exist on the
 --      admin path alone. Derived rows carry zeros, and the charts show zeros -- inventing them
---      from sessions would answer a question nobody asked the data.
+--      from sessions would answer a question nobody asked the data. Edit decisions are zero on
+--      derived rows too, and gold_tool_acceptance keeps reading the ledger alone. In the sessions
+--      path nearly every edit is decided by an allow rule or a mode (source = 'config'), with no
+--      person asked, so acceptance read from it is close to 100% and reports success that did
+--      not occur (ADR-0031).
 --   3. THE TWO PATHS STAY SEPARABLE. Derived rows carry source = 'sessions', so a chart can
 --      still split what the ledger says from what the sessions say.
+--
+-- Service runs are not people (ADR-0036): their sessions, and the requests and spend in them, are
+-- in none of the derived rows, as in every view that counts people.
 --
 -- The floor is untouched: gold still exposes no per-person rows (INV-3), and the enablement
 -- views' rollups below min_group_size are not in this file's scope.
 
 -- One row per person and day from the sessions path. Service runs are not people and stay out.
 CREATE OR REPLACE VIEW cardo.silver_actor_day_sessions AS
-WITH
-    sessions AS
-    (
-        SELECT
-            day,
-            pseudonym,
-            uniqExact(session_id) AS n
-        FROM cardo.silver_session
-        WHERE actor_kind != 'service'
-          AND pseudonym IS NOT NULL
-          AND pseudonym != ''
-        GROUP BY day, pseudonym
-    ),
-    edits AS
-    (
-        SELECT
-            day,
-            pseudonym,
-            countIf(tool_name = 'Edit' AND decision != 'reject')         AS edit_accepted,
-            countIf(tool_name = 'Edit' AND decision = 'reject')          AS edit_rejected,
-            countIf(tool_name = 'MultiEdit' AND decision != 'reject')    AS multi_edit_accepted,
-            countIf(tool_name = 'MultiEdit' AND decision = 'reject')     AS multi_edit_rejected,
-            countIf(tool_name = 'Write' AND decision != 'reject')        AS write_accepted,
-            countIf(tool_name = 'Write' AND decision = 'reject')         AS write_rejected,
-            countIf(tool_name = 'NotebookEdit' AND decision != 'reject') AS notebook_accepted,
-            countIf(tool_name = 'NotebookEdit' AND decision = 'reject')  AS notebook_rejected
-        FROM cardo.silver_tool_call
-        WHERE is_edit
-          AND pseudonym IS NOT NULL
-          AND pseudonym != ''
-        GROUP BY day, pseudonym
-    )
 SELECT
-    'sessions'                                          AS source,
-    s.day                                               AS day,
-    s.pseudonym                                         AS pseudonym,
-    toInt64(s.n)                                        AS sessions,
-    toInt64(0)                                          AS lines_added,
-    toInt64(0)                                          AS lines_removed,
-    toInt64(0)                                          AS commits,
-    toInt64(0)                                          AS pull_requests,
-    toInt64(coalesce(e.edit_accepted, 0))               AS edit_accepted,
-    toInt64(coalesce(e.edit_rejected, 0))               AS edit_rejected,
-    toInt64(coalesce(e.multi_edit_accepted, 0))         AS multi_edit_accepted,
-    toInt64(coalesce(e.multi_edit_rejected, 0))         AS multi_edit_rejected,
-    toInt64(coalesce(e.write_accepted, 0))              AS write_accepted,
-    toInt64(coalesce(e.write_rejected, 0))              AS write_rejected,
-    toInt64(coalesce(e.notebook_accepted, 0))           AS notebook_accepted,
-    toInt64(coalesce(e.notebook_rejected, 0))           AS notebook_rejected
-FROM sessions AS s
-LEFT JOIN edits AS e ON (e.day = s.day) AND (e.pseudonym = s.pseudonym);
+    'sessions'                     AS source,
+    day,
+    pseudonym,
+    toInt64(uniqExact(session_id)) AS sessions,
+    toInt64(0)                     AS lines_added,
+    toInt64(0)                     AS lines_removed,
+    toInt64(0)                     AS commits,
+    toInt64(0)                     AS pull_requests,
+    toInt64(0)                     AS edit_accepted,
+    toInt64(0)                     AS edit_rejected,
+    toInt64(0)                     AS multi_edit_accepted,
+    toInt64(0)                     AS multi_edit_rejected,
+    toInt64(0)                     AS write_accepted,
+    toInt64(0)                     AS write_rejected,
+    toInt64(0)                     AS notebook_accepted,
+    toInt64(0)                     AS notebook_rejected
+FROM cardo.silver_session
+WHERE actor_kind != 'service'
+  AND pseudonym IS NOT NULL
+  AND pseudonym != ''
+GROUP BY day, pseudonym;
 
--- One row per person, day and model from the sessions path.
+-- One row per person, day and model from the sessions path. A service run's requests are left
+-- out by their session.
 CREATE OR REPLACE VIEW cardo.silver_actor_day_model_sessions AS
 SELECT
     'sessions'                            AS source,
@@ -92,6 +71,7 @@ FROM cardo.silver_api_request
 WHERE pseudonym IS NOT NULL
   AND pseudonym != ''
   AND model != ''
+  AND session_id NOT IN (SELECT session_id FROM cardo.silver_session WHERE actor_kind = 'service')
 GROUP BY day, pseudonym, model;
 
 -- Both paths, admin first: a (day, person) the ledger has is never counted twice.
@@ -125,9 +105,9 @@ LEFT ANTI JOIN
     (SELECT DISTINCT day, pseudonym FROM cardo.silver_actor_day) AS a
     ON (a.day = d.day) AND (a.pseudonym = d.pseudonym);
 
--- The four gold views, their shapes unchanged, now over both paths. Each body is the last
+-- Three gold views, their shapes unchanged, now over both paths. Each body is the last
 -- definition's, with only the source view changed: 019's fleet adoption and cost daily, and
--- 003's tool acceptance and model mix.
+-- 003's model mix. gold_tool_acceptance is not redefined: it stays 003's, over the ledger alone.
 
 CREATE OR REPLACE VIEW cardo.gold_fleet_adoption AS
 WITH totals AS
@@ -172,37 +152,6 @@ SELECT
     source,
     active_actors,
     round(cost_usd_total, 2) AS cost_usd
-FROM totals
-ORDER BY day;
-
-CREATE OR REPLACE VIEW cardo.gold_tool_acceptance AS
-WITH totals AS
-(
-    SELECT
-        day,
-        source,
-        sum(edit_accepted + multi_edit_accepted + write_accepted + notebook_accepted) AS accepted_total,
-        sum(edit_rejected + multi_edit_rejected + write_rejected + notebook_rejected) AS rejected_total,
-        sum(edit_accepted)        AS edit_accepted_total,
-        sum(edit_rejected)        AS edit_rejected_total,
-        sum(write_accepted)       AS write_accepted_total,
-        sum(write_rejected)       AS write_rejected_total,
-        count(DISTINCT pseudonym) AS active_actors
-    FROM cardo.silver_actor_day_both
-    GROUP BY day, source
-)
-SELECT
-    day,
-    source,
-    active_actors,
-    accepted_total AS accepted,
-    rejected_total AS rejected,
-    accepted_total + rejected_total AS proposals,
-    round(accepted_total / nullIf(accepted_total + rejected_total, 0), 4) AS acceptance_rate,
-    round(edit_accepted_total / nullIf(edit_accepted_total + edit_rejected_total, 0), 4) AS edit_acceptance_rate,
-    edit_accepted_total + edit_rejected_total AS edit_proposals,
-    round(write_accepted_total / nullIf(write_accepted_total + write_rejected_total, 0), 4) AS write_acceptance_rate,
-    write_accepted_total + write_rejected_total AS write_proposals
 FROM totals
 ORDER BY day;
 

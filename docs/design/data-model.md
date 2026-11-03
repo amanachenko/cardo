@@ -89,6 +89,14 @@ themselves. **A duration never has one end on each clock.**
 These are their own grain. A daily aggregate can never answer session-level questions, and it does
 not pretend to be the session model below.
 
+`021_gold_both_paths.sql` derives the same two grains from the collector path, so a stack with no
+Admin API key still has them: `silver_actor_day_sessions` from `silver_session`, and
+`silver_actor_day_model_sessions` from `silver_api_request`. `silver_actor_day_both` and
+`silver_actor_day_model_both` put the two paths together. A person's day the Admin API has is never
+taken from the sessions as well. The derived rows carry `source = 'sessions'`, leave service runs
+out, and are zero for what only the Admin API knows: lines, commits, pull requests and edit
+decisions.
+
 ### Built (collector path)
 
 `sql/clickhouse/006_silver_collector.sql`. Deliberately small: this is the
@@ -135,7 +143,10 @@ Vendor-specific richness lives in the attribute maps, not flattened away.
 ### Built (Admin API path)
 
 `gold_fleet_adoption`, `gold_tool_acceptance`, `gold_model_mix`, `gold_cost_daily`,
-`gold_schema_drift`. All are cohort-level: CI reads each `gold_*` view's last definition and
+`gold_schema_drift`. Since `021`, `gold_fleet_adoption`, `gold_model_mix` and `gold_cost_daily` read
+both paths through the `_both` views above. `gold_tool_acceptance` reads the Admin API alone: on the
+collector path nearly every edit is decided by an allow rule or a mode, not a person, so the rate
+would read close to 100% ([ADR-0031](../adr/0031-what-works-means.md)). All are cohort-level: CI reads each `gold_*` view's last definition and
 fails one that uses a pseudonym for anything but counting people (INV-3). None divides by the
 people it counts: `019_no_per_head.sql` removed sessions and spend per active person
 ([ADR-0030](../adr/0030-stakeholders-and-questions.md)).

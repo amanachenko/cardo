@@ -9,7 +9,9 @@ import (
 
 // The daily-aggregate family must see both ingestion paths, and never count a day twice. The
 // Admin API row wins the person's day; the sessions path fills only what the ledger does not
-// have. Lines, commits and pull requests stay zero on derived rows -- only the ledger knows them.
+// have. Lines, commits, pull requests and edit decisions stay zero on derived rows -- only the
+// ledger knows them -- and edit acceptance reads the ledger alone. A service run is not a person,
+// so neither its session nor its spend is in the derived rows.
 //
 // The day is one no other data uses (the day after the newest session in the store), so the gold
 // views' day-level sums are exactly this scenario's.
@@ -27,6 +29,7 @@ func TestGoldAggregatesReadBothPaths(t *testing.T) {
 
 	// The sessions path. Person tp1 works, spends 0.25, and has one edit accepted and one
 	// rejected. Person tp2 spends 9.99 -- and also has a ledger day, which must win outright.
+	service := map[string]bool{}
 	otel := func(person, session, event, prompt string, kv ...string) {
 		lg := "{'session.id': '" + session + "', 'prompt.id': '" + prompt + "'"
 		for i := 0; i+1 < len(kv); i += 2 {
@@ -34,6 +37,9 @@ func TestGoldAggregatesReadBothPaths(t *testing.T) {
 		}
 		lg += "}"
 		res := "{'user.pseudonym': '" + person + "', 'cardo.cohort': 'g'}"
+		if service[session] {
+			res = "{'user.pseudonym': '" + person + "', 'cardo.cohort': 'g', 'cardo.actor': 'service', 'cardo.workflow': 'nightly'}"
+		}
 		q := fmt.Sprintf("INSERT INTO %s (Timestamp, EventName, LogAttributes, ResourceAttributes) "+
 			"VALUES ('%s 10:00:00', '%s', %s, %s)", logsTable, day, event, lg, res)
 		if err := st.c.Exec(ctx, q); err != nil {
@@ -54,6 +60,14 @@ func TestGoldAggregatesReadBothPaths(t *testing.T) {
 	otel(p2, s2, "claude_code.api_request", "pr2", "model", "m1",
 		"input_tokens", "100", "output_tokens", "20",
 		"cache_read_tokens", "10", "cache_creation_tokens", "5", "cost_usd", "9.99")
+
+	// A CI job, run as a service: its session and its 5.00 are in no derived row.
+	p3, s3 := "tp3-"+run, "s-"+run+"-3"
+	service[s3] = true
+	otel(p3, s3, "claude_code.user_prompt", "pr3", "prompt_length", "10")
+	otel(p3, s3, "claude_code.api_request", "pr3", "model", "m1",
+		"input_tokens", "100", "output_tokens", "20",
+		"cache_read_tokens", "10", "cache_creation_tokens", "5", "cost_usd", "5.00")
 
 	// The ledger path: one person only here (pa), one in both (tp2). The payload is the admin
 	// record's: three sessions, seven lines, one commit, two edits accepted and one rejected.
@@ -89,16 +103,26 @@ func TestGoldAggregatesReadBothPaths(t *testing.T) {
 	expect(t, "sessions-path rows", got[1], map[string]string{
 		"source": "sessions", "sessions": "1", "lines": "0", "commits": "0"})
 
-	// The money: tp2's 9.99 is suppressed by their ledger day; tp1's 0.25 is not.
+	// The money: tp2's 9.99 is suppressed by their ledger day, and the service run's 5.00 is not a
+	// person's; tp1's 0.25 is all the sessions path adds, from one person.
 	money := oneRow(t, st, "cost", fmt.Sprintf(
-		"SELECT round(sum(cost_usd), 2) AS c FROM cardo.gold_cost_daily WHERE day = '%s' AND source = 'sessions'", day))
-	expect(t, "daily spend", money, map[string]string{"c": "0.25"})
-
-	// The acceptance family sees the sessions path's edits.
-	acc := oneRow(t, st, "acceptance", fmt.Sprintf(
-		"SELECT accepted, rejected, edit_proposals FROM cardo.gold_tool_acceptance "+
+		"SELECT round(sum(cost_usd), 2) AS c, sum(active_actors) AS people FROM cardo.gold_cost_daily "+
 			"WHERE day = '%s' AND source = 'sessions'", day))
-	expect(t, "tool acceptance", acc, map[string]string{"accepted": "1", "rejected": "1", "edit_proposals": "2"})
+	expect(t, "daily spend", money, map[string]string{"c": "0.25", "people": "1"})
+
+	// Edit acceptance reads the ledger alone: tp1's two edit decisions on the sessions path are
+	// not in it, and the ledger's are (two people, two accepted and one rejected each).
+	acc := rowsOf(t, st, fmt.Sprintf(
+		"SELECT source, accepted, rejected FROM cardo.gold_tool_acceptance "+
+			"WHERE day = '%s' AND source IN ('acme', 'sessions') ORDER BY source", day))
+	if len(acc) != 1 {
+		t.Fatalf("gold_tool_acceptance: got %d source rows, want the ledger's alone: %v", len(acc), acc)
+	}
+	expect(t, "tool acceptance", acc[0], map[string]string{"source": "acme", "accepted": "4", "rejected": "2"})
+	edits := oneRow(t, st, "derived edits", fmt.Sprintf(
+		"SELECT sum(edit_accepted + edit_rejected + write_accepted + write_rejected) AS n "+
+			"FROM cardo.silver_actor_day_both WHERE day = '%s' AND source = 'sessions'", day))
+	expect(t, "edit decisions on derived rows", edits, map[string]string{"n": "0"})
 
 	// The model mix too, by the model the request carried.
 	mix := oneRow(t, st, "mix", fmt.Sprintf(
