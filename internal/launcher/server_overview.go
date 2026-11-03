@@ -138,7 +138,7 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 	case count == 0:
 		out.Next = actionView{Surface: "install", Title: "Prove it with your own session", Detail: "Run Claude Code once in an instrumented project, then check the session step."}
 	case !hasDir:
-		out.Next = actionView{Surface: "teams", Title: "Load the team directory", Detail: "Without it no session can be attributed to a team, and every team view stays empty."}
+		out.Next = actionView{Surface: "teams", Title: "Load the team directory", Detail: "Without it teams fall back to the labels sessions carry; a directory is how they get named your way."}
 	case approved == 0:
 		out.Next = actionView{Surface: "catalog", Title: "Approve the first artifact", Detail: "Drafts change nothing the views read; only an approved version becomes the organization's standard."}
 	case !out.Poller.Configured:

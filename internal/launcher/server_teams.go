@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -22,15 +21,16 @@ type teamRow struct {
 
 type teamsView struct {
 	Loaded      bool      `json:"loaded"`
+	Source      string    `json:"source"` // "directory" once one is loaded, else "labels"
 	Batch       string    `json:"batch,omitempty"`
 	LoadedAt    string    `json:"loadedAt,omitempty"`
 	SourceHash  string    `json:"sourceHash,omitempty"`
 	Rows        int       `json:"rows"`
 	Teams       int       `json:"teams"`
-	Sessions7d  int       `json:"sessions7d"`
-	Mapped      int       `json:"mapped"`
-	CoveragePct float64   `json:"coveragePct"`
-	Unassigned  int       `json:"unassigned"`
+	People7d    int       `json:"people7d"`    // people with a session in the last 7 days
+	Mapped      int       `json:"mapped"`      // of them, people with a team
+	CoveragePct float64   `json:"coveragePct"` // Mapped as a share of People7d
+	Unassigned  int       `json:"unassigned"`  // People7d minus Mapped
 	HiddenTeams int       `json:"hiddenTeams"`
 	Floor       int       `json:"floor"`
 	TeamRows    []teamRow `json:"teamRows"`
@@ -46,9 +46,17 @@ func (s *Server) handleTeamsGet(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, v)
 }
 
-// teamsView answers "who is mapped" in numbers only. A team below the floor is not rendered at all.
+// teamsView answers "who is in a team" in numbers only, counted in people. A team below the floor
+// is not rendered at all.
+//
+// A session's team is what cardo.silver_session_team says, the one rule every team view reads:
+// the directory's team when the person is listed for the salt in force, the session's own label
+// otherwise. That view writes "unassigned" for a session with neither, and the shipped settings
+// bundle labels every session "unassigned" until an organization sets its cohorts, so here
+// "unassigned" is no team at all, never a team of that name. The view reads stored silver, so a
+// new session reaches this page when the store's copy is next rebuilt (ADR-0052).
 func (s *Server) teamsView(ctx context.Context) (teamsView, error) {
-	v := teamsView{Floor: 5, TeamRows: []teamRow{}}
+	v := teamsView{Floor: 5, Source: "labels", TeamRows: []teamRow{}}
 	if body, err := s.ch(ctx, "SELECT min_group_size FROM cardo.settings_effective LIMIT 1"); err == nil {
 		if n, err := strconv.Atoi(strings.TrimSpace(body)); err == nil && n > 0 {
 			v.Floor = n
@@ -70,50 +78,50 @@ func (s *Server) teamsView(ctx context.Context) (teamsView, error) {
 			return v, err
 		}
 		v.Loaded, v.Batch, v.LoadedAt, v.Rows, v.Teams, v.SourceHash = true, b.Batch, shortTime(b.At), b.Rows, b.Teams, b.Hash
+		v.Source = "directory"
 	}
 
-	sessionFilter := "last_event_at > now() - INTERVAL 7 DAY AND session_id NOT LIKE '" + probePrefix + "%'"
-	saltVersion := "v1"
-	if env, err := ReadDotEnv(s.opts.Dir + "/.env"); err == nil {
-		if v := strings.TrimSpace(env["CARDO_SALT_VERSION"]); v != "" {
-			saltVersion = v
+	// The last seven days of people's sessions, each with its team. Service runs are not people,
+	// and silver_session_team has no row for them (ADR-0036).
+	recent := `FROM cardo.silver_session_team AS t
+		INNER JOIN cardo.silver_session AS s ON s.session_id = t.session_id
+		WHERE s.last_event_at > now() - INTERVAL 7 DAY AND s.session_id NOT LIKE '` + probePrefix + `%'
+		  AND s.pseudonym IS NOT NULL`
+
+	// A person counts as in a team if any of their sessions this week had one; the rest have none.
+	if body, err := s.ch(ctx, `SELECT uniqExact(s.pseudonym) AS people, uniqExactIf(s.pseudonym, t.team != 'unassigned') AS placed
+		`+recent+` FORMAT JSONEachRow`); err == nil && strings.TrimSpace(body) != "" {
+		var n struct {
+			People int `json:"people"`
+			Placed int `json:"placed"`
+		}
+		if json.Unmarshal([]byte(firstLine(body)), &n) == nil {
+			v.People7d, v.Mapped, v.Unassigned = n.People, n.Placed, n.People-n.Placed
+			if n.People > 0 {
+				v.CoveragePct = float64(n.Placed) / float64(n.People) * 100
+			}
 		}
 	}
-	if n, err := s.chInt(ctx, "SELECT count() FROM cardo.silver_session_live WHERE "+sessionFilter); err == nil {
-		v.Sessions7d = n
-	}
-	if v.Loaded {
-		in := "pseudonym IN (SELECT pseudonym FROM cardo.settings_teams WHERE batch = '" + escapeSQL(v.Batch) + "' AND salt_version = '" + escapeSQL(saltVersion) + "')"
-		if n, err := s.chInt(ctx, "SELECT count() FROM cardo.silver_session_live WHERE "+sessionFilter+" AND "+in); err == nil {
-			v.Mapped = n
-		}
-		if n, err := s.chInt(ctx, "SELECT uniqExact(pseudonym) FROM cardo.silver_session_live WHERE "+sessionFilter+" AND pseudonym IS NOT NULL AND pseudonym NOT IN (SELECT pseudonym FROM cardo.settings_teams WHERE batch = '"+escapeSQL(v.Batch)+"' AND salt_version = '"+escapeSQL(saltVersion)+"')"); err == nil {
-			v.Unassigned = n
-		}
-		if v.Sessions7d > 0 {
-			v.CoveragePct = float64(v.Mapped) / float64(v.Sessions7d) * 100
-		}
-		rows, err := s.ch(ctx, fmt.Sprintf(`SELECT t.team AS team, uniqExact(s.pseudonym) AS people, count() AS sessions
-			FROM cardo.silver_session_live s INNER JOIN cardo.settings_teams t
-			ON s.pseudonym = t.pseudonym AND t.batch = '%s' AND t.salt_version = s.salt_version
-			WHERE s.%s GROUP BY t.team ORDER BY sessions DESC FORMAT JSONEachRow`, escapeSQL(v.Batch), sessionFilter))
-		if err == nil {
-			for _, line := range strings.Split(strings.TrimSpace(rows), "\n") {
-				if strings.TrimSpace(line) == "" {
-					continue
+
+	rows, err := s.ch(ctx, `SELECT t.team AS team, uniqExact(s.pseudonym) AS people, count() AS sessions
+		`+recent+` AND t.team != 'unassigned'
+		GROUP BY t.team ORDER BY sessions DESC FORMAT JSONEachRow`)
+	if err == nil {
+		for _, line := range strings.Split(strings.TrimSpace(rows), "\n") {
+			if strings.TrimSpace(line) == "" {
+				continue
+			}
+			var tr struct {
+				Team     string `json:"team"`
+				People   int    `json:"people"`
+				Sessions int    `json:"sessions"`
+			}
+			if json.Unmarshal([]byte(line), &tr) == nil {
+				if tr.People < v.Floor {
+					v.HiddenTeams++
+					continue // a team of two people is a person
 				}
-				var tr struct {
-					Team     string `json:"team"`
-					People   int    `json:"people"`
-					Sessions int    `json:"sessions"`
-				}
-				if json.Unmarshal([]byte(line), &tr) == nil {
-					if tr.People < v.Floor {
-						v.HiddenTeams++
-						continue // a team of two people is a person
-					}
-					v.TeamRows = append(v.TeamRows, teamRow{Team: tr.Team, People: tr.People, Sessions: tr.Sessions})
-				}
+				v.TeamRows = append(v.TeamRows, teamRow{Team: tr.Team, People: tr.People, Sessions: tr.Sessions})
 			}
 		}
 	}
