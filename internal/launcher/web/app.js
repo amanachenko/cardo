@@ -1136,7 +1136,8 @@ async function loadCatalog() {
   try {
     const r = await fetchT('/api/catalog');
     if (!r.ok) throw new Error('HTTP ' + r.status);
-    catalogRows = await r.json() || [];
+    const page = await r.json();
+    catalogRows = Array.isArray(page) ? page : (page && Array.isArray(page.rows) ? page.rows : []);
   } catch (e) {
     tbody.innerHTML = '';
     const tr = el('tr');
@@ -1387,7 +1388,9 @@ async function loadTeams() {
     const tr = el('tr');
     const td = el('td');
     td.colSpan = 3;
-    td.appendChild(el('div', 'state-empty', 'No sessions yet, so there is nothing to attribute. Load a directory and let the collector run.'));
+    td.appendChild(el('div', 'state-empty', t.loaded
+      ? 'No mapped sessions yet. They appear here as the collector sees people in the directory.'
+      : 'No directory loaded yet, so nothing is attributed to teams. Load one; the sessions already in the store map to it.'));
     tr.appendChild(td);
     body.appendChild(tr);
   }
@@ -1487,7 +1490,9 @@ function renderCoach(v, standalone) {
   const n = v.report.now, pv = v.report.prev;
   hero.appendChild(coachCell('Sessions', String(n.sessions), 'prev ' + pv.sessions));
   hero.appendChild(coachCell('Prompts', String(n.prompts), 'prev ' + pv.prompts));
-  hero.appendChild(coachCell('Cost', '$' + n.costUsd.toFixed(2), 'prev $' + pv.costUsd.toFixed(2)));
+  hero.appendChild(coachCell('Cost',
+    '$' + n.costUsd.toFixed(2) + (n.costEstimatedUsd > 0 ? ' (incl. $' + n.costEstimatedUsd.toFixed(2) + ' estimated)' : (n.costUsd === 0 && n.outputTokens > 0 ? ' (unpriced models)' : '')),
+    'prev $' + pv.costUsd.toFixed(2) + (pv.costEstimatedUsd > 0 ? ' (incl. $' + pv.costEstimatedUsd.toFixed(2) + ' est.)' : '')));
   hero.appendChild(coachCell('Peak context', n.peakContext.toLocaleString(), 'prev ' + pv.peakContext.toLocaleString()));
   box.appendChild(hero);
 
@@ -1509,7 +1514,8 @@ function renderCoach(v, standalone) {
 
   const sug = document.createElement('ol');
   sug.className = 'coach-sug';
-  for (const s of v.report.suggestions) {
+  const suggestions = Array.isArray(v.report.suggestions) ? v.report.suggestions : [];
+  for (const s of suggestions) {
     const li = document.createElement('li');
     const b = document.createElement('b');
     b.textContent = String(sug.children.length + 1).padStart(2, '0');
@@ -1517,7 +1523,7 @@ function renderCoach(v, standalone) {
     li.appendChild(document.createTextNode(s));
     sug.appendChild(li);
   }
-  if (!v.report.suggestions.length) {
+  if (!suggestions.length) {
     const li = document.createElement('li');
     li.textContent = 'No suggestion this window: nothing your colleagues have adopted is missing from your own work.';
     sug.appendChild(li);

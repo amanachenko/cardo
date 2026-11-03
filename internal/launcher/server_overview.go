@@ -85,7 +85,7 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 		var failing []string
 		for _, row := range rows {
 			if !row.OK && !row.Pending {
-				failing = append(failing, row.Name+": "+row.Value)
+				failing = append(failing, warnLine(row))
 				if out.Stack.Cause == "" {
 					out.Stack.Cause, out.Stack.Fix = row.Cause, row.Fix
 				}
@@ -101,7 +101,7 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 				}
 				if row.Pending {
 					pending++
-					out.Warnings = append(out.Warnings, row.Name+": "+row.Value)
+					out.Warnings = append(out.Warnings, warnLine(row))
 				}
 			}
 			if pending > 0 {

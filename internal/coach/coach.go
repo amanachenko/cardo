@@ -15,15 +15,22 @@ import (
 // Window is one person's numbers for one period. All values are counts or sums; nothing here is a
 // score.
 type Window struct {
-	Sessions     int     `json:"sessions"`
-	Prompts      int     `json:"prompts"`
-	CostUSD      float64 `json:"costUsd"`
-	OutputTokens uint64  `json:"outputTokens"`
-	PeakContext  int64   `json:"peakContext"`
-	Blocked      int     `json:"blocked"`
-	FailedTools  int     `json:"failedTools"`
-	ToolCalls    int     `json:"toolCalls"`
-	Edits        int     `json:"edits"`
+	Sessions int     `json:"sessions"`
+	Prompts  int     `json:"prompts"`
+	CostUSD  float64 `json:"costUsd"`
+	// CostEstimatedUSD is the part of CostUSD that came from imported sessions, where the price is
+	// the published list rate applied to counted tokens (ADR-0050). A window that mixes measured
+	// and estimated money says so rather than adding them silently.
+	CostEstimatedUSD float64 `json:"costEstimatedUsd"`
+	OutputTokens     uint64  `json:"outputTokens"`
+	PeakContext      int64   `json:"peakContext"`
+	FailedTools      int     `json:"failedTools"`
+	ToolCalls        int     `json:"toolCalls"`
+	Edits            int     `json:"edits"`
+	// ToolsObserved says the tool figures were looked for and found. It is false when the window
+	// holds imported history and nothing else: a transcript carries no tool decisions, so a failure
+	// count of zero would say "no failures" where the truth is "not looked at" (ADR-0050).
+	ToolsObserved bool `json:"toolsObserved"`
 }
 
 // Artifact is one thing this person loaded, by name.
@@ -90,7 +97,8 @@ func Query(ctx context.Context, endpoint, user, pass, pseudonym string, from, to
 	// than at the next rebuild of the stored tables, up to 10 minutes later (ADR-0052). One
 	// person's rows are few, so reading them live costs little.
 	sql := fmt.Sprintf(`SELECT uniqExact(session_id), count(), round(sum(cost_usd), 4), sum(output_tokens),
-		toInt64(round(ifNotFinite(quantile(0.5)(peak_context_tokens), 0))) FROM cardo.silver_turn_live
+		toInt64(round(ifNotFinite(quantile(0.5)(peak_context_tokens), 0))),
+		round(sumIf(cost_usd, cohort = 'imported'), 4) FROM cardo.silver_turn_live
 		WHERE pseudonym = '%s' AND day BETWEEN toDate('%s') AND toDate('%s')
 			AND session_id IN (SELECT session_id FROM cardo.silver_session_live WHERE actor_kind != 'service') FORMAT TSV`,
 		pseudonym, from.Format("2006-01-02"), to.Format("2006-01-02"))
@@ -98,11 +106,13 @@ func Query(ctx context.Context, endpoint, user, pass, pseudonym string, from, to
 	if err != nil {
 		return w, nil, err
 	}
-	var cost float64
-	if _, err := fmt.Sscanf(strings.TrimSpace(row), "%d\t%d\t%f\t%d\t%d", &w.Sessions, &w.Prompts, &cost, &w.OutputTokens, &w.PeakContext); err != nil && strings.TrimSpace(row) != "" {
+	var cost, estimated float64
+	if _, err := fmt.Sscanf(strings.TrimSpace(row), "%d\t%d\t%f\t%d\t%d\t%f",
+		&w.Sessions, &w.Prompts, &cost, &w.OutputTokens, &w.PeakContext, &estimated); err != nil && strings.TrimSpace(row) != "" {
 		return w, nil, fmt.Errorf("turns row %q: %w", row, err)
 	}
 	w.CostUSD = cost
+	w.CostEstimatedUSD = estimated
 
 	sql = fmt.Sprintf(`SELECT countIf(ran = 1 AND succeeded = 0), countIf(ran = 1), countIf(is_edit = 1)
 		FROM cardo.silver_tool_call_live WHERE pseudonym = '%s' AND day BETWEEN toDate('%s') AND toDate('%s')
@@ -113,6 +123,22 @@ func Query(ctx context.Context, endpoint, user, pass, pseudonym string, from, to
 		return w, nil, err
 	}
 	_, _ = fmt.Sscanf(strings.TrimSpace(row), "%d\t%d\t%d", &w.FailedTools, &w.ToolCalls, &w.Edits)
+
+	// Were the tool figures looked for at all? A transcript carries no tool decisions, so a window
+	// of imported history reports no failures because nothing was observed, not because nothing
+	// failed. The cohort tells the two apart (ADR-0050). The _live views are what the rest of the
+	// coach reads, so a session that just ended counts at once.
+	sql = fmt.Sprintf(`SELECT countIf(cohort != 'imported') FROM cardo.silver_turn_live
+		WHERE pseudonym = '%s' AND day BETWEEN toDate('%s') AND toDate('%s')
+			AND session_id IN (SELECT session_id FROM cardo.silver_session_live WHERE actor_kind != 'service') FORMAT TSV`,
+		pseudonym, from.Format("2006-01-02"), to.Format("2006-01-02"))
+	row, err = q(sql)
+	if err != nil {
+		return w, nil, err
+	}
+	var liveTurns int
+	_, _ = fmt.Sscanf(strings.TrimSpace(row), "%d", &liveTurns)
+	w.ToolsObserved = liveTurns > 0
 
 	sql = fmt.Sprintf(`SELECT name, count() FROM cardo.silver_artifact_load_live
 		WHERE pseudonym = '%s' AND day BETWEEN toDate('%s') AND toDate('%s')
@@ -143,7 +169,8 @@ func Query(ctx context.Context, endpoint, user, pass, pseudonym string, from, to
 // The suggestion carries the number of people who use it, because that count is the evidence.
 func Suggest(untried []PeerArtifact) []string {
 	if len(untried) == 0 {
-		return nil
+		// Never nil: a report's suggestions marshal as a list, because the board iterates them.
+		return []string{}
 	}
 	a := untried[0]
 	return []string{fmt.Sprintf("%d people here use %s, and you haven't tried it yet.", a.People, a.Name)}

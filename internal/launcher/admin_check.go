@@ -12,12 +12,25 @@ import (
 // checkAdminData answers the other half of "what the views rely on": the Admin API path. It is
 // pending until the first poll, and fails when the newest day is older than two days, which is how
 // a dead poller looks from the outside.
+//
+// The path is optional. With no CARDO_ADMIN_KEY it is off, and then nothing about it can fail: the
+// rows left from when it ran are history, not a broken poller. A disabled optional path failing the
+// stack forever is how a fresh install ends up permanently red.
 func checkAdminData(ctx context.Context, opts Options) (Result, error) {
 	r := Result{ID: "admin", Name: "ADMIN DATA"}
 	env, err := ReadDotEnv(filepath.Join(opts.Dir, ".env"))
 	if err != nil {
 		r.Pending = true
 		r.Fix = "Run cardo up once; it writes .env and starts the stack."
+		return r, nil
+	}
+	enabled := strings.TrimSpace(env["CARDO_ADMIN_KEY"]) != ""
+	if !enabled {
+		// The path is off by choice, so there is nothing to wait for: a disabled optional path is
+		// a healthy stack, and `cardo check --proof` must not fail over it forever.
+		r.OK = true
+		r.Value = "off (optional)"
+		r.Fix = "Set CARDO_ADMIN_KEY in Settings to start polling."
 		return r, nil
 	}
 	body, _, err := chQuery(ctx, opts.url("8124", ""), env["CLICKHOUSE_USER"], env["CLICKHOUSE_PASSWORD"],

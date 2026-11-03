@@ -131,9 +131,6 @@ Recorded here so you know what is coming before it arrives. Each links to the de
   any loaded, and how many. Your organization can choose to record the names of project-level
   files, and this document will say if it has. The names of your own personal files are never
   recorded ([ADR-0035](../adr/0035-repository-identity-classified.md)).
-- **The dates you joined and left your team,** from the directory
-  ([ADR-0034](../adr/0034-identity-in-pilots.md)). Today the directory holds only the current team
-  of each code name.
 - **Only if your organization asks for it:** a budget owner may see the cost of people who are
   over a budget published to you. It shows only what Anthropic's console already shows them, and
   you see your own position first ([ADR-0033](../adr/0033-per-person-cost-for-budget-owners.md)).
@@ -201,7 +198,89 @@ deletion request.
 | Security (T0) | 1 year |
 | Fleet (T1) | 90 days by default; your organization may change it |
 | Personal (T2) | 30 days |
-| Aggregates with no pseudonym | indefinite |
+| Aggregates with no pseudonym, each describing at least five people | indefinite |
+
+## The deletion path, written down
+
+[ADR-0016](../adr/0016-retention.md) says a deletion request can be honoured because the salt
+exists, and that the procedure must be written down rather than improvised. This is that
+procedure, and each step names what it removes.
+
+**1. The person's sessions are listed first.** Once their OTel rows are gone, their hook rows can no
+longer be tied to them: a hook row carries no identity at all, only the session id.
+
+```sql
+SELECT session_id FROM cardo.silver_session_live
+    WHERE pseudonym = '<pseudonym>' FORMAT TSV;
+```
+
+**2. Everything that carries the pseudonym, deleted by the field each table actually carries.** The
+collector puts the pseudonym wherever the email arrived: on the resource, on the event record or on
+the metric point. `bronze_hook_events` carries no identity at all, and `bronze_actor_day` has a
+`pseudonym` column and no resource. The team directory, if your organization uploaded one, keeps
+one line per code name in `settings_teams`. Deleting by one field alone leaves the rest in the
+store.
+
+```sql
+-- bronze_otel_logs: the pseudonym on the record or on the resource, or any of their sessions
+ALTER TABLE cardo.bronze_otel_logs DELETE WHERE
+    LogAttributes['user.pseudonym'] = '<pseudonym>'
+    OR ResourceAttributes['user.pseudonym'] = '<pseudonym>'
+    OR LogAttributes['session.id'] IN (<sessions>)
+    SETTINGS mutations_sync = 1;
+
+-- bronze_otel_metrics_sum: the pseudonym on the data point or on the resource
+ALTER TABLE cardo.bronze_otel_metrics_sum DELETE WHERE
+    Attributes['user.pseudonym'] = '<pseudonym>'
+    OR ResourceAttributes['user.pseudonym'] = '<pseudonym>'
+    SETTINGS mutations_sync = 1;
+
+-- bronze_hook_events: no identity, only the session id
+ALTER TABLE cardo.bronze_hook_events DELETE WHERE
+    LogAttributes['session_id'] IN (<sessions>) SETTINGS mutations_sync = 1;
+
+-- bronze_actor_day: its own pseudonym column
+ALTER TABLE cardo.bronze_actor_day DELETE WHERE
+    pseudonym = '<pseudonym>' SETTINGS mutations_sync = 1;
+
+-- settings_teams: the directory's line for them, in every upload kept
+ALTER TABLE cardo.settings_teams DELETE WHERE
+    pseudonym = '<pseudonym>' SETTINGS mutations_sync = 1;
+```
+
+Every figure Cardo shows is computed from those rows, so your absence changes the numbers rather
+than hiding inside them. The directory line comes back with the next upload that lists you, so your
+organization removes you from its directory file too.
+
+**3. Stored silver is rebuilt, on its own within ten minutes.** The silver tables hold what the
+last rebuild saw, so the person's rows are rebuilt away — and a trend recomputed after that cannot
+put them back, because `cardo trend` rebuilds silver before it reads.
+
+**4. The trend rows are not part of the request.** The rows that outlive the window
+([ADR-0055](../adr/0055-trend-rows-outlive-the-rows.md)) carry no pseudonym, and each one describes
+at least five people. A line saying "five people, twelve sessions on 3 March" cannot be reduced to
+you, so it is not your record and it is left alone.
+
+**5. An organization that wants those periods gone anyway deletes the period, and the period is the
+unit.** One person cannot be subtracted from an aggregate: the rows that said which of the five was
+you expired with the window. So the deletion is the whole period, said out loud:
+
+```sql
+ALTER TABLE cardo.trend_day           DROP PARTITION tuple('2026-03-03');
+ALTER TABLE cardo.trend_week_artifact DROP PARTITION tuple('2026-03-01'); -- the week's Monday
+```
+
+That removes the day for the whole fleet and the week for every artifact they used — not only their
+share of it. `cardo trend --from 2026-03-03 --to 2026-03-03` then recomputes the day from whatever
+rows are still inside the window.
+
+**6. For a period whose rows have already expired, the person's share cannot even be located.**
+Nothing in a trend row says who was there. Your organization names the periods it wants removed, and
+they are removed whole, as in step 5.
+
+Deleting a person's rows does not shrink the trend rows for the days they worked: those counts were
+computed while their rows were there, and every one of them describes a group of at least five. That
+is the honest limit of an aggregate, and it is why the floor is applied before anything is written.
 
 ## What your administrator can do that Cardo cannot prevent
 
@@ -215,4 +294,4 @@ actually deployed on your machine ([ADR-0007](../adr/0007-enrollment-posture.md)
 ## Data protection deliverables
 
 To be shipped in this repository (v0.2, [ADR-0003](../adr/0003-efficiency-before-security.md) phase 3):
-a DPIA template, a documented deletion path, and a works-council one-pager.
+a DPIA template and a works-council one-pager. The deletion path is written down above.
