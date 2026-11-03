@@ -107,7 +107,7 @@ Recorded here so a future session knows these were considered and postponed, not
 - **Materializing the silver and gold views themselves** — they read the stored silver, which is
   rebuilt from 90-day bronze every 10 minutes (ADR-0052); a materialized table is a migration each
   time the marts change (risks.md #14). What is built here is the rollup that lets a trend outlive
-  its rows (ADR-0055, pending its acceptance) -- trend rows with no TTL, written by `cardo trend`.
+  its rows (ADR-0055) -- trend rows with no TTL, written by `cardo trend`.
 - **The Claude Enterprise Analytics adapter** — built when an organization on Enterprise seats asks
   for it. The Console adapter went first because it could be tested without an organization
   (ADR-0021, ordered by ADR-0042).
