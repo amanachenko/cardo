@@ -425,8 +425,8 @@ func TestINV3_GoldViewsExposeNoPerPersonRows(t *testing.T) {
 		lines []sqlLine
 	}
 	created := regexp.MustCompile(`^\s*create\s+(?:or\s+replace\s+)?(?:materialized\s+)?view\s+` +
-		`(?:if\s+not\s+exists\s+)?(?:cardo\.)?(gold_\w+)`)
-	dropped := regexp.MustCompile(`^\s*drop\s+(?:view|table)\s+(?:if\s+exists\s+)?(?:cardo\.)?(gold_\w+)`)
+		`(?:if\s+not\s+exists\s+)?(?:cardo\.)?((?:gold|trend)_\w+)`)
+	dropped := regexp.MustCompile(`^\s*drop\s+(?:view|table)\s+(?:if\s+exists\s+)?(?:cardo\.)?((?:gold|trend)_\w+)`)
 	final := map[string]definition{}
 	for _, path := range paths {
 		b, err := os.ReadFile(path)

@@ -108,6 +108,34 @@ If validation refuses a file, the diff is not offered — fix the file, do not f
 
 Re-uploading the same file is safe; it produces a new generation and prunes the old one.
 
+**`cardo teams --file <directory.csv>`** does the same thing from a shell, for a machine where the
+board is not open. It shows the counts before anything is written and writes nothing without
+`--apply`:
+
+```sh
+cardo teams --file teams.csv            # dry run: rows, teams, how many are below the floor
+cardo teams --file teams.csv --apply    # store the mapping
+```
+
+A malformed line is reported with its line number and nothing is written, so a file with one bad row
+never half-loads. The output never contains an address: it is counts, the same counts the console
+shows (ADR-0046).
+
+**What the organization can now read.** `gold_team_reach` answers "how far did this reach inside
+that team" as the share of the team's own active people that week who use it, with the same share
+for the whole organization beside it ([ADR-0030](adr/0030-stakeholders-and-questions.md)). Teams
+are read against the whole, never against one another. A team below the floor is not rendered at
+all, and the floor is the team's active people that week — the people with a session — not everyone
+the directory lists. The view carries no pseudonym: the join that puts a session in its team lives
+in the silver layer (`silver_session_team`), so a leader cannot read a person's row out of it
+(INV-3).
+
+A person's weeks all count under the team the directory lists for them now: the directory keeps no
+dates, so someone who moved from `payments` to `search` in March has their weeks before March
+counted under `search` too. With the default 90-day window, that shifts at most the weeks of the
+window before the move. An organization that keeps everything sees older weeks move with the person
+as well ([ADR-0058](adr/0058-the-current-team-carries-the-history.md)).
+
 ### 3.5 Coach
 
 The console page is the operator preview: type an email, get the same report the person would get,
@@ -160,7 +188,8 @@ what a salted SHA-256 looks like. A value that is not one is refused rather than
 - **Cost** is Anthropic's published list price, not an invoice (§13, gap 1).
 - **Peak context** is the largest `input + cache read + cache create` seen in one request.
 - **Tool calls** are only available for live-telemetry sessions. Imported transcripts carry no tool
-  decisions or durations, so the imported path reports `0` (§13, gap 2).
+  decisions or durations, so a window that holds imported history and nothing else says **not
+  observed** rather than `0 failed` — the figures were never looked for (§13, gap 2).
 
 ### 4.3 Pseudonyms
 
@@ -367,7 +396,7 @@ the console has never been opened.
 | `bronze_otel_logs` | MergeTree | Live telemetry **and** imported rows; imported ones carry `cardo.import=1`, `cardo.cohort=imported` |
 | `bronze_hook_events` | MergeTree | Reduced hook payloads (allowlist only) |
 | `silver_session`, `silver_turn`, `silver_api_request`, `silver_tool_call` | Tables, rebuilt every 10 minutes from their `_live` views (migration 017) | The console and the coach read the `_live` views, so a session shows at once. `silver_session` leaves out `cardo-probe-%` sessions (migration 013) |
-| `gold_cost_daily`, `gold_fleet_adoption`, `gold_artifact_usage`, … | Views | `gold_artifact_usage` excludes service runs |
+| `gold_cost_daily`, `gold_fleet_adoption`, `gold_artifact_usage`, `gold_team_reach`, … | Views | `gold_artifact_usage` excludes service runs |
 | `settings`, `settings_effective`, `settings_changes` | Tables | Immutable versions; every write audited |
 | `settings_artifact_versions` | Table | Catalog metadata; files stay on disk |
 | `settings_teams`, `settings_teams_batches` | Tables | Hashed directory and commit markers |
@@ -458,7 +487,7 @@ counting `silver_session_live` rows with `session_id LIKE 'demo-%'` (expect 0).
 | --- | --- | --- |
 | `FIELDS  cannot read back` + `invalid character '…'` | A ClickHouse query parsed as JSON without `FORMAT JSONEachRow`, so the TSV body was handed to `json.Unmarshal` | Append `FORMAT JSONEachRow` to every query whose body is parsed. Fixed in `internal/launcher/readback.go` on 2026-10-18 |
 | `FIELDS  … missing app_version, hook rows` | The newest session was an imported or demo one, which can never carry hooks | The check now excludes `cohort='imported'` and `demo-%`; run Claude Code once in an instrumented project to produce a real session |
-| `Tool calls 0` in the coach | Imported transcripts carry no tool calls | Expected; label the figure "live only" or add hook capture |
+| the coach says *not observed* | Imported transcripts carry no tool calls | Expected |
 | `unpriced models` in `cardo import` | The model is not in the published table, or the transcript has a typo | Add it to `~/Library/Caches/cardo/pricing-override.json`, or fix the model name in the transcript |
 | Console refuses the link | Token rotated, or the port changed (token files are per port) | Open `?t=<token>` from `~/Library/Caches/cardo/token-<port>` |
 | Coach link 401 | `k` missing, wrong pseudonym, or the board token rotated | Reissue from Console → Coach |
@@ -471,7 +500,8 @@ counting `silver_session_live` rows with `session_id LIKE 'demo-%'` (expect 0).
 1. **Cost is Anthropic's published list price, not the invoice.** Discounts, credits and batch pricing
    are not modelled.
 2. **Imported history has no tool calls.** Transcripts contain no decisions or durations; only live
-   telemetry does.
+   telemetry does. The coach says "not observed" for such a window rather than `0 failed`, so a
+   zero is never reported where nothing was looked at.
 3. Three of the 84 imported sessions have no prompts and therefore no turns (81 appear in
    `silver_turn`).
 4. **The import sees one machine.** Cross-machine history needs export/import (roadmap, Step 3,
