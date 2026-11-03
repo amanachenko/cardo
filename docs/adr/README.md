@@ -64,6 +64,7 @@ The hard rules that these decisions produce live in
 | [0053](0053-retention-default-and-organization-choice.md) | Retention is 90 days by default, and the organization may change it | Accepted | 2026-10-25 |
 | [0054](0054-both-actor-types-are-people.md) | Both actor types are people, so a service run is labelled by the run itself | Accepted | 2026-10-25 |
 | [0055](0055-trend-rows-outlive-the-rows.md) | Trend rows outlive the rows behind them, and only when they describe five people | Accepted | 2026-10-25 |
+| [0056](0056-efficiency-compared-within-people.md) | Efficiency is compared within one person, over one week | Accepted | 2026-10-25 |
 | [0057](0057-clickhouse-is-the-only-store.md) | ClickHouse is the only store; the file store and its DuckDB views are removed | Accepted | 2026-10-27 |
 | [0058](0058-the-current-team-carries-the-history.md) | A person's whole history sits on the team they are in now | Accepted | 2026-11-01 |
 
