@@ -63,10 +63,15 @@ type Options struct {
 	// restart; tests and the embedded board leave it empty.
 	Token string
 	Deps  Deps
-	// Pilot is kept for the board and the notice; the pilot-only rows (leaders' logins, bundle,
-	// notice) land with the next change. It changes nothing in this one.
+	// Pilot says the organization chose the team path: the leaders' read-only login, the bundle
+	// for the machines it manages and the notice it hands to its engineers are rows a single
+	// person has no use for, so they run only with --pilot or when the board's path selector says
+	// pilot.
 	Pilot  bool
 	DryRun bool
+	// pathUnknown says the store did not answer when a team row asked which path this is. The
+	// bundle then refuses to guess: for it, the solo path is not the safe one.
+	pathUnknown bool
 	// Project is the directory whose Claude Code settings the connect step installs into.
 	Project string
 }
@@ -184,6 +189,22 @@ func Up(ctx context.Context, opts Options) error {
 		rows = append(rows, r)
 	}
 
+	// The pilot rows are the ones a second person needs: the leaders' read-only login, the bundle
+	// for the machines the organization manages, and the notice it hands to its engineers. A solo
+	// install has nobody to hand them to, so they run only when the organization chose the team
+	// path — with the flag, or by having chosen it in the board, which writes the same setting.
+	if pilot, _ := pilotModeInStore(ctx, opts); opts.Pilot || pilot {
+		pilotOpts := opts
+		pilotOpts.Pilot = true
+		for _, id := range []string{"gold", "bundle", "notice"} {
+			r, err := RunStep(ctx, pilotOpts, id)
+			if err != nil {
+				return fmt.Errorf("%s: %w", id, err)
+			}
+			rows = append(rows, r)
+		}
+	}
+
 	Render(opts.Out, rows)
 	for _, r := range rows {
 		if !r.OK {
@@ -191,6 +212,25 @@ func Up(ctx context.Context, opts Options) error {
 		}
 	}
 	return nil
+}
+
+// pilotModeInStore says whether the organization chose the team path, read from the settings
+// table where the board writes it.
+//
+// The CLI and the board must not disagree about which rows belong to a pilot, so both read the
+// same setting. A store that cannot be read answers false, and known says it did not answer: for
+// most rows the solo path is the safe one, but not for the bundle.
+func pilotModeInStore(ctx context.Context, opts Options) (pilot, known bool) {
+	env, err := ReadDotEnv(filepath.Join(opts.Dir, ".env"))
+	if err != nil {
+		return false, false
+	}
+	body, _, err := chQuery(ctx, opts.url("8124", ""), env["CLICKHOUSE_USER"], env["CLICKHOUSE_PASSWORD"],
+		"SELECT argMax(value, version) FROM cardo.settings WHERE key = 'pilot_mode' FORMAT TSV")
+	if err != nil {
+		return false, false
+	}
+	return strings.TrimSpace(body) == "1", true
 }
 
 // Check is read-only: it never writes .env and never starts a container.

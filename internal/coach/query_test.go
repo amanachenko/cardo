@@ -16,7 +16,7 @@ func TestQueryParsesTheThreeTables(t *testing.T) {
 		body := string(raw)
 		switch {
 		case strings.Contains(body, "silver_turn"):
-			w.Write([]byte("3\t42\t12.50\t9000\t120000\n"))
+			w.Write([]byte("3\t42\t12.50\t9000\t120000\t2.00\n"))
 		case strings.Contains(body, "silver_tool_call"):
 			w.Write([]byte("4\t30\t12\n"))
 		case strings.Contains(body, "silver_artifact_load"):
@@ -34,7 +34,10 @@ func TestQueryParsesTheThreeTables(t *testing.T) {
 		t.Fatal(err)
 	}
 	if w.Sessions != 3 || w.Prompts != 42 || w.CostUSD != 12.5 || w.OutputTokens != 9000 || w.PeakContext != 120000 {
-		t.Fatalf("turns parsed wrong: %+v", w)
+		t.Fatalf("window = %+v", w)
+	}
+	if w.CostEstimatedUSD != 2.0 {
+		t.Fatalf("estimated share = %v, want 2.0: imported money is named, not folded in", w.CostEstimatedUSD)
 	}
 	if w.FailedTools != 4 || w.ToolCalls != 30 || w.Edits != 12 {
 		t.Fatalf("tool calls parsed wrong: %+v", w)
@@ -64,7 +67,7 @@ func TestQueryLeavesServiceSessionsOut(t *testing.T) {
 		sqls = append(sqls, body)
 		switch {
 		case strings.Contains(body, "silver_turn"):
-			w.Write([]byte("3	42	12.50	9000	120000\n"))
+			w.Write([]byte("3	42	12.50	9000	120000\t0\n"))
 		case strings.Contains(body, "silver_tool_call"):
 			w.Write([]byte("4	30	12\n"))
 		default:
