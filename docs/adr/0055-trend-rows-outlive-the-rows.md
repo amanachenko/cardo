@@ -1,6 +1,6 @@
 # ADR-0055 — Trend rows outlive the rows behind them, and only when they describe five people
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-10-25
 **Evidence:** Judgment. [risks.md](../../risks.md) #10 and #14 record the deliberate deferral this
 reverses; nothing has changed about the marts' shape since, so the shape question is answered here
