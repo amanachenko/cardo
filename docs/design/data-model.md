@@ -205,13 +205,13 @@ session started, and in a weekly view in that day's week.
 ## trend — the rows that outlive their rows
 
 The only tables with no TTL ([ADR-0055](../adr/0055-trend-rows-outlive-the-rows.md)). They carry no
-pseudonym and no content: counts, sums and quantiles only. A row is written only when its own group
-had at least `min_group_size` people in its own period, so nothing here describes fewer than five
-people, and the published views check the count again at read time against the floor in force now.
+pseudonym and no content: counts only. A row is written only when its own group had at least
+`min_group_size` people in its own period, so nothing here describes fewer than five people, and
+the published views check the count again at read time against the floor in force now.
 
 | Table | Grain | Published as | Answers |
 |---|---|---|---|
-| `trend_day` | day | `gold_trend_day` | how much the fleet did, and what it cost it |
+| `trend_day` | day | `gold_trend_day` | how much the fleet did: people, sessions, prompts and compactions |
 | `trend_week_artifact` | week, kind, artifact, file_kind | `gold_trend_artifact_usage` | how adoption moved |
 
 There is no table by team: friction is shown by approach, rule or tool, never by team (ADR-0030

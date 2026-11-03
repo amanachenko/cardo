@@ -305,10 +305,9 @@ path only.** `cardo trend` writes the trend rows on a schedule in the reference 
 than the window is still there after the rows behind it are deleted. The shape objection that
 delayed this is answered rather than waited out: the trend rows are not materialized marts, they
 are one surface whose shape is decided once, and they carry no label whose floor decision could be
-frozen. What stays open here is the Admin API path's own rollup — its marts are the leadership
-ones, and its store is the file store with a DuckDB mirror
-([ADR-0028](docs/adr/0028-file-store-is-admin-api-only.md)), so a change to one target belongs in
-both. The falsifier below still stands.
+frozen. What stays open here is the Admin API path's own rollup: its marts are the leadership
+ones, computed from the daily aggregates in `bronze_actor_day`, and nothing writes a trend from them
+yet. The falsifier below still stands.
 
 ### 11. The reference stack has only ever run on one machine
 

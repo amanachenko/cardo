@@ -7,7 +7,7 @@
 -- This migration adds the aggregate that finally does it, and nothing else. Two tables, one per
 -- trend the product has a question about:
 --
---   trend_day              day                  how much the fleet did, and what it cost it
+--   trend_day              day                  how much the fleet did
 --   trend_week_artifact    week, kind, name     how adoption moved
 --
 -- No TTL on any of them. That is the point, and it is a privacy decision with a name on it rather
