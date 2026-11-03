@@ -1,6 +1,6 @@
 {
   "uid": "cardo-enablement",
-  "title": "Cardo \u2014 enablement",
+  "title": "Cardo — enablement",
   "description": "What the organization rolled out for Claude Code and who uses it, what engineers brought in that several now use, which version of the shared instructions people load, where work gets stuck, and where the money goes. From the hook pack and native OTel; every panel reads a gold view. Figures are weekly, Monday to Sunday, and a week shows once it is over. A team, or a name the organization did not roll out, is shown only in weeks when at least five people are in it (the minimum group size, which can be raised); below that it is counted as other. There is no per-person row anywhere. Who each chart is for, what it helps decide and what it cannot show: docs/design/dashboards.md in Cardo's repository.",
   "tags": [
     "cardo"
@@ -560,7 +560,7 @@
           "editorType": "sql",
           "queryType": "timeseries",
           "format": 0,
-          "rawSql": "WITH toMonday(least(toDate($__toTime) + 1, today())) - 7 AS last_week SELECT time, if(files > 1, concat(team, ' \u00b7 ', family), team) AS line, current_share, sessions FROM (SELECT time, team, family, current_share, sessions, uniqExact(family) OVER () AS files FROM (SELECT week AS time, cohort AS team, family, current_share, sessions FROM cardo.gold_instructions_by_team_weekly WHERE week >= toMonday(toDate($__fromTime)) AND week <= last_week UNION ALL SELECT time, 'Whole fleet' AS team, family, round(current_total / nullIf(sessions_total, 0), 4) AS current_share, sessions_total AS sessions FROM (SELECT week AS time, family, sum(sessions_current) AS current_total, sum(sessions) AS sessions_total FROM cardo.gold_instructions_by_team_weekly WHERE week >= toMonday(toDate($__fromTime)) AND week <= last_week GROUP BY week, family))) ORDER BY time, line"
+          "rawSql": "WITH toMonday(least(toDate($__toTime) + 1, today())) - 7 AS last_week SELECT time, if(files > 1, concat(team, ' · ', family), team) AS line, current_share, sessions FROM (SELECT time, team, family, current_share, sessions, uniqExact(family) OVER () AS files FROM (SELECT week AS time, cohort AS team, family, current_share, sessions FROM cardo.gold_instructions_by_team_weekly WHERE week >= toMonday(toDate($__fromTime)) AND week <= last_week UNION ALL SELECT time, 'Whole fleet' AS team, family, round(current_total / nullIf(sessions_total, 0), 4) AS current_share, sessions_total AS sessions FROM (SELECT week AS time, family, sum(sessions_current) AS current_total, sum(sessions) AS sessions_total FROM cardo.gold_instructions_by_team_weekly WHERE week >= toMonday(toDate($__fromTime)) AND week <= last_week GROUP BY week, family))) ORDER BY time, line"
         }
       ],
       "fieldConfig": {
@@ -831,8 +831,7 @@
         "w": 24,
         "x": 0,
         "y": 72
-      },
-      "description": "A model or release fewer than min_group_size people used that week rolls into 'other': what one person spent on a model is that person's spend, and the floor protects people. The rollup is the floor working, not missing data."
+      }
     },
     {
       "id": 21,
