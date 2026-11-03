@@ -349,8 +349,10 @@ neither spend chart. No view shows service runs on their own yet.
 
 ## Cardo — fleet adoption
 
-`dashboards/cardo-fleet.json`, over the Admin API's data. **Status:** not reviewed; waits for the
-cost data path. Its figures are daily, and it predates the rules above. Its descriptions say what
+`dashboards/cardo-fleet.json`, over the Admin API's data and, since `021_gold_both_paths.sql`, the
+sessions the collector stored, under the source `sessions`. A person's day the Admin API has is
+taken from it alone, so no day is counted twice. **Status:** not reviewed; waits for the cost data
+path. Its figures are daily, and it predates the rules above. Its descriptions say what
 each chart shows, not who reads it, so its entries have no "For" line. Its review starts from
 [the questions after them](#questions-for-the-fleet-dashboards-review).
 
@@ -384,7 +386,8 @@ shows the count itself, and the spend chart is gone, since "Daily spend" shows t
 
 - **Asks:** how much code, how many commits and pull requests, went through Claude Code each day?
 - **Reads:** `gold_fleet_adoption`: lines added and removed, commits and pull requests, as the API
-  reports them, deliberately not folded into a score.
+  reports them, deliberately not folded into a score. Only the Admin API knows them: on the
+  sessions' rows they are zero.
 - **Cannot show:** whether any of it was useful. Lines of code are an activity measure.
 - **Status:** not reviewed; waits for the cost data path.
 
@@ -418,7 +421,8 @@ shows the count itself, and the spend chart is gone, since "Daily spend" shows t
 #### Edit acceptance rate, with the volume it is measured over
 
 - **Asks:** how many of the edits Claude Code proposed did people accept?
-- **Reads:** `gold_tool_acceptance`: the acceptance rate, with the edits proposed as bars.
+- **Reads:** `gold_tool_acceptance`: the acceptance rate, with the edits proposed as bars. From the
+  Admin API alone: the sessions' own edit decisions are left out, for the reason below.
 - **Cannot show:** much in a fleet that works in auto mode, where no person is asked about an edit,
   so nearly every edit counts as accepted. This is why the enablement dashboard dropped its edit
   rejection rate.
