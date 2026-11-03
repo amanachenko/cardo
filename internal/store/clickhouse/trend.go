@@ -52,7 +52,13 @@ func (s *Store) Trend(ctx context.Context, day string) error {
 	if err := RebuildSilver(ctx, s.c); err != nil {
 		return fmt.Errorf("rebuilding stored silver before the trend run: %w", err)
 	}
+	return s.trend(ctx, day)
+}
 
+// trend recomputes one day from stored silver as it stands. The caller rebuilds silver first:
+// Trend does it for one day, and TrendBackfill once for all the days it fills, since a rebuild
+// reads every raw row in the window and the days it fills can number the whole window.
+func (s *Store) trend(ctx context.Context, day string) error {
 	// Both of these are interpolated into DDL, so they are checked rather than trusted.
 	// dayPattern is the same check Put makes.
 	if !dayPattern.MatchString(day) {
@@ -205,9 +211,14 @@ const (
 // the rows behind it expire (ADR-0055's hole rule). A day with no row because no group reached the
 // floor is recomputed each time, which is harmless.
 //
-// The days are recomputed one at a time through Trend, which refuses periods outside the window
-// rather than replacing a complete row with an empty one.
+// Silver is rebuilt once, then the days are recomputed one at a time, each refused if it lies
+// outside the window rather than a complete row being replaced with an empty one. On a stack with
+// fewer than five people no day ever gets a row, so every run fills the whole window again: a
+// rebuild per day would be ninety rebuilds a run.
 func (s *Store) TrendBackfill(ctx context.Context) (int, error) {
+	if err := RebuildSilver(ctx, s.c); err != nil {
+		return 0, fmt.Errorf("rebuilding stored silver before the backfill: %w", err)
+	}
 	window, err := s.retentionDays(ctx)
 	if err != nil {
 		return 0, err
@@ -228,7 +239,7 @@ func (s *Store) TrendBackfill(ctx context.Context) (int, error) {
 		day := d.Format("2006-01-02")
 		if !haveDays[day] && !seen[day] {
 			seen[day] = true
-			if err := s.Trend(ctx, day); err != nil {
+			if err := s.trend(ctx, day); err != nil {
 				s.log.Warn("skipped", "day", day, "err", err)
 				continue
 			}
@@ -240,7 +251,7 @@ func (s *Store) TrendBackfill(ctx context.Context) (int, error) {
 		if (int(d.Weekday())+6)%7 == 0 {
 			if !haveWeeks[day] && !seen[day] && !seen["w"+day] {
 				seen["w"+day] = true
-				if err := s.Trend(ctx, day); err != nil {
+				if err := s.trend(ctx, day); err != nil {
 					s.log.Warn("skipped", "week", day, "err", err)
 					continue
 				}
