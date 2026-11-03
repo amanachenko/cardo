@@ -159,10 +159,11 @@ missing is an organization running Cardo safely, so this comes first.
   - permission waits, for people in default mode;
   - how sessions across the organization go as the conversation grows.
 
-  Before an organization's data is read, each claim to test is written down with the result that
-  would prove it wrong
-  ([spread is a vote only for what teams chose](adr/0040-spread-is-a-vote-only-for-what-teams-chose.md),
-  sixth point). *Open.*
+  How each number is computed, and each claim to test with the result that would prove it wrong,
+  are written down before an organization's data is read
+  ([efficiency compared within one person](adr/0056-efficiency-compared-within-people.md)): each
+  person's sessions with an approach against their own sessions without it, in the same week. The
+  views are *Open.*
 - **The code-name command, `cardo pseudonym <email>`**
   ([the coach by shared link](adr/0032-engineer-coach-by-shared-link.md),
   [identity in pilots](adr/0034-identity-in-pilots.md)). It prints one engineer's code name, so
@@ -197,7 +198,8 @@ their own.
   [what "works" means](adr/0031-what-works-means.md)):
   - cost per accepted change, money spent redoing work, and cost per approach;
   - each team's reach against the whole organization;
-  - the same people's efficiency before and after they took up an approach.
+  - the same people's efficiency with and without an approach, and before and after only for what
+    is in every session.
 
   *Waits for* the signs of struggle, and for data from more than one team.
 - **Proof that policy holds** ([policy evidence](adr/0037-policy-evidence.md)): whether machines

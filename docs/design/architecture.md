@@ -55,9 +55,12 @@ them needs ([ADR-0030](../adr/0030-stakeholders-and-questions.md) to
 
 **Decided on 2026-10-08 and not built.** Spread is read by how an artifact arrived: for one the
 organization rolled out, it is the rollout's reach, and whether the artifact helps is measured in
-the same people before and after
-([ADR-0040](../adr/0040-spread-is-a-vote-only-for-what-teams-chose.md)). The coach suggests only
-what the fleet has shown ([ADR-0041](../adr/0041-the-coach-suggests-what-the-fleet-has-shown.md)).
+the same people ([ADR-0040](../adr/0040-spread-is-a-vote-only-for-what-teams-chose.md)): their
+sessions with it against their sessions without it in the same week, and before and after the
+declared rollout date only for what is in every session
+([ADR-0056](../adr/0056-efficiency-compared-within-people.md), decided on 2026-10-25). The coach
+suggests only what the fleet has shown
+([ADR-0041](../adr/0041-the-coach-suggests-what-the-fleet-has-shown.md)).
 
 None of it is described below until it exists. The order it is built in is
 [`docs/roadmap.md`](../roadmap.md).

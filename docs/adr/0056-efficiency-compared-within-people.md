@@ -1,6 +1,6 @@
 # ADR-0056 — Efficiency is compared within one person, over one week
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-10-25
 **Evidence:** Judgment for the shape of the comparison and for the pooling rule. The field notes
 [ADR-0031](0031-what-works-means.md) cites say what is observed. The preregistration at the end is
