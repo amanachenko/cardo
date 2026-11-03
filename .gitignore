@@ -54,3 +54,6 @@ dist/
 
 # Hermes agent workspace
 .hermes/
+
+# Per-machine: written by cardo connect, never shared.
+.claude/settings.json
