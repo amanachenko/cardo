@@ -220,7 +220,9 @@ SELECT session_id FROM cardo.silver_session_live
 **2. Everything that carries the pseudonym, deleted by the field each table actually carries.** The
 collector puts the pseudonym wherever the email arrived: on the resource, on the event record or on
 the metric point. `bronze_hook_events` carries no identity at all, and `bronze_actor_day` has a
-`pseudonym` column and no resource. Deleting by one field alone leaves the rest in the store.
+`pseudonym` column and no resource. The team directory, if your organization uploaded one, keeps
+one line per code name in `settings_teams`. Deleting by one field alone leaves the rest in the
+store.
 
 ```sql
 -- bronze_otel_logs: the pseudonym on the record or on the resource, or any of their sessions
@@ -243,14 +245,19 @@ ALTER TABLE cardo.bronze_hook_events DELETE WHERE
 -- bronze_actor_day: its own pseudonym column
 ALTER TABLE cardo.bronze_actor_day DELETE WHERE
     pseudonym = '<pseudonym>' SETTINGS mutations_sync = 1;
+
+-- settings_teams: the directory's line for them, in every upload kept
+ALTER TABLE cardo.settings_teams DELETE WHERE
+    pseudonym = '<pseudonym>' SETTINGS mutations_sync = 1;
 ```
 
 Every figure Cardo shows is computed from those rows, so your absence changes the numbers rather
-than hiding inside them.
+than hiding inside them. The directory line comes back with the next upload that lists you, so your
+organization removes you from its directory file too.
 
-**3. Stored silver is rebuilt.** The silver tables hold what the last rebuild saw, so the person's
-rows are rebuilt away — and a trend recomputed after that cannot put them back, because
-`cardo trend` rebuilds silver before it reads.
+**3. Stored silver is rebuilt, on its own within ten minutes.** The silver tables hold what the
+last rebuild saw, so the person's rows are rebuilt away — and a trend recomputed after that cannot
+put them back, because `cardo trend` rebuilds silver before it reads.
 
 **4. The trend rows are not part of the request.** The rows that outlive the window
 ([ADR-0055](../adr/0055-trend-rows-outlive-the-rows.md)) carry no pseudonym, and each one describes

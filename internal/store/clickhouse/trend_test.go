@@ -288,6 +288,8 @@ func TestTheDeletionStepsLeaveNothingOfThePerson(t *testing.T) {
 		fmt.Sprintf("INSERT INTO cardo.bronze_hook_events (Timestamp, ServiceName, Body, ResourceSchemaUrl, ResourceAttributes, ScopeSchemaUrl, ScopeName, ScopeVersion, ScopeAttributes, LogAttributes, EventName) VALUES (toDateTime64('%s 10:03:00',9),'claude-code','','x',{},'','','',{},{'session_id':'%s','instructions_name':'acme-rules-v1.md'},'InstructionsLoaded')", trendDay, session),
 		// the day table's own pseudonym column
 		fmt.Sprintf("INSERT INTO cardo.bronze_actor_day (source, day, pseudonym, salt_version, tier, actor_type) VALUES ('test_delete','%s','%s','v1',1,'user_actor')", trendDay, pseudo),
+		// the team directory's line for them, and for someone else, in a batch no view reads
+		fmt.Sprintf("INSERT INTO cardo.settings_teams (team, pseudonym, salt_version, batch) VALUES ('acme-payments','%s','v1','del%d'), ('acme-payments','%s','v1','del%d')", pseudo, nano, other, nano),
 		// someone else, who must survive
 		fmt.Sprintf("INSERT INTO cardo.bronze_otel_logs (Timestamp, ServiceName, Body, ResourceSchemaUrl, ResourceAttributes, ScopeSchemaUrl, ScopeName, ScopeVersion, ScopeAttributes, LogAttributes, EventName) VALUES (toDateTime64('%s 10:04:00',9),'claude-code','','x',{'cardo.salt_version':'v1'},'','','',{},{'session.id':'%s','user.pseudonym':'%s'},'claude_code.user_prompt')", trendDay, otherSession, other),
 	}
@@ -302,6 +304,7 @@ func TestTheDeletionStepsLeaveNothingOfThePerson(t *testing.T) {
 		_ = st.c.Exec(ctx, fmt.Sprintf("ALTER TABLE cardo.bronze_otel_metrics_sum DELETE WHERE Attributes['session.id'] = '%s' SETTINGS mutations_sync = 1", session))
 		_ = st.c.Exec(ctx, fmt.Sprintf("ALTER TABLE cardo.bronze_hook_events DELETE WHERE LogAttributes['session_id'] = '%s' SETTINGS mutations_sync = 1", session))
 		_ = st.c.Exec(ctx, fmt.Sprintf("ALTER TABLE cardo.bronze_actor_day DELETE WHERE pseudonym = '%s' OR pseudonym = '%s' SETTINGS mutations_sync = 1", pseudo, other))
+		_ = st.c.Exec(ctx, fmt.Sprintf("ALTER TABLE cardo.settings_teams DELETE WHERE batch = 'del%d' SETTINGS mutations_sync = 1", nano))
 		_ = RebuildSilver(ctx, st.c)
 	})
 
@@ -316,6 +319,7 @@ func TestTheDeletionStepsLeaveNothingOfThePerson(t *testing.T) {
 		fmt.Sprintf("ALTER TABLE cardo.bronze_otel_metrics_sum DELETE WHERE Attributes['user.pseudonym'] = '%s' OR ResourceAttributes['user.pseudonym'] = '%s' SETTINGS mutations_sync = 1", pseudo, pseudo),
 		fmt.Sprintf("ALTER TABLE cardo.bronze_hook_events DELETE WHERE LogAttributes['session_id'] IN ('%s') SETTINGS mutations_sync = 1", sessions),
 		fmt.Sprintf("ALTER TABLE cardo.bronze_actor_day DELETE WHERE pseudonym = '%s' SETTINGS mutations_sync = 1", pseudo),
+		fmt.Sprintf("ALTER TABLE cardo.settings_teams DELETE WHERE pseudonym = '%s' SETTINGS mutations_sync = 1", pseudo),
 	}
 	for _, q := range steps {
 		if err := st.c.Exec(ctx, q); err != nil {
@@ -331,6 +335,7 @@ func TestTheDeletionStepsLeaveNothingOfThePerson(t *testing.T) {
 		"SELECT count() FROM cardo.bronze_otel_metrics_sum WHERE Attributes['user.pseudonym'] = '" + pseudo + "' OR Attributes['session.id'] = '" + session + "'",
 		"SELECT count() FROM cardo.bronze_hook_events WHERE LogAttributes['session_id'] = '" + session + "'",
 		"SELECT count() FROM cardo.bronze_actor_day WHERE pseudonym = '" + pseudo + "'",
+		"SELECT count() FROM cardo.settings_teams WHERE pseudonym = '" + pseudo + "'",
 		"SELECT count() FROM cardo.silver_session WHERE session_id = '" + session + "'",
 	} {
 		if n := trendQuery(t, st, q+" FORMAT TabSeparated"); n != "0" {
@@ -340,5 +345,9 @@ func TestTheDeletionStepsLeaveNothingOfThePerson(t *testing.T) {
 	if n := trendQuery(t, st,
 		"SELECT count() FROM cardo.bronze_otel_logs WHERE LogAttributes['session.id'] = '"+otherSession+"' FORMAT TabSeparated"); n != "1" {
 		t.Errorf("the deletion took someone else's rows too: %s left, want 1", n)
+	}
+	if n := trendQuery(t, st,
+		"SELECT count() FROM cardo.settings_teams WHERE pseudonym = '"+other+"' FORMAT TabSeparated"); n != "1" {
+		t.Errorf("the deletion took someone else's directory line too: %s left, want 1", n)
 	}
 }
