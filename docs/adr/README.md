@@ -106,8 +106,10 @@ Recorded here so a future session knows these were considered and postponed, not
 - **Bedrock / Vertex / Foundry support** — out of scope for v1 (ADR-0018, upheld by ADR-0021).
 - **Another storage engine** — the views are written for ClickHouse only. A port is a new record,
   written when an organization that cannot run ClickHouse asks for one (ADR-0057).
-- **Rollups that outlive the raw rows** — silver is stored, but rebuilt from 90-day bronze every
-  10 minutes, so nothing outlives the raw rows (risks.md #10, ADR-0052).
+- **Materializing the silver and gold views themselves** — they read the stored silver, which is
+  rebuilt from 90-day bronze every 10 minutes (ADR-0052); a materialized table is a migration each
+  time the marts change (risks.md #14). What is built here is the rollup that lets a trend outlive
+  its rows (ADR-0055) -- trend rows with no TTL, written by `cardo trend`.
 - **The Claude Enterprise Analytics adapter** — built when an organization on Enterprise seats asks
   for it. The Console adapter went first because it could be tested without an organization
   (ADR-0021, ordered by ADR-0042).
