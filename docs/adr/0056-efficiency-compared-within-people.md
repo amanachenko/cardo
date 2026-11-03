@@ -85,8 +85,8 @@ of everyone's sessions: that would put the difference between two people into th
 One person runs 90 sessions with a skill and 10 without, another the reverse; the first has 1
 failed call per session either way, the second 5. The skill changes nothing for either of them, and
 a ratio of sums publishes a 70% cut. Pooled as above, both differences are zero and the row says
-zero. Had the skill saved each of them 0.1, the row says 0.1, where a ratio of sums would still say
-about 70%.
+zero. Had the skill saved each of them 0.1, the row says a saving of 0.1, where a ratio of sums
+would still say about 70%.
 
 Two numbers guard the pool:
 
@@ -103,10 +103,12 @@ materialized it is not written at all: a row about two people is two people's re
 record expires ([ADR-0016](0016-retention.md)).
 
 **6. `gold_friction_daily` is retired, and the enablement dashboard's friction panels are rebuilt on
-the family, without the team breakdown.** Nothing that measures friction or activity is kept or
-shown by team anywhere, in a view or in a permanent table. Reach by team stays — how many of a team
-use something, which is what reach means. Sessions and prompts per team are activity, not reach,
-and permission prompts per team are friction in another form.
+the family, without the team breakdown.** Nothing that measures friction is kept or shown by team
+anywhere, in a view or in a permanent table, and permission prompts per team are friction in
+another form. Reach by team stays — how many of a team use something, which is what reach means.
+Sessions, prompts and spend per team are activity, not reach, and are never presented as reach.
+Where a live view shows them, it is the sizing [ADR-0030](0030-stakeholders-and-questions.md)
+decision 7 allows, never divided by headcount. The trend store keeps nothing by team (ADR-0055).
 
 **7. A signal that is not observed is published as "not observed", never as zero.** A zero says
 "measured, and there were none"; "not observed" says "nobody looked". The first version of the
