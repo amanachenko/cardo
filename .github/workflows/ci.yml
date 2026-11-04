@@ -111,6 +111,7 @@ jobs:
           grep -q "PASS: TestViewSettingsLastWriteWins" out.txt
           grep -q "PASS: TestAnInsertWithoutTheEventNameStillStoresIt" out.txt
           grep -q "PASS: TestTheRepairNamesTheStoredRowsOnce" out.txt
+          grep -q "PASS: TestTheAccountActiveWhenARowWasSent" out.txt
 
   collector:
     # deploy/collector/config.yaml is the privacy contract for the whole Phase 2 path, and it is

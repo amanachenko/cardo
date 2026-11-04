@@ -67,6 +67,7 @@ The hard rules that these decisions produce live in
 | [0056](0056-efficiency-compared-within-people.md) | Efficiency is compared within one person, over one week | Accepted | 2026-10-25 |
 | [0057](0057-clickhouse-is-the-only-store.md) | ClickHouse is the only store; the file store and its DuckDB views are removed | Accepted | 2026-10-27 |
 | [0058](0058-the-current-team-carries-the-history.md) | A person's whole history sits on the team they are in now | Accepted | 2026-11-01 |
+| [0059](0059-a-session-can-carry-more-than-one-account.md) | A session can carry more than one account, and each row belongs to the account on it | Accepted | 2026-11-04 |
 
 ADR-0030 to ADR-0037 came out of one design review on 2026-09-25, which asked who Cardo is for and
 what each of them needs. Its evidence is
