@@ -216,6 +216,13 @@ Every write goes through `settings_changes`, and the leadership Grafana reads `l
                                      Grafana  dashboards/cardo-enablement.json
 ```
 
+The collector can start before ClickHouse answers. It does after a reboot, when Docker restarts
+every container at once and compose's start order is not consulted. Its exporter then leaves
+`EventName` out of every INSERT until it is restarted, and the bronze tables fill the name from the
+row's own attributes: an OTel row whose `event.name` is `user_prompt` is stored as
+`claude_code.user_prompt` (`sql/clickhouse/022`). `scripts/cold-start.sh` reproduces the race, and
+CI runs it.
+
 The silver views are stored ([ADR-0052](../adr/0052-silver-is-stored-and-rebuilt-every-10-minutes.md)). Each is a table ClickHouse
 rebuilds every 10 minutes from a plain view of the same name with `_live` added, such as
 `silver_session_live`. So the dashboards run up to 10 minutes behind. On the made-up organization

@@ -90,10 +90,18 @@ Treat it as a code change, not a tag bump. OTTL syntax and component names move 
 `webhookevent` became `webhook_event` while this was being built. The exporter's column set can
 change too, and our DDL mirrors it. The procedure:
 
-1. Bump the image tag here, in `deploy/compose/docker-compose.yml`, and in `.github/workflows/ci.yml`.
+1. Bump the image tag here, in `deploy/compose/docker-compose.yml`, in `.github/workflows/ci.yml`
+   and in `scripts/cold-start.sh`.
 2. Diff the exporter's `internal/sqltemplates` between the two tags. A column change is a **new**
    migration in `sql/clickhouse/`, never an edit to `004`.
-3. `make collector-test` against the stack, and let the CI `collector` job run.
+3. Check that the bronze tables still name a row the way this file does. When the collector starts
+   before ClickHouse answers, as after a reboot, the exporter leaves `EventName` out of every
+   INSERT, and the tables' default builds it instead: `claude_code.` plus `event.name` for OTel
+   (`transform/otel_content`), `hook_event_name` for hooks (`transform/hooks`). A change to either
+   statement is a new migration with a matching default (`sql/clickhouse/022` set the first one).
+   `scripts/cold-start.sh` reproduces the race.
+4. `make collector-test` against the stack, and let the CI `collector` job run. That job runs
+   `scripts/cold-start.sh` as well.
 
 ## Idle cost
 

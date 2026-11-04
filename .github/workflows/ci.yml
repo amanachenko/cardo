@@ -109,6 +109,8 @@ jobs:
           grep -q "PASS: TestCollectorSilverViews" out.txt
           grep -q "PASS: TestCollectorGoldAppliesTheMinimumGroupSize" out.txt
           grep -q "PASS: TestViewSettingsLastWriteWins" out.txt
+          grep -q "PASS: TestAnInsertWithoutTheEventNameStillStoresIt" out.txt
+          grep -q "PASS: TestTheRepairNamesTheStoredRowsOnce" out.txt
 
   collector:
     # deploy/collector/config.yaml is the privacy contract for the whole Phase 2 path, and it is
@@ -207,6 +209,13 @@ jobs:
           grep -q "PASS: TestCollector_HookPayloadsReduceToTheAllowlist" strict.txt
           grep -q "PASS: TestCollector_OTelIdentityIsThePollersPseudonym" strict.txt
           grep -q "PASS: TestCollector_RepositoriesAreClassified" strict.txt
+
+      # After a reboot Docker starts the collector before ClickHouse answers, and the exporter then
+      # leaves EventName out of every INSERT for the rest of its life. The script reproduces that
+      # race on containers and a network of its own, and requires both rows named anyway, by the
+      # database's default (sql/clickhouse/022). It fails if the race was not reproduced.
+      - name: Collector started before ClickHouse
+        run: bash scripts/cold-start.sh
 
       - name: Collector log
         if: always()
