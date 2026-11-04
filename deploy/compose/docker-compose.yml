@@ -72,7 +72,11 @@ services:
       start_interval: 2s
 
   # One-shot. Applies the schema -- including the tables the collector writes to -- and exits.
-  # The collector below only ever INSERTs (create_schema: false), so it waits for this to succeed.
+  # The collector below only ever INSERTs (create_schema: false), so on `docker compose up` it
+  # waits for this to succeed. After a reboot it does not: Docker restarts each container by its
+  # restart policy alone, depends_on is not consulted, and this one does not run again. The
+  # collector can then start before ClickHouse answers and write rows without their event name,
+  # which the tables fill in from the row's own attributes (sql/clickhouse/022).
   migrate:
     build:
       context: ../..

@@ -53,5 +53,13 @@ Instructions-file names are kept only when they are the organization's
 - A backslash or a double quote in `CARDO_ORG_REPOS` or `CARDO_ORG_ARTIFACTS`. The collector pastes
   the value into a quoted OTTL string, and either one stops it from starting. Write a dot as `[.]`,
   as in `^github[.]com/acme/`. ADR-0035's own example, `^github\.com/acme/`, is the form that fails.
+- Trusting compose's start order to have ClickHouse up before the collector. `depends_on` holds
+  only on `docker compose up`. After a reboot Docker restarts every container at once, and the
+  collector usually wins. The ClickHouse exporter reads each table's columns once, at start-up;
+  when that fails it logs `schema detection failed` once and leaves `EventName` out of every
+  INSERT until it is restarted. Days of prompts, cost and tool use then counted nowhere, with no
+  other error. The bronze tables' `EventName` default fills the name from `event.name` or
+  `hook_event_name` (`sql/clickhouse/022`), and `scripts/cold-start.sh` reproduces the race in CI.
+  A change to how `config.yaml` names rows has to change that default too, in a new migration.
 - Upgrading the collector image as a tag bump. OTTL syntax, component names and the exporter's
   columns move between releases; see `deploy/collector/README.md`.
