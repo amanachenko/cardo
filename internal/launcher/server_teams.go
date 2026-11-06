@@ -82,9 +82,11 @@ func (s *Server) teamsView(ctx context.Context) (teamsView, error) {
 	}
 
 	// The last seven days of people's sessions, each with its team. Service runs are not people,
-	// and silver_session_team has no row for them (ADR-0036).
+	// and silver_session_team has no row for them (ADR-0036). A session can carry two accounts, one
+	// row each (ADR-0059), so the join is on the session and the code name, and a session is counted
+	// once however many accounts it had.
 	recent := `FROM cardo.silver_session_team AS t
-		INNER JOIN cardo.silver_session AS s ON s.session_id = t.session_id
+		INNER JOIN cardo.silver_session AS s ON s.session_id = t.session_id AND s.pseudonym = t.pseudonym
 		WHERE s.last_event_at > now() - INTERVAL 7 DAY AND s.session_id NOT LIKE '` + probePrefix + `%'
 		  AND s.pseudonym IS NOT NULL`
 
@@ -103,7 +105,7 @@ func (s *Server) teamsView(ctx context.Context) (teamsView, error) {
 		}
 	}
 
-	rows, err := s.ch(ctx, `SELECT t.team AS team, uniqExact(s.pseudonym) AS people, count() AS sessions
+	rows, err := s.ch(ctx, `SELECT t.team AS team, uniqExact(s.pseudonym) AS people, uniqExact(s.session_id) AS sessions
 		`+recent+` AND t.team != 'unassigned'
 		GROUP BY t.team ORDER BY sessions DESC FORMAT JSONEachRow`)
 	if err == nil {

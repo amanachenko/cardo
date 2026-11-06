@@ -308,20 +308,14 @@ func TestTheDeletionStepsLeaveNothingOfThePerson(t *testing.T) {
 		_ = RebuildSilver(ctx, st.c)
 	})
 
-	// The documented steps.
+	// The documented steps (deletionSteps, in accounts_test.go).
+	t.Cleanup(func() { _ = st.c.Exec(ctx, "DROP TABLE IF EXISTS cardo.deletion_credited") })
 	sessions := strings.TrimSpace(trendQuery(t, st,
-		fmt.Sprintf("SELECT session_id FROM cardo.silver_session_live WHERE pseudonym = '%s' FORMAT TSV", pseudo)))
+		fmt.Sprintf("SELECT DISTINCT session_id FROM cardo.silver_session_live WHERE pseudonym = '%s' FORMAT TSV", pseudo)))
 	if sessions != session {
 		t.Fatalf("step 1 lists %q, want the person's session %q", sessions, session)
 	}
-	steps := []string{
-		fmt.Sprintf("ALTER TABLE cardo.bronze_otel_logs DELETE WHERE LogAttributes['user.pseudonym'] = '%s' OR ResourceAttributes['user.pseudonym'] = '%s' OR LogAttributes['session.id'] IN ('%s') SETTINGS mutations_sync = 1", pseudo, pseudo, sessions),
-		fmt.Sprintf("ALTER TABLE cardo.bronze_otel_metrics_sum DELETE WHERE Attributes['user.pseudonym'] = '%s' OR ResourceAttributes['user.pseudonym'] = '%s' SETTINGS mutations_sync = 1", pseudo, pseudo),
-		fmt.Sprintf("ALTER TABLE cardo.bronze_hook_events DELETE WHERE LogAttributes['session_id'] IN ('%s') SETTINGS mutations_sync = 1", sessions),
-		fmt.Sprintf("ALTER TABLE cardo.bronze_actor_day DELETE WHERE pseudonym = '%s' SETTINGS mutations_sync = 1", pseudo),
-		fmt.Sprintf("ALTER TABLE cardo.settings_teams DELETE WHERE pseudonym = '%s' SETTINGS mutations_sync = 1", pseudo),
-	}
-	for _, q := range steps {
+	for _, q := range deletionSteps(pseudo, "'"+sessions+"'") {
 		if err := st.c.Exec(ctx, q); err != nil {
 			t.Fatalf("a deletion step failed: %v\n%s", err, q)
 		}

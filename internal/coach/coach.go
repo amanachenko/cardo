@@ -233,7 +233,7 @@ func Untried(ctx context.Context, endpoint, user, pass, pseudonym string, from, 
 // attribute them: Claude Code omits user.email when the run authenticates with an API key, and the
 // collector has nothing to hash. The coach says so instead of showing an unexplained empty page.
 func Unidentified(ctx context.Context, endpoint, user, pass string, from, to time.Time) (int, error) {
-	sql := fmt.Sprintf(`SELECT count() FROM cardo.silver_session_live
+	sql := fmt.Sprintf(`SELECT uniqExact(session_id) FROM cardo.silver_session_live
 		WHERE day BETWEEN toDate('%s') AND toDate('%s')
 		AND (pseudonym IS NULL OR pseudonym = '') FORMAT TSV`,
 		from.Format("2006-01-02"), to.Format("2006-01-02"))

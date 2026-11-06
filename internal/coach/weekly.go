@@ -18,6 +18,8 @@ type Week struct {
 }
 
 // Weekly returns the last n weeks for one pseudonym, oldest first. Two queries, merged by week.
+//
+// Service runs are left out, as Query leaves them out: the bars are about one person (ADR-0036).
 func Weekly(ctx context.Context, endpoint, user, pass, pseudonym string, weeks int, now time.Time) ([]Week, error) {
 	if weeks < 2 {
 		weeks = 2
@@ -44,6 +46,7 @@ func Weekly(ctx context.Context, endpoint, user, pass, pseudonym string, weeks i
 
 	turns, err := post(fmt.Sprintf(`SELECT toMonday(day) AS w, uniqExact(session_id), round(sum(cost_usd), 2)
 		FROM cardo.silver_turn_live WHERE pseudonym = '%s' AND day >= toDate('%s')
+			AND session_id IN (SELECT session_id FROM cardo.silver_session_live WHERE actor_kind != 'service')
 		GROUP BY w ORDER BY w FORMAT TSV`, pseudonym, from.Format("2006-01-02")))
 	if err != nil {
 		return nil, err
@@ -70,6 +73,7 @@ func Weekly(ctx context.Context, endpoint, user, pass, pseudonym string, weeks i
 
 	fails, err := post(fmt.Sprintf(`SELECT toMonday(day) AS w, countIf(ran = 1 AND succeeded = 0)
 		FROM cardo.silver_tool_call_live WHERE pseudonym = '%s' AND day >= toDate('%s')
+			AND session_id IN (SELECT session_id FROM cardo.silver_session_live WHERE actor_kind != 'service')
 		GROUP BY w ORDER BY w FORMAT TSV`, pseudonym, from.Format("2006-01-02")))
 	if err != nil {
 		return nil, err

@@ -49,17 +49,25 @@ became active. Every view that needs an account for an unnamed row looks it up t
 the deletion procedure, so a page and a deletion always credit a row to the same account.
 
 **3. `silver_session` has one row per session and account.** A session switched once has two rows,
-and each counts the session once for its account. What describes the session itself is the same on
-each of its rows: when it started and last showed an event, its day, its clock, whether and why it
-ended, whether it is a service run and its workflow, its app version, its terminal and how it
-started. A session is still counted on the day it started. What describes the account comes from
-that account's rows: the code name, the team label and the salt version. Every value is the first
-one seen, by time, never `any`, so the same rows always give the same answer.
+and each counts the session once for its account. Each row describes that account's part: its code
+name, team label and salt version, when the part started and last showed an event, which paths its
+rows came by, its release and terminal, and whether the session ended in it. Three things belong to
+the session and are the same on each row: its day, which is the day the session started, whether it
+is a service run, and its workflow. So a session is still counted on the day it started, whichever
+account was on it. Every value is the first one seen, by time, never `any`, so the same rows always
+give the same answer.
 
 **4. The fleet counts a session once.** Anything that counts sessions counts distinct session ids,
-never rows of `silver_session`. Anything that joins `silver_session` to a row-level view joins on
-the session and the code name, or tests the session with `IN`, so that a session's turns are not
-counted once per account. People counts were already distinct.
+never rows of `silver_session`, and anything that joins it to row-level rows by the session joins a
+list with one row per session, so that a session's prompts are not counted once per account. People
+counts were already distinct. The gold views never join on a code name, which the rule that gold
+names nobody forbids (INV-3), so the views that give a session its team label keep one row per
+session: its rows go under the label of the account it started on. The label comes from the
+machine's settings, which do not change inside one Claude Code process, so both accounts carry the
+same one, and each account is still counted under its own label when a team is sized. The team from
+the organization's directory is by code name, so there each account has its own team. Where the
+fleet's figure adds up each person's, as on the fleet adoption page, a session is counted for the
+account it started on, and the account that joined it later still counts as active.
 
 **5. Deleting a person deletes what is credited to them, by the same rule.** Their rows are the rows
 that carry their code name and the unnamed rows that the helper view credits to them. The other
@@ -76,6 +84,13 @@ someone else's history on a request they did not make.
   to be dropped and rebuilt for this change.
 - The trend rows of the days and weeks that hold a switched session are recomputed once, by the
   migration that makes this change, because they were written from the old pick.
+- The daily views by team leave service runs out from this change on. They were written before
+  service runs were labelled and had counted a CI job as a person
+  ([ADR-0036](0036-service-runs-are-not-people.md)); the weekly views always left them out.
+- Every view that credits a row reads the session's accounts from the OTel events, which costs
+  about one more pass over them. On 5 million made-up events, rebuilding the stored silver took 23
+  seconds instead of 10, inside its 10-minute cycle; the gold views read the stored tables and are
+  no slower.
 - A rule for every view written later: take the code name from the row, never from the session, and
   never with `any` over a value that can differ between rows. `.claude/rules/views.md` carries it,
   and a test fails on a view that takes its code name from `silver_session`.
