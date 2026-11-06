@@ -38,6 +38,30 @@ stored tables; `cardo check`, the console and the coach read the `_live` views.
   it, `TestCollectorSilverViews` read 0 sessions.
 - Reading the stored tables from something that must show an event at once. `cardo check` looks for
   the session started a minute ago, so it reads `silver_session_live`.
+- Taking a row's code name from its session, or picking any value with `any`. A session can carry
+  two accounts: someone who switches Claude accounts keeps the session id, and the rows after the
+  switch carry the second code name. 017's views joined `silver_session_live`, which picked one code
+  name with `anyIf`, so a switched session's prompts and dollars moved between the two accounts from
+  one read to the next, and the coach's figures changed on reload
+  ([ADR-0059](../../docs/adr/0059-a-session-can-carry-more-than-one-account.md)). Take the code name
+  and team label from the row; a row without them, such as a hook row, takes the account active at
+  its moment from `silver_session_account_live`, with
+  `ASOF LEFT JOIN ... ON a.session_id = r.session_id AND r.at >= a.active_from`. Any other pick over
+  values that can differ is `argMin` or `argMinIf` by time. `TestSilverViewsTakeTheCodeNameFromTheRow`
+  in `test/invariants_test.go` fails on either.
+- Counting `silver_session` rows as sessions, or joining it to row-level rows by the session alone.
+  It has a row per account, so a switched session counts twice and each of its prompts is counted
+  once per account. Count `uniqExact(session_id)` or `count(DISTINCT session_id)`, filter with
+  `session_id IN (SELECT session_id FROM ...)`, or join a list with one row per session, such as
+  `(SELECT DISTINCT session_id, day FROM cardo.silver_session WHERE actor_kind != 'service')`.
+- Joining a gold view to `silver_session_cohort` on the code name too, so that each account of a
+  switched session keeps its own team. The check that no gold view shows one person (INV-3,
+  `TestINV3_GoldViewsExposeNoPerPersonRows`) allows `pseudonym` in a gold view only inside a count of
+  distinct people, and the first draft of 023 failed it. `silver_session_cohort` and
+  `silver_session_cohort_week` keep one row per session, under the label of the account it started
+  on, and gold joins them by the session. The label comes from the machine's settings, so both
+  accounts carry the same one. Only `silver_session_team`, a silver view, carries the code name,
+  because the directory's team is by code name.
 - Redefining a view whole from the migration that first defined it. A later one may have changed
   it since: the review's draft of `gold_artifact_usage` started from 007's and dropped 012's
   service filter, so every service run counted as a person again, and the test guarding the filter

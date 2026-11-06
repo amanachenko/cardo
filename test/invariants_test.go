@@ -614,6 +614,96 @@ func TestServiceRunsStayOutOfPeopleCounts(t *testing.T) {
 	}
 }
 
+// A session can carry two accounts (ADR-0059): someone who switches Claude accounts keeps the
+// session id, and the rows after the switch carry the second code name. 017's silver views took
+// the code name from the session, through a join to silver_session_live, which picked one with
+// anyIf. A switched session's prompts and dollars moved from one account to the other between
+// reads, and the coach showed different figures on each reload. So, in each silver view as last
+// defined:
+//
+//   - nothing is picked with any, anyIf, anyLast or anyHeavy, which return whichever row
+//     ClickHouse reads first. A pick over values that can differ is argMin by time.
+//   - a view that reads rows, from bronze or a row-level silver view, takes the code name and the
+//     team label from those rows, or from silver_session_account_live for a row without one, never
+//     from silver_session or silver_session_live.
+//
+// A view built from silver_session alone, such as silver_session_team, is at its grain, one row
+// per session and account, and its code name is the row's own.
+func TestSilverViewsTakeTheCodeNameFromTheRow(t *testing.T) {
+	paths, err := filepath.Glob(filepath.Join(repoRoot(t), "sql", "clickhouse", "*.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sort.Strings(paths)
+	// 017 dropped the plain views it stored and made tables of their names, so a view's last
+	// definition is the last one no DROP followed.
+	type definition struct{ file, body string }
+	create := regexp.MustCompile(`(?i)create\s+or\s+replace\s+view\s+cardo\.(silver_\w+)\s+as\b`)
+	dropped := regexp.MustCompile(`(?i)drop\s+(?:view|table)\s+(?:if\s+exists\s+)?cardo\.(silver_\w+)`)
+	final := map[string]definition{}
+	for _, path := range paths {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, stmt := range strings.Split(withoutLineComments(string(b)), ";") {
+			if m := create.FindStringSubmatchIndex(stmt); m != nil {
+				final[stmt[m[2]:m[3]]] = definition{filepath.Base(path), strings.ToLower(stmt[m[1]:])}
+			} else if m := dropped.FindStringSubmatch(stmt); m != nil {
+				delete(final, m[1])
+			}
+		}
+	}
+
+	picked := regexp.MustCompile(`\bany(?:if|last|lastif|heavy)?\s*\(\s*(\w*)`)
+	session := regexp.MustCompile(`cardo\.silver_session(?:_live)?\s+(?:as\s+)?(\w+)`)
+	readsRows := func(body string) bool {
+		for _, v := range []string{"cardo.bronze_", "cardo.silver_api_request", "cardo.silver_turn",
+			"cardo.silver_tool_call", "cardo.silver_policy_decision", "cardo.silver_context_event",
+			"cardo.silver_artifact_load", "cardo.silver_instruction_load"} {
+			if strings.Contains(body, v) {
+				return true
+			}
+		}
+		return false
+	}
+	views := make([]string, 0, len(final))
+	for v := range final {
+		views = append(views, v)
+	}
+	sort.Strings(views)
+	rowViews := 0
+	for _, v := range views {
+		def := final[v]
+		for _, m := range picked.FindAllStringSubmatch(def.body, -1) {
+			if m[1] == "select" {
+				continue // `= ANY (SELECT ...)` compares with a list; it picks nothing.
+			}
+			t.Errorf("%s: %s picks with %q, which returns whichever row ClickHouse reads first, so the "+
+				"same rows can give a different answer on each read (ADR-0059). Take the first value "+
+				"seen, with argMin or argMinIf by time.", def.file, v, strings.TrimSpace(m[0]))
+		}
+		if !readsRows(def.body) {
+			continue
+		}
+		rowViews++
+		for _, m := range session.FindAllStringSubmatch(def.body, -1) {
+			for _, col := range []string{"pseudonym", "cohort"} {
+				if strings.Contains(def.body, m[1]+"."+col) {
+					t.Errorf("%s: %s takes %s from the session (%s.%s). A session can carry two accounts, "+
+						"and a row belongs to the account on it (ADR-0059): take it from the row, or for a "+
+						"row without one from cardo.silver_session_account_live, with an ASOF join on the "+
+						"session and the row's time.", def.file, v, col, m[1], col)
+				}
+			}
+		}
+	}
+	if rowViews < 7 {
+		t.Fatalf("only %d silver views that read rows were checked; the row-level views were not found, "+
+			"and this test would pass vacuously", rowViews)
+	}
+}
+
 // withoutLineComments drops each line's `--` comment, as the migration runner does, so a comment
 // that mentions a filter does not count as the filter.
 func withoutLineComments(sql string) string {

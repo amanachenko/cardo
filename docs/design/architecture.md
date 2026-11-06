@@ -236,11 +236,17 @@ The ClickHouse has to have refreshable materialized views. The reference stack p
 they are on by default; an organization's own ClickHouse needs a version where they are on too.
 
 All of these views exist in the ClickHouse dialect only
-([ADR-0057](../adr/0057-clickhouse-is-the-only-store.md)). Four things shape them, each measured
-from a real session:
+([ADR-0057](../adr/0057-clickhouse-is-the-only-store.md)). Five things shape them, each seen
+in a real session:
 
 - **Hook rows have no identity.** They reach a pseudonym and a cohort through their session's
-  OTel rows.
+  OTel rows: those of the account active in the session when the hook row arrived.
+- **A session can carry two accounts.** Someone who switches Claude accounts keeps the session id,
+  and the rows after the switch carry the second pseudonym. Each row belongs to the account on it,
+  `silver_session` has a row for each account, and the fleet counts the session once
+  ([ADR-0059](../adr/0059-a-session-can-carry-more-than-one-account.md)). Until `023` the views
+  picked one pseudonym per session with `any`, and the whole session moved between the two
+  accounts from one read to the next.
 - **Hook rows carry the collector's clock.** A duration takes both ends from the laptop's clock
   (OTel), and a row that had to fall back says so in a `clock` column.
 - **Hook and OTel prompt ids are the same value.**
@@ -264,7 +270,8 @@ fleet-wide totals are always shown. The views read the pattern and the size from
 which `cardo migrate` writes from `CARDO_ORG_ARTIFACTS` and `CARDO_MIN_GROUP_SIZE`.
 
 Hook payloads carry no identity. A hook row is tied to a person only through `session_id`, which
-matches the `session.id` on that session's OTel records, and those carry the pseudonym. Every
+matches the `session.id` on that session's OTel records, and those carry the pseudonym; in a
+session that switched accounts, the pseudonym of the account active when the hook row arrived. Every
 processor fails closed (`error_mode: propagate`). A missing, short or non-hex salt refuses OTel
 batches with a log line saying why, rather than storing reversible pseudonyms.
 
@@ -282,8 +289,9 @@ batches with a log line saying why, rather than storing reversible pseudonyms.
   `gold_instructions_versions` exclude sessions whose `actor_kind` is `service` from every count.
   So do the weekly views (018): `silver_session_cohort_week` puts a service run in no team, and the
   two that read `silver_session` directly filter it themselves. The daily views from 007, which no
-  panel reads now, still count service runs. The coach leaves them out too
-  ([ADR-0048](../adr/0048-coach-in-the-console.md)).
+  panel reads now, counted service runs until `023`, which leaves them out of
+  `silver_session_cohort` and of the daily views' session counts. The coach leaves them out too,
+  its weekly bars included ([ADR-0048](../adr/0048-coach-in-the-console.md)).
 - `deploy/ci/github-actions.card.yaml` is the ready-made block: telemetry on, `cardo.actor=service`,
   `cardo.workflow=${{ github.workflow }}`, and the instruction to run with an API key, never a
   person's login.
