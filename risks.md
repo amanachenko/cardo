@@ -439,6 +439,12 @@ people.
 estimate of about a minute a rebuild, and at a few thousand it could fill the 10 minutes. The fix
 then is to rebuild only the last few days, which needs a superseding record. The rebuilds are not
 #10's fix: silver holds only what the raw rows hold.
+
+**2026-11-06:** crediting each row to the account active when it was sent
+([ADR-0059](docs/adr/0059-a-session-can-carry-more-than-one-account.md), migration 023) reads every
+OTel event once more. On 5 million made-up OTel rows, about the made-up organization's size,
+rebuilding took 23 seconds instead of 10. At that rate 500 people is an estimate of about three
+minutes a rebuild, and the 10 minutes fill at around 1,500 people, not a few thousand.
 **Would falsify it:** a deployment of a few hundred engineers whose rebuilds take a few seconds.
 
 ### 15. Any Grafana login can read every row the data source can

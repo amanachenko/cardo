@@ -166,7 +166,7 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 // behind (ADR-0052), and a console that has just been installed is asked whether a session has
 // arrived yet.
 func (s *Server) sessionFacts(ctx context.Context) (string, int, error) {
-	body, err := s.ch(ctx, "SELECT count() AS n, toString(max(last_event_at)) AS last FROM cardo.silver_session_live WHERE session_id NOT LIKE '"+probePrefix+"%' AND last_event_at > now() - INTERVAL 7 DAY FORMAT JSONEachRow")
+	body, err := s.ch(ctx, "SELECT uniqExact(session_id) AS n, toString(max(last_event_at)) AS last FROM cardo.silver_session_live WHERE session_id NOT LIKE '"+probePrefix+"%' AND last_event_at > now() - INTERVAL 7 DAY FORMAT JSONEachRow")
 	if err != nil {
 		return "", 0, err
 	}

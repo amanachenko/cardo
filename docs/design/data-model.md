@@ -50,6 +50,15 @@ through `LogAttributes['session_id']`, which equals `LogAttributes['session.id']
 session's OTel rows, and those carry the pseudonym. If OTel is off, hook rows are anonymous
 session-level events.
 
+**A session can carry two pseudonyms.** Someone who switches Claude accounts in the middle of a
+session keeps the session id, and Claude Code sends the new account's email from then on. Each row
+belongs to the account on it, and a row without one, such as a hook row, to the account active when
+it arrived: the last pseudonym the session's OTel rows showed before it, or the first for a row
+earlier than any ([ADR-0059](../adr/0059-a-session-can-carry-more-than-one-account.md)). For
+example, in a session whose OTel rows carry account A until 10:03 and account B after it, a hook
+row at 10:05 is B's. A hook row carries the collector's clock and OTel the laptop's, so a hook row
+within a few seconds of a switch can land on the other account, and it does so on every read.
+
 **Hook bronze is not verbatim** ([ADR-0023](../adr/0023-hook-payload-allowlist.md)). Payloads carry
 prompt text, command lines and paths by design, so only an allowlist is kept. The *names* of every
 field received are kept in `cardo.received_keys`, so a new field is visible as drift even though
@@ -95,7 +104,8 @@ Admin API key still has them: `silver_actor_day_sessions` from `silver_session`,
 `silver_actor_day_model_both` put the two paths together. A person's day the Admin API has is never
 taken from the sessions as well. The derived rows carry `source = 'sessions'`, leave service runs
 out, and are zero for what only the Admin API knows: lines, commits, pull requests and edit
-decisions.
+decisions. A session switched between accounts counts as a session for the account it started on,
+and the account that joined it later still has a row for the day, as active.
 
 ### Built (collector path)
 
@@ -106,19 +116,23 @@ The seven views below `silver_session_cohort` are stored (`017_stored_silver.sql
 [ADR-0052](../adr/0052-silver-is-stored-and-rebuilt-every-10-minutes.md)). `silver_session` is a table ClickHouse rebuilds every 10
 minutes from `silver_session_live`, the plain view, and so on for each. `silver_artifact_load`
 stays a plain view over `silver_artifact_load_stored`, adding `is_org` as it is read. Every view
-carries `pseudonym` and `cohort`, taken from the session's OTel rows for anything a hook row
-reports. Both are NULL or empty for a session that sent no OTel.
+carries `pseudonym` and `cohort`: the row's own, or, for a row without them such as anything a hook
+row reports, the account active in its session at that moment. `silver_session_account_live`, a
+plain view, lists when each account of a session became active, and each view looks a row up there
+with an ASOF join on the session and the row's time (`023`). Both are NULL or empty for a session
+that sent no OTel. No view picks a value with `any`: where rows can disagree, the first value seen
+wins, so the same rows give the same answer on every read.
 
 | View | Grain | Fed by |
 |---|---|---|
-| `silver_session` | one row per session | Every OTel log row, `claude_code.session.count` (for `start_type` only, since a metric's time is its export's) and every hook row; `SessionEnd` for `end_reason`. It starts at its first OTel event, and at its first hook row only if it sent no OTel. The `SessionStart` hook never runs in 2.1.281 |
+| `silver_session` | one row per session and account | Every OTel log row, `claude_code.session.count` (for `start_type` only, since a metric's time is its export's) and every hook row; `SessionEnd` for `end_reason`. It starts at its first OTel event, and at its first hook row only if it sent no OTel. The `SessionStart` hook never runs in 2.1.281. A session switched between accounts has a row for each, describing that account's part: its pseudonym, team label and salt version, when it started and last showed an event, its release and terminal, and whether the session ended in it. `day`, the day the session started, `actor_kind` and `workflow` are the session's and the same on each row. Count sessions as `uniqExact(session_id)`, never as rows ([ADR-0059](../adr/0059-a-session-can-carry-more-than-one-account.md)) |
 | `silver_api_request` | one row per API request | `claude_code.api_request`. `context_tokens` = `input_tokens + cache_read_tokens + cache_creation_tokens`, the size of the conversation on a main-thread request (`query_source=repl_main_thread`). `cost_usd` is Claude Code's, in dollars |
 | `silver_turn` | one row per user prompt, built-in commands included | `claude_code.user_prompt` (command, the laptop's time) and the `UserPromptSubmit` hook (`permission_mode`), joined on `prompt.id` = `prompt_id`. `first_context_tokens` and `peak_context_tokens` come from the prompt's main-thread requests |
 | `silver_tool_call` | one row per tool call | `claude_code.tool_decision` and `claude_code.tool_result`, joined on `tool_use_id`. `is_edit` for Edit, MultiEdit, Write and NotebookEdit; `mcp_server` from `mcp__<server>__<tool>` |
 | `silver_policy_decision` | one row per permission prompt | `claude_code.hook_execution_start` with `hook_name=PermissionRequest:<tool>`, as-of joined to the next `claude_code.tool_decision` with a person's `source` for the same session, prompt and tool. `wait_ms` is NULL for a prompt nobody answered. The hook row adds `permission_mode` and the asking subagent. A session with no `hook_execution_start` falls back to the hook row's time, with `clock = 'two_clocks'` |
 | `silver_context_event` | one row per compaction or model switch | Compaction: OTel `claude_code.compaction` (`tokens_before`, `tokens_after`), or the `PreCompact` hook alone for a session that sent no OTel compaction. Switch: the `PostModelSwitch` or `PreModelSwitch` hook's fields, timed by its `hook_execution_start`, and `next_request_*`, the next main-thread request on the new model, which is what the switch cost. Both models are compared with the date and `[1m]` removed, since the switch's `to_model` may be dated. Not for a switch made before the session's first main-thread request: that request is the session starting, and the hook's `context_tokens` is 0 ([note](../research/2026-10-06-model-switch-observed.md)). Only switches someone asked for: a `PostModelSwitch` from a fallback (`auto`) or a resume is left out. Defined in `009`, which redefines `008`'s view |
 | `silver_artifact_load` | one row per artifact use | `instructions`: each `InstructionsLoaded`. `skill`: `UserPromptExpansion` and `skill.name` on API requests, one row per prompt and name. `subagent`: each `SubagentStart`, never `SubagentStop`. `mcp`: tool calls on `mcp__<server>__*`, one row per prompt and server. `is_org` applies the organization's pattern; an instructions file with a stored name is always the organization's. `is_builtin` marks Claude Code's own subagents and commands |
-| `silver_session_cohort` | one row per session | The cohort each session is reported under in the daily views: its label, or `other` below the minimum group size that day ([ADR-0029](../adr/0029-minimum-group-size.md)) |
+| `silver_session_cohort` | one row per session | The cohort each session is reported under in the daily views: its label, or `other` below the minimum group size that day ([ADR-0029](../adr/0029-minimum-group-size.md)). A session switched between accounts is reported under the label of the account it started on; the label comes from the machine's settings, so both accounts carry the same one. A service run has no row from `023` on |
 | `silver_session_cohort_week` | one row per session | The same for the weekly views: the session's week, the Monday of the day it started, and its label, or `other` below the minimum group size that week. A session with no label is `unassigned`. A service run has no row, so no weekly view counts it ([ADR-0036](../adr/0036-service-runs-are-not-people.md)). Defined in `018` |
 | `silver_session_repo` | one row per session | The repository the session worked in, joined from its OTel rows because a hook row carries none: `org` with the owner and name, `external` with the host alone, or `none`. Read from the record first and the resource as a fallback, where real sessions carry it. The full URL was never stored ([ADR-0035](../adr/0035-repository-identity-classified.md)). Defined in `015`, stored by `020` |
 | `silver_instruction_load` | one row per instructions file that was loaded | Each `InstructionsLoaded`, with the scope Claude Code sent (`memory_type`), the file's name when the collector kept it, and the repository of the session. Two names, two meanings: `instructions_name` is the organization's own artifact (ADR-0026), `instructions_project_name` is a file of a repository, kept only with `CARDO_INSTRUCTIONS_NAMES=project` (ADR-0035). A service run is not a person, so its rows are left out. Defined in `015`, stored by `020` |
@@ -181,7 +195,8 @@ A team below the minimum group size is not rendered at all, and its rows are not
 the team's active people that week, not everyone the directory lists. The join that puts a session
 in its team lives in the silver layer, `silver_session_team` — the directory's team when the person
 is listed, the session's own label otherwise — because a gold view may count a pseudonym but never
-compare one (INV-3).
+compare one (INV-3). It has one row per session and account, since the directory lists pseudonyms:
+each account of a switched session is in its own team.
 
 A mart with the effort distribution by cohort is not built. Spend by cohort and the model mix are
 `gold_spend_weekly` and `gold_model_spend_weekly` on the collector path, and `gold_model_mix` on the

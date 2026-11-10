@@ -316,8 +316,8 @@ SKIPPED      12 sessions already collected live
 WROTE        318 rows for 31 sessions
 ```
 
-Counting such a session twice would double its cost, tokens and prompts, and would leave its rows
-with a random `cohort` in `silver_session`.
+Counting such a session twice would double its cost, tokens and prompts, and its rows would carry
+two team labels, the one it was sent with and the one the importer was given.
 
 ---
 

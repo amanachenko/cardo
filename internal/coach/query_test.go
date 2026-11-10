@@ -91,6 +91,30 @@ func TestQueryLeavesServiceSessionsOut(t *testing.T) {
 	}
 }
 
+// The weekly bars are about one person too, so they leave service sessions out as the figures do.
+// They did not: a CI job running under someone's code name added its sessions and cost to their
+// bars while the figures above them left it out.
+func TestWeeklyLeavesServiceSessionsOut(t *testing.T) {
+	var sqls []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		sqls = append(sqls, string(raw))
+		w.Write([]byte("\n"))
+	}))
+	defer srv.Close()
+	if _, err := Weekly(context.Background(), srv.URL, "u", "p", "abc", 4, time.Date(2026, 10, 29, 0, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+	if len(sqls) != 2 {
+		t.Fatalf("Weekly sent %d queries, want 2", len(sqls))
+	}
+	for _, sql := range sqls {
+		if !strings.Contains(sql, "actor_kind != 'service'") {
+			t.Errorf("a weekly query does not exclude service runs: %s", sql)
+		}
+	}
+}
+
 // The floor is the organization's minimum group size, read from the settings, not a literal five
 // (ADR-0029). The coach follows whatever the organization set.
 func TestUntriedReadsTheFloorFromTheSettings(t *testing.T) {

@@ -206,27 +206,56 @@ deletion request.
 exists, and that the procedure must be written down rather than improvised. This is that
 procedure, and each step names what it removes.
 
-**1. The person's sessions are listed first.** Once their OTel rows are gone, their hook rows can no
-longer be tied to them: a hook row carries no identity at all, only the session id.
+**1. The person's sessions, and the rows credited to them, are listed first.** Once their OTel rows
+are gone, their hook rows can no longer be tied to them: a hook row carries no identity at all,
+only the session id. A session can also carry two accounts, when someone switches Claude accounts in
+the middle of it ([a session can carry more than one account, ADR-0059](../adr/0059-a-session-can-carry-more-than-one-account.md)).
+A row with no code name of its own is theirs only if the pages credit it to them, because it came
+while their account was active. So the rows credited to them are written down before anything is
+deleted, in a table that step 2 drops.
 
 ```sql
-SELECT session_id FROM cardo.silver_session_live
+SELECT DISTINCT session_id FROM cardo.silver_session_live
     WHERE pseudonym = '<pseudonym>' FORMAT TSV;
+
+-- the rows without a code name that the pages credit to them: hook rows, and OTel events that
+-- came without an email
+CREATE TABLE cardo.deletion_credited ENGINE = MergeTree ORDER BY tuple() AS
+SELECT 'hook' AS kind, r.LogAttributes['session_id'] AS session_id, r.Timestamp AS at,
+       cityHash64(r.LogAttributes) AS attributes
+FROM cardo.bronze_hook_events AS r
+ASOF JOIN cardo.silver_session_account_live AS a
+    ON a.session_id = r.LogAttributes['session_id'] AND r.Timestamp >= a.active_from
+WHERE r.LogAttributes['session_id'] IN (<sessions>) AND a.pseudonym = '<pseudonym>'
+UNION ALL
+SELECT 'otel', r.LogAttributes['session.id'], r.Timestamp, cityHash64(r.LogAttributes)
+FROM cardo.bronze_otel_logs AS r
+ASOF JOIN cardo.silver_session_account_live AS a
+    ON a.session_id = r.LogAttributes['session.id'] AND r.Timestamp >= a.active_from
+WHERE r.LogAttributes['session.id'] IN (<sessions>)
+  AND r.LogAttributes['user.pseudonym'] = '' AND r.ResourceAttributes['user.pseudonym'] = ''
+  AND a.pseudonym = '<pseudonym>';
 ```
 
-**2. Everything that carries the pseudonym, deleted by the field each table actually carries.** The
-collector puts the pseudonym wherever the email arrived: on the resource, on the event record or on
-the metric point. `bronze_hook_events` carries no identity at all, and `bronze_actor_day` has a
-`pseudonym` column and no resource. The team directory, if your organization uploaded one, keeps
-one line per code name in `settings_teams`. Deleting by one field alone leaves the rest in the
-store.
+For example, a session that started on someone's work account and moved to their personal account
+at 14:20: deleting the personal account deletes its events and the hook rows from 14:20 on, and the
+work account's part of the session stays, because it is the work account's history.
+
+**2. Everything that carries the pseudonym, and everything credited to it, deleted by the field each
+table actually carries.** The collector puts the pseudonym wherever the email arrived: on the
+resource, on the event record or on the metric point. `bronze_hook_events` carries no identity at
+all, and `bronze_actor_day` has a `pseudonym` column and no resource. The team directory, if your
+organization uploaded one, keeps one line per code name in `settings_teams`. Deleting by one field
+alone leaves the rest in the store.
 
 ```sql
--- bronze_otel_logs: the pseudonym on the record or on the resource, or any of their sessions
+-- bronze_otel_logs: the pseudonym on the record or on the resource, and the events without one
+-- that step 1 credited to them
 ALTER TABLE cardo.bronze_otel_logs DELETE WHERE
     LogAttributes['user.pseudonym'] = '<pseudonym>'
     OR ResourceAttributes['user.pseudonym'] = '<pseudonym>'
-    OR LogAttributes['session.id'] IN (<sessions>)
+    OR (LogAttributes['session.id'], Timestamp, cityHash64(LogAttributes)) IN
+       (SELECT session_id, at, attributes FROM cardo.deletion_credited WHERE kind = 'otel')
     SETTINGS mutations_sync = 1;
 
 -- bronze_otel_metrics_sum: the pseudonym on the data point or on the resource
@@ -235,9 +264,11 @@ ALTER TABLE cardo.bronze_otel_metrics_sum DELETE WHERE
     OR ResourceAttributes['user.pseudonym'] = '<pseudonym>'
     SETTINGS mutations_sync = 1;
 
--- bronze_hook_events: no identity, only the session id
+-- bronze_hook_events: no identity, so the rows step 1 credited to them
 ALTER TABLE cardo.bronze_hook_events DELETE WHERE
-    LogAttributes['session_id'] IN (<sessions>) SETTINGS mutations_sync = 1;
+    (LogAttributes['session_id'], Timestamp, cityHash64(LogAttributes)) IN
+    (SELECT session_id, at, attributes FROM cardo.deletion_credited WHERE kind = 'hook')
+    SETTINGS mutations_sync = 1;
 
 -- bronze_actor_day: its own pseudonym column
 ALTER TABLE cardo.bronze_actor_day DELETE WHERE
@@ -246,6 +277,9 @@ ALTER TABLE cardo.bronze_actor_day DELETE WHERE
 -- settings_teams: the directory's line for them, in every upload kept
 ALTER TABLE cardo.settings_teams DELETE WHERE
     pseudonym = '<pseudonym>' SETTINGS mutations_sync = 1;
+
+-- the list from step 1, which names their sessions
+DROP TABLE cardo.deletion_credited;
 ```
 
 Every figure Cardo shows is computed from those rows, so your absence changes the numbers rather
